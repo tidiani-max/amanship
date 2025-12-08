@@ -19,7 +19,7 @@ export default function HomeStackNavigator() {
         name="Home"
         component={HomeScreen}
         options={{
-          headerTitle: () => <HeaderTitle title="My App" />,
+          headerTitle: () => <HeaderTitle title="KilatGo" />,
         }}
       />
     </Stack.Navigator>

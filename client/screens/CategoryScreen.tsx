@@ -1,0 +1,163 @@
+import React from "react";
+import { View, StyleSheet, FlatList, Pressable } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useHeaderHeight } from "@react-navigation/elements";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Feather } from "@expo/vector-icons";
+
+import { ThemedText } from "@/components/ThemedText";
+import { useTheme } from "@/hooks/useTheme";
+import { Spacing, BorderRadius } from "@/constants/theme";
+import { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { Product } from "@/types";
+import { mockProducts } from "@/data/mockData";
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+type CategoryRouteProp = RouteProp<RootStackParamList, "Category">;
+
+export default function CategoryScreen() {
+  const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+  const { theme } = useTheme();
+  const navigation = useNavigation<NavigationProp>();
+  const route = useRoute<CategoryRouteProp>();
+  const { category } = route.params;
+
+  const products = mockProducts.filter((p) => p.category === category.id);
+
+  const formatPrice = (price: number) => {
+    return `Rp ${price.toLocaleString("id-ID")}`;
+  };
+
+  const handleProductPress = (product: Product) => {
+    navigation.navigate("ProductDetail", { product });
+  };
+
+  const renderProduct = ({ item }: { item: Product }) => (
+    <Pressable
+      style={[styles.productCard, { backgroundColor: theme.cardBackground }]}
+      onPress={() => handleProductPress(item)}
+    >
+      <View style={[styles.productImage, { backgroundColor: theme.backgroundDefault }]}>
+        <Feather name="package" size={32} color={theme.textSecondary} />
+        {!item.inStock ? (
+          <View style={[styles.outOfStock, { backgroundColor: theme.error }]}>
+            <ThemedText type="small" style={{ color: "#FFFFFF", fontSize: 10 }}>
+              Out of Stock
+            </ThemedText>
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.productInfo}>
+        <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
+          {item.name}
+        </ThemedText>
+        <ThemedText type="small" style={{ color: theme.textSecondary }}>
+          {item.brand}
+        </ThemedText>
+        <View style={styles.priceRow}>
+          <View>
+            <ThemedText type="body" style={{ fontWeight: "600", color: theme.primary }}>
+              {formatPrice(item.price)}
+            </ThemedText>
+            {item.originalPrice ? (
+              <ThemedText
+                type="small"
+                style={{ color: theme.textSecondary, textDecorationLine: "line-through" }}
+              >
+                {formatPrice(item.originalPrice)}
+              </ThemedText>
+            ) : null}
+          </View>
+          {item.inStock ? (
+            <Pressable style={[styles.addButton, { backgroundColor: theme.primary }]}>
+              <Feather name="plus" size={16} color={theme.buttonText} />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    </Pressable>
+  );
+
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+      <FlatList
+        data={products}
+        renderItem={renderProduct}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
+        contentContainerStyle={[
+          styles.listContent,
+          {
+            paddingTop: headerHeight + Spacing.lg,
+            paddingBottom: insets.bottom + Spacing.xl,
+          },
+        ]}
+        columnWrapperStyle={styles.row}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Feather name="package" size={48} color={theme.textSecondary} />
+            <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
+              No products in this category
+            </ThemedText>
+          </View>
+        }
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  listContent: {
+    paddingHorizontal: Spacing.lg,
+  },
+  row: {
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  productCard: {
+    flex: 1,
+    borderRadius: BorderRadius.md,
+    overflow: "hidden",
+  },
+  productImage: {
+    height: 120,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  outOfStock: {
+    position: "absolute",
+    top: Spacing.sm,
+    left: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.xs,
+  },
+  productInfo: {
+    padding: Spacing.md,
+  },
+  productName: {
+    marginBottom: Spacing.xs,
+    minHeight: 36,
+  },
+  priceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginTop: Spacing.sm,
+  },
+  addButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.xxl * 2,
+  },
+});
