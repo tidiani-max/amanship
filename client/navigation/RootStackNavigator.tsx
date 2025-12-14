@@ -15,8 +15,6 @@ import EditAddressScreen from "@/screens/EditAddressScreen";
 import HelpCenterScreen from "@/screens/HelpCenterScreen";
 import VouchersScreen from "@/screens/VouchersScreen";
 import AdminDashboardScreen from "@/screens/AdminDashboardScreen";
-import LoginScreen from "@/screens/LoginScreen";
-import SignupScreen from "@/screens/SignupScreen";
 import NotificationsScreen from "@/screens/NotificationsScreen";
 import LanguageScreen from "@/screens/LanguageScreen";
 import AboutScreen from "@/screens/AboutScreen";
@@ -26,8 +24,6 @@ import { Product, Category, Order, CartItem, Address, Voucher } from "@/types";
 export type RootStackParamList = {
   Onboarding: undefined;
   Main: undefined;
-  Login: undefined;
-  Signup: undefined;
   Category: { category: Category };
   ProductDetail: { product: Product };
   Cart: undefined;
@@ -77,16 +73,6 @@ export default function RootStackNavigator() {
           <Stack.Screen
             name="Main"
             component={MainTabNavigator}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Login"
-            component={LoginScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Signup"
-            component={SignupScreen}
             options={{ headerShown: false }}
           />
           <Stack.Screen
