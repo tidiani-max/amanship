@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { categories, products, vouchers, users } from "@shared/schema";
+import { categories, products, vouchers, users, stores, storeStaff, storeInventory } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Categories
@@ -195,6 +195,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/seed", async (_req: Request, res: Response) => {
     try {
       const existingCategories = await storage.getCategories();
+      
+      // Check if store data needs to be seeded (new tables)
+      const existingStores = await storage.getStores();
+      const DEMO_STORE_ID_CHECK = "demo-store";
+      const DEMO_PICKER_ID_CHECK = "demo-picker";
+      const DEMO_DRIVER_ID_CHECK = "demo-driver";
+      
       if (existingCategories.length > 0) {
         const demoUser = await storage.getUser(DEMO_USER_ID);
         if (!demoUser) {
@@ -205,6 +212,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
             phone: "+62123456789",
           });
         }
+        
+        // Seed store data if stores are empty but products exist
+        if (existingStores.length === 0) {
+          const allProducts = await storage.getProducts();
+          
+          // Create demo store
+          await db.insert(stores).values({
+            id: DEMO_STORE_ID_CHECK,
+            name: "KilatGo Central Jakarta",
+            address: "Jl. Sudirman No. 1, Central Jakarta, DKI Jakarta 10220",
+            latitude: "-6.2088000",
+            longitude: "106.8456000",
+            codAllowed: true,
+            isActive: true,
+          });
+
+          // Create picker and driver users
+          await db.insert(users).values([
+            {
+              id: DEMO_PICKER_ID_CHECK,
+              username: "picker1",
+              password: "picker123",
+              phone: "+6281234567890",
+              role: "picker",
+            },
+            {
+              id: DEMO_DRIVER_ID_CHECK,
+              username: "driver1",
+              password: "driver123",
+              phone: "+6281234567891",
+              role: "driver",
+            },
+          ]);
+
+          // Create store staff
+          await db.insert(storeStaff).values([
+            {
+              id: "staff-picker-1",
+              userId: DEMO_PICKER_ID_CHECK,
+              storeId: DEMO_STORE_ID_CHECK,
+              role: "picker",
+              status: "online",
+            },
+            {
+              id: "staff-driver-1",
+              userId: DEMO_DRIVER_ID_CHECK,
+              storeId: DEMO_STORE_ID_CHECK,
+              role: "driver",
+              status: "online",
+            },
+          ]);
+
+          // Create inventory for all products
+          const inventoryEntries = allProducts.map((product, index) => ({
+            id: `inventory-${index + 1}`,
+            storeId: DEMO_STORE_ID_CHECK,
+            productId: product.id,
+            stockCount: product.stockCount,
+            isAvailable: product.inStock,
+          }));
+          await db.insert(storeInventory).values(inventoryEntries);
+          
+          return res.json({ message: "Store data seeded successfully" });
+        }
+        
         return res.json({ message: "Data already seeded" });
       }
 
@@ -339,6 +411,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ];
 
       await db.insert(products).values(seedProducts);
+
+      // Seed demo store in Central Jakarta
+      const DEMO_STORE_ID = "demo-store";
+      await db.insert(stores).values({
+        id: DEMO_STORE_ID,
+        name: "KilatGo Central Jakarta",
+        address: "Jl. Sudirman No. 1, Central Jakarta, DKI Jakarta 10220",
+        latitude: "-6.2088000",
+        longitude: "106.8456000",
+        codAllowed: true,
+        isActive: true,
+      });
+
+      // Seed picker and driver users
+      const DEMO_PICKER_ID = "demo-picker";
+      const DEMO_DRIVER_ID = "demo-driver";
+      
+      await db.insert(users).values([
+        {
+          id: DEMO_PICKER_ID,
+          username: "picker1",
+          password: "picker123",
+          phone: "+6281234567890",
+          role: "picker",
+        },
+        {
+          id: DEMO_DRIVER_ID,
+          username: "driver1",
+          password: "driver123",
+          phone: "+6281234567891",
+          role: "driver",
+        },
+      ]);
+
+      // Seed store staff assignments (picker and driver)
+      await db.insert(storeStaff).values([
+        {
+          id: "staff-picker-1",
+          userId: DEMO_PICKER_ID,
+          storeId: DEMO_STORE_ID,
+          role: "picker",
+          status: "online",
+        },
+        {
+          id: "staff-driver-1",
+          userId: DEMO_DRIVER_ID,
+          storeId: DEMO_STORE_ID,
+          role: "driver",
+          status: "online",
+        },
+      ]);
+
+      // Seed store inventory - link all products to the demo store
+      const inventoryEntries = seedProducts.map((product, index) => ({
+        id: `inventory-${index + 1}`,
+        storeId: DEMO_STORE_ID,
+        productId: product.id,
+        stockCount: product.stockCount,
+        isAvailable: product.inStock,
+      }));
+      await db.insert(storeInventory).values(inventoryEntries);
 
       const seedVouchers = [
         {

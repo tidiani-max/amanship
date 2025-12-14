@@ -1,0 +1,128 @@
+KilatGo — NEXT IMPLEMENTATION SPEC (COPY TO REPLIT)
+📌 Goal
+Upgrade the current KilatGo MVP into a real operational quick-commerce system that enforces 15-minute delivery by controlling store availability, staff status, driver readiness, distance, and payment options (including COD).
+1️⃣ USER ROLES (CORE LOGIC)
+1. Customer (Buyer)
+Browses products
+Uses voice ordering
+Pays (Midtrans or Cash on Delivery)
+Tracks order in real time
+2. Picker (Store Staff / Product Admin)
+Works inside the store
+Picks and packs orders
+Manages stock (available / out of stock)
+Can be ONLINE / OFFLINE
+3. Driver (Store-Based Rider)
+Waits near the store
+Delivers orders
+Can be ONLINE / OFFLINE
+Assigned per store (not floating across city)
+4. Store (Logical Entity)
+Registered location with:
+products
+one or more pickers
+one or more drivers
+Has operational status based on staff availability
+2️⃣ ONLINE / OFFLINE STATUS RULES (CRITICAL)
+Picker Status
+ONLINE = physically in store, ready to pick orders
+OFFLINE = store cannot accept orders
+Driver Status
+ONLINE = at store, ready to deliver immediately
+OFFLINE = store cannot accept orders
+Store Availability Logic
+A store is AVAILABLE only if:
+At least 1 picker ONLINE
+At least 1 driver ONLINE
+Customer distance ≤ 5 km
+Store has available stock
+If any condition fails → store becomes UNAVAILABLE and hidden from customers.
+3️⃣ CUSTOMER FLOW (END-TO-END)
+Customer opens app
+App requests location permission
+Backend:
+Finds nearest stores within 5 km
+Filters stores with picker + driver ONLINE
+If no store available:
+Show message:
+“No KilatGo store nearby can deliver in 15 minutes.”
+If store available:
+Show products from nearest eligible store only
+Customer:
+Adds items OR uses voice ordering
+Confirms cart
+Payment:
+Midtrans (GoPay, OVO, etc.) OR
+Cash on Delivery (COD)
+Order confirmed
+Order lifecycle:
+Assigned to picker → packed
+Assigned to driver → delivered
+Customer tracks order live
+4️⃣ PICKER FLOW (STORE STAFF APP)
+Login
+Select assigned store
+Toggle Go Online / Go Offline
+When ONLINE:
+Receive orders instantly
+See picking timer (target: ≤ 5 min)
+Actions:
+Mark items unavailable
+Confirm packed order
+Handover to driver
+5️⃣ DRIVER FLOW (RIDER APP)
+Login
+Select assigned store
+Toggle Ready / Offline
+When READY:
+Auto-assigned orders from that store
+Actions:
+Accept order
+Start delivery
+Mark delivered
+For COD:
+Confirm cash collected
+6️⃣ CASH ON DELIVERY (COD) RULES
+Available only if:
+Customer within 5 km
+Store allows COD
+Driver must:
+Confirm payment received
+Order marked completed only after confirmation
+7️⃣ BACKEND LOGIC TO ADD
+New Tables / Fields
+users (role: customer / picker / driver)
+stores
+store_staff (user_id, store_id, role)
+staff_status (ONLINE / OFFLINE)
+driver_status (READY / OFFLINE)
+store_availability (computed, not manual)
+payment_method (midtrans / COD)
+Store Availability Query
+Return store only if:
+distance <= 5km
+AND picker_online = true
+AND driver_online = true
+AND stock_available = true
+8️⃣ VOICE ORDERING LOGIC (CONFIRMATION STEP)
+Flow:
+User speaks order
+System converts speech → cart items
+Show confirmation screen:
+“You ordered: 2 Indomie, 1 Milk”
+User taps Confirm Order
+Voice input never auto-places order.
+9️⃣ ADMIN / FOUNDER VISIBILITY (READ-ONLY FOR NOW)
+Owners (founder / investor) can see:
+Number of active stores
+Online pickers & drivers
+Orders per hour
+Average delivery time
+COD vs digital payment split
+(No control actions in MVP)
+10️⃣ FINAL RESULT
+After this:
+The app never lies about delivery time
+Every visible store can actually deliver in 15 minutes
+MVP is investor-ready
+System is scalable to multiple cities

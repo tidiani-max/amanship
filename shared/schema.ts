@@ -3,6 +3,22 @@ import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, decimal } f
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// User roles enum
+export const userRoles = ["customer", "picker", "driver", "admin"] as const;
+export type UserRole = typeof userRoles[number];
+
+// Staff status enum
+export const staffStatuses = ["online", "offline"] as const;
+export type StaffStatus = typeof staffStatuses[number];
+
+// Order status enum for proper lifecycle tracking
+export const orderStatuses = ["pending", "confirmed", "picking", "packed", "delivering", "delivered", "cancelled"] as const;
+export type OrderStatus = typeof orderStatuses[number];
+
+// Payment method types
+export const paymentMethodTypes = ["midtrans", "cod"] as const;
+export type PaymentMethodType = typeof paymentMethodTypes[number];
+
 export const users = pgTable("users", {
   id: varchar("id")
     .primaryKey()
@@ -10,6 +26,34 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   phone: text("phone"),
+  role: text("role").notNull().default("customer"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Stores table
+export const stores = pgTable("stores", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  address: text("address").notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
+  codAllowed: boolean("cod_allowed").default(true).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Store staff assignment - links users (pickers/drivers) to stores
+export const storeStaff = pgTable("store_staff", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  role: text("role").notNull(), // 'picker' or 'driver'
+  status: text("status").notNull().default("offline"), // 'online' or 'offline'
+  lastStatusChange: timestamp("last_status_change").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -65,15 +109,35 @@ export const orders = pgTable("orders", {
     .default(sql`gen_random_uuid()`),
   orderNumber: text("order_number").notNull().unique(),
   userId: varchar("user_id").notNull().references(() => users.id),
+  storeId: varchar("store_id").references(() => stores.id),
+  pickerId: varchar("picker_id").references(() => users.id),
+  driverId: varchar("driver_id").references(() => users.id),
   items: jsonb("items").notNull(),
   status: text("status").notNull().default("pending"),
   total: integer("total").notNull(),
   deliveryFee: integer("delivery_fee").notNull().default(10000),
   addressId: varchar("address_id").references(() => addresses.id),
-  paymentMethodId: text("payment_method_id"),
+  paymentMethod: text("payment_method").default("midtrans"), // 'midtrans' or 'cod'
+  paymentStatus: text("payment_status").default("pending"), // 'pending', 'paid', 'collected'
+  codCollected: boolean("cod_collected").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  pickedAt: timestamp("picked_at"),
+  packedAt: timestamp("packed_at"),
+  deliveredAt: timestamp("delivered_at"),
   estimatedDelivery: timestamp("estimated_delivery"),
-  riderInfo: jsonb("rider_info"),
+  customerLat: decimal("customer_lat", { precision: 10, scale: 7 }),
+  customerLng: decimal("customer_lng", { precision: 10, scale: 7 }),
+});
+
+// Store inventory - links products to stores with store-specific stock
+export const storeInventory = pgTable("store_inventory", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  stockCount: integer("stock_count").notNull().default(0),
+  isAvailable: boolean("is_available").default(true).notNull(),
 });
 
 export const vouchers = pgTable("vouchers", {
@@ -93,17 +157,47 @@ export const usersRelations = relations(users, ({ many }) => ({
   addresses: many(addresses),
   cartItems: many(cartItems),
   orders: many(orders),
+  storeStaff: many(storeStaff),
+}));
+
+export const storesRelations = relations(stores, ({ many }) => ({
+  staff: many(storeStaff),
+  inventory: many(storeInventory),
+  orders: many(orders),
+}));
+
+export const storeStaffRelations = relations(storeStaff, ({ one }) => ({
+  user: one(users, {
+    fields: [storeStaff.userId],
+    references: [users.id],
+  }),
+  store: one(stores, {
+    fields: [storeStaff.storeId],
+    references: [stores.id],
+  }),
+}));
+
+export const storeInventoryRelations = relations(storeInventory, ({ one }) => ({
+  store: one(stores, {
+    fields: [storeInventory.storeId],
+    references: [stores.id],
+  }),
+  product: one(products, {
+    fields: [storeInventory.productId],
+    references: [products.id],
+  }),
 }));
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
   products: many(products),
 }));
 
-export const productsRelations = relations(products, ({ one }) => ({
+export const productsRelations = relations(products, ({ one, many }) => ({
   category: one(categories, {
     fields: [products.categoryId],
     references: [categories.id],
   }),
+  inventory: many(storeInventory),
 }));
 
 export const addressesRelations = relations(addresses, ({ one }) => ({
@@ -133,6 +227,18 @@ export const ordersRelations = relations(orders, ({ one }) => ({
     fields: [orders.addressId],
     references: [addresses.id],
   }),
+  store: one(stores, {
+    fields: [orders.storeId],
+    references: [stores.id],
+  }),
+  picker: one(users, {
+    fields: [orders.pickerId],
+    references: [users.id],
+  }),
+  driver: one(users, {
+    fields: [orders.driverId],
+    references: [users.id],
+  }),
 }));
 
 // Insert schemas
@@ -140,6 +246,22 @@ export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
   phone: true,
+  role: true,
+});
+
+export const insertStoreSchema = createInsertSchema(stores).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertStoreStaffSchema = createInsertSchema(storeStaff).omit({
+  id: true,
+  createdAt: true,
+  lastStatusChange: true,
+});
+
+export const insertStoreInventorySchema = createInsertSchema(storeInventory).omit({
+  id: true,
 });
 
 export const insertCategorySchema = createInsertSchema(categories).pick({
@@ -164,6 +286,9 @@ export const insertCartItemSchema = createInsertSchema(cartItems).omit({
 export const insertOrderSchema = createInsertSchema(orders).omit({
   id: true,
   createdAt: true,
+  pickedAt: true,
+  packedAt: true,
+  deliveredAt: true,
 });
 
 export const insertVoucherSchema = createInsertSchema(vouchers).omit({
@@ -173,6 +298,15 @@ export const insertVoucherSchema = createInsertSchema(vouchers).omit({
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export type InsertStore = z.infer<typeof insertStoreSchema>;
+export type Store = typeof stores.$inferSelect;
+
+export type InsertStoreStaff = z.infer<typeof insertStoreStaffSchema>;
+export type StoreStaff = typeof storeStaff.$inferSelect;
+
+export type InsertStoreInventory = z.infer<typeof insertStoreInventorySchema>;
+export type StoreInventory = typeof storeInventory.$inferSelect;
 
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Category = typeof categories.$inferSelect;
