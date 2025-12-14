@@ -11,6 +11,7 @@ import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { useOnboarding } from "@/context/OnboardingContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
@@ -54,6 +55,7 @@ export default function AccountScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { user, isAuthenticated, logout } = useAuth();
   const { t } = useLanguage();
+  const { resetOnboarding } = useOnboarding();
 
   const handleLogout = async () => {
     Alert.alert(
@@ -66,10 +68,7 @@ export default function AccountScreen() {
           style: "destructive",
           onPress: async () => {
             await logout();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "Login" }],
-            });
+            resetOnboarding();
           },
         },
       ]
@@ -136,7 +135,7 @@ export default function AccountScreen() {
           <Card style={styles.profileCard}>
             <Pressable 
               style={styles.loginPrompt}
-              onPress={() => navigation.navigate("Login")}
+              onPress={() => resetOnboarding()}
             >
               <View style={[styles.avatar, { backgroundColor: theme.textSecondary }]}>
                 <Feather name="user" size={24} color={theme.buttonText} />

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import MainTabNavigator from "@/navigation/MainTabNavigator";
 import OnboardingNavigator from "@/navigation/OnboardingNavigator";
+import { useOnboarding } from "@/context/OnboardingContext";
 import CategoryScreen from "@/screens/CategoryScreen";
 import ProductDetailScreen from "@/screens/ProductDetailScreen";
 import CartScreen from "@/screens/CartScreen";
@@ -46,14 +47,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootStackNavigator() {
   const screenOptions = useScreenOptions();
-  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 100);
-  }, []);
+  const { hasCompletedOnboarding, isLoading, completeOnboarding } = useOnboarding();
 
   if (isLoading) {
     return null;
@@ -66,7 +60,7 @@ export default function RootStackNavigator() {
           name="Onboarding"
           options={{ headerShown: false }}
         >
-          {() => <OnboardingNavigator onComplete={() => setHasCompletedOnboarding(true)} />}
+          {() => <OnboardingNavigator onComplete={completeOnboarding} />}
         </Stack.Screen>
       ) : (
         <>
