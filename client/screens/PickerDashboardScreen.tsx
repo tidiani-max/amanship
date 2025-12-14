@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Pressable, Switch, Alert, FlatList } from "react-native";
+import { View, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Pressable, Switch, Alert, TextInput, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
@@ -7,9 +7,10 @@ import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 
 interface Order {
@@ -21,6 +22,14 @@ interface Order {
   createdAt: string;
   customerLat: string;
   customerLng: string;
+}
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  image: string;
+  categoryId: string;
 }
 
 interface InventoryItem {
@@ -144,24 +153,247 @@ function OrderCard({
   );
 }
 
-function InventoryCard({ item }: { item: InventoryItem }) {
+function InventoryItemRow({ 
+  item, 
+  onUpdateStock,
+  isUpdating,
+  onEditComplete
+}: { 
+  item: InventoryItem;
+  onUpdateStock: (id: string, newStock: number) => void;
+  isUpdating: boolean;
+  onEditComplete: () => void;
+}) {
   const { theme } = useTheme();
+  const [isEditing, setIsEditing] = useState(false);
+  const [stockValue, setStockValue] = useState(String(item.stock));
+  const [submittedValue, setSubmittedValue] = useState<number | null>(null);
   const isLowStock = item.stock <= item.lowStockThreshold;
 
+  React.useEffect(() => {
+    if (!isUpdating && isEditing && submittedValue !== null) {
+      if (item.stock === submittedValue) {
+        setStockValue(String(item.stock));
+        setIsEditing(false);
+        setSubmittedValue(null);
+        onEditComplete();
+      } else {
+        setSubmittedValue(null);
+      }
+    }
+  }, [isUpdating, item.stock, submittedValue]);
+
+  const handleSave = () => {
+    const newStock = parseInt(stockValue, 10);
+    if (isNaN(newStock) || newStock < 0) {
+      Alert.alert("Invalid Stock", "Please enter a valid stock number");
+      setStockValue(String(item.stock));
+      return;
+    }
+    setSubmittedValue(newStock);
+    onUpdateStock(item.id, newStock);
+  };
+
+  const handleCancel = () => {
+    if (isUpdating) return;
+    setStockValue(String(item.stock));
+    setIsEditing(false);
+  };
+
   return (
-    <View style={styles.inventoryRow}>
+    <View style={[styles.inventoryRow, { borderBottomColor: theme.border }]}>
       <View style={styles.inventoryInfo}>
         <ThemedText type="body" numberOfLines={1}>{item.product.name}</ThemedText>
         <ThemedText type="caption" style={{ color: theme.textSecondary }}>
           Rp {item.product.price.toLocaleString()}
         </ThemedText>
       </View>
-      <View style={[styles.stockBadge, { backgroundColor: isLowStock ? theme.error + "20" : theme.success + "20" }]}>
-        <ThemedText type="body" style={{ color: isLowStock ? theme.error : theme.success }}>
-          {item.stock}
-        </ThemedText>
-      </View>
+      {isEditing ? (
+        <View style={styles.editStockContainer}>
+          <TextInput
+            style={[styles.stockInput, { borderColor: theme.border, color: theme.text }]}
+            value={stockValue}
+            onChangeText={setStockValue}
+            keyboardType="numeric"
+            autoFocus
+            editable={!isUpdating}
+          />
+          <Pressable 
+            style={[styles.stockSaveButton, { backgroundColor: theme.success, opacity: isUpdating ? 0.7 : 1 }]}
+            onPress={handleSave}
+            disabled={isUpdating}
+          >
+            {isUpdating ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Feather name="check" size={16} color="#fff" />
+            )}
+          </Pressable>
+          <Pressable 
+            style={[styles.stockCancelButton, { backgroundColor: theme.textSecondary, opacity: isUpdating ? 0.5 : 1 }]}
+            onPress={handleCancel}
+            disabled={isUpdating}
+          >
+            <Feather name="x" size={16} color="#fff" />
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable 
+          style={[styles.stockBadge, { backgroundColor: isLowStock ? theme.error + "20" : theme.success + "20" }]}
+          onPress={() => setIsEditing(true)}
+        >
+          <ThemedText type="body" style={{ color: isLowStock ? theme.error : theme.success }}>
+            {item.stock}
+          </ThemedText>
+          <Feather name="edit-2" size={12} color={isLowStock ? theme.error : theme.success} style={{ marginLeft: 4 }} />
+        </Pressable>
+      )}
     </View>
+  );
+}
+
+function AddProductModal({
+  visible,
+  onClose,
+  onAddProduct,
+  existingProductIds,
+  isAdding
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onAddProduct: (productId: string, stock: number) => void;
+  existingProductIds: string[];
+  isAdding: boolean;
+}) {
+  const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [stockCount, setStockCount] = useState("10");
+
+  const { data: products, isLoading } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    queryFn: async () => {
+      const response = await fetch(new URL("/api/products", getApiUrl()).toString());
+      if (!response.ok) throw new Error("Failed to fetch products");
+      return response.json();
+    },
+    enabled: visible,
+  });
+
+  const availableProducts = products?.filter(p => !existingProductIds.includes(p.id)) || [];
+
+  const handleAdd = () => {
+    if (!selectedProduct) {
+      Alert.alert("Select Product", "Please select a product to add");
+      return;
+    }
+    const stock = parseInt(stockCount, 10);
+    if (isNaN(stock) || stock < 0) {
+      Alert.alert("Invalid Stock", "Please enter a valid stock number");
+      return;
+    }
+    onAddProduct(selectedProduct.id, stock);
+  };
+
+  const handleClose = () => {
+    if (isAdding) return;
+    setSelectedProduct(null);
+    setStockCount("10");
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, { backgroundColor: theme.cardBackground, paddingBottom: insets.bottom + Spacing.lg }]}>
+          <View style={styles.modalHeader}>
+            <ThemedText type="h3">Add Product to Inventory</ThemedText>
+            <Pressable onPress={handleClose} disabled={isAdding}>
+              <Feather name="x" size={24} color={isAdding ? theme.textSecondary : theme.text} />
+            </Pressable>
+          </View>
+
+          {isLoading ? (
+            <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: Spacing.xl }} />
+          ) : availableProducts.length === 0 ? (
+            <View style={styles.emptyProducts}>
+              <Feather name="package" size={48} color={theme.textSecondary} />
+              <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md, textAlign: "center" }}>
+                All products are already in inventory
+              </ThemedText>
+            </View>
+          ) : (
+            <ScrollView style={styles.productList} showsVerticalScrollIndicator={false}>
+              {availableProducts.map(product => (
+                <Pressable
+                  key={product.id}
+                  style={[
+                    styles.productOption,
+                    { borderColor: theme.border },
+                    selectedProduct?.id === product.id && { borderColor: theme.primary, backgroundColor: theme.primary + "10" }
+                  ]}
+                  onPress={() => !isAdding && setSelectedProduct(product)}
+                  disabled={isAdding}
+                >
+                  <View style={styles.productOptionInfo}>
+                    <ThemedText type="body">{product.name}</ThemedText>
+                    <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                      Rp {product.price.toLocaleString()}
+                    </ThemedText>
+                  </View>
+                  {selectedProduct?.id === product.id ? (
+                    <Feather name="check-circle" size={20} color={theme.primary} />
+                  ) : (
+                    <Feather name="circle" size={20} color={theme.border} />
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+
+          <KeyboardAwareScrollViewCompat 
+            style={{ flexShrink: 0 }}
+            contentContainerStyle={{ flexGrow: 0 }}
+          >
+            {selectedProduct ? (
+              <View style={styles.stockInputSection}>
+                <ThemedText type="body" style={{ marginBottom: Spacing.sm }}>Initial Stock:</ThemedText>
+                <TextInput
+                  style={[styles.stockInputLarge, { borderColor: theme.border, color: theme.text }]}
+                  value={stockCount}
+                  onChangeText={setStockCount}
+                  keyboardType="numeric"
+                  placeholder="Enter stock count"
+                  placeholderTextColor={theme.textSecondary}
+                  editable={!isAdding}
+                />
+              </View>
+            ) : null}
+          </KeyboardAwareScrollViewCompat>
+
+          <View style={styles.modalActions}>
+            <Pressable 
+              style={[styles.modalButton, { backgroundColor: theme.border, opacity: isAdding ? 0.5 : 1 }]}
+              onPress={handleClose}
+              disabled={isAdding}
+            >
+              <ThemedText type="button" style={{ color: theme.text }}>Cancel</ThemedText>
+            </Pressable>
+            <Pressable 
+              style={[styles.modalButton, { backgroundColor: theme.primary, opacity: (selectedProduct && !isAdding) ? 1 : 0.5 }]}
+              onPress={handleAdd}
+              disabled={!selectedProduct || isAdding}
+            >
+              {isAdding ? (
+                <ActivityIndicator size="small" color={theme.buttonText} />
+              ) : (
+                <ThemedText type="button" style={{ color: theme.buttonText }}>Add Product</ThemedText>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -172,11 +404,13 @@ export default function PickerDashboardScreen() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"orders" | "inventory">("orders");
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [updatingInventoryId, setUpdatingInventoryId] = useState<string | null>(null);
+  const [showAddProduct, setShowAddProduct] = useState(false);
 
   const { data: dashboard, isLoading, refetch, isRefetching } = useQuery<PickerDashboardData>({
     queryKey: ["/api/picker/dashboard", user?.id],
     queryFn: async () => {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : ""}/api/picker/dashboard?userId=${user?.id}`);
+      const response = await fetch(new URL(`/api/picker/dashboard?userId=${user?.id}`, getApiUrl()).toString());
       if (!response.ok) throw new Error("Failed to fetch dashboard");
       return response.json();
     },
@@ -184,10 +418,10 @@ export default function PickerDashboardScreen() {
     refetchInterval: 15000,
   });
 
-  const { data: inventory } = useQuery<InventoryItem[]>({
+  const { data: inventory, refetch: refetchInventory } = useQuery<InventoryItem[]>({
     queryKey: ["/api/picker/inventory", user?.id],
     queryFn: async () => {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : ""}/api/picker/inventory?userId=${user?.id}`);
+      const response = await fetch(new URL(`/api/picker/inventory?userId=${user?.id}`, getApiUrl()).toString());
       if (!response.ok) throw new Error("Failed to fetch inventory");
       return response.json();
     },
@@ -228,6 +462,52 @@ export default function PickerDashboardScreen() {
     },
   });
 
+  const updateInventoryMutation = useMutation({
+    mutationFn: async ({ inventoryId, stockCount }: { inventoryId: string; stockCount: number }) => {
+      setUpdatingInventoryId(inventoryId);
+      const response = await apiRequest("PUT", `/api/picker/inventory/${inventoryId}`, { 
+        userId: user?.id, 
+        stockCount 
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update inventory");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory", user?.id] });
+      setUpdatingInventoryId(null);
+    },
+    onError: (error: Error) => {
+      Alert.alert("Error", error.message);
+      setUpdatingInventoryId(null);
+    },
+  });
+
+  const addProductMutation = useMutation({
+    mutationFn: async ({ productId, stockCount }: { productId: string; stockCount: number }) => {
+      const response = await apiRequest("POST", "/api/picker/inventory", { 
+        userId: user?.id, 
+        productId,
+        stockCount 
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to add product");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory", user?.id] });
+      setShowAddProduct(false);
+      Alert.alert("Success", "Product added to inventory");
+    },
+    onError: (error: Error) => {
+      Alert.alert("Error", error.message);
+    },
+  });
+
   if (!user || user.role !== "picker") {
     return (
       <ThemedView style={styles.container}>
@@ -257,13 +537,14 @@ export default function PickerDashboardScreen() {
   const pendingOrders = dashboard?.orders?.pending || [];
   const activeOrders = dashboard?.orders?.active || [];
   const allOrders = [...pendingOrders, ...activeOrders];
+  const existingProductIds = inventory?.map(i => i.productId) || [];
 
   return (
     <ThemedView style={styles.container}>
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }]}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.primary} />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => { refetch(); if (activeTab === "inventory") refetchInventory(); }} tintColor={theme.primary} />}
       >
         <Card style={styles.statusCard}>
           <View style={styles.statusRow}>
@@ -330,22 +611,48 @@ export default function PickerDashboardScreen() {
             )}
           </>
         ) : (
-          <Card style={styles.inventoryCard}>
-            {inventory && inventory.length > 0 ? (
-              inventory.map(item => (
-                <InventoryCard key={item.id} item={item} />
-              ))
-            ) : (
-              <View style={styles.emptyInventory}>
-                <Feather name="box" size={32} color={theme.textSecondary} />
-                <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.sm }}>
-                  No inventory items
-                </ThemedText>
-              </View>
-            )}
-          </Card>
+          <>
+            <Pressable 
+              style={[styles.addProductButton, { backgroundColor: theme.primary }]}
+              onPress={() => setShowAddProduct(true)}
+            >
+              <Feather name="plus" size={18} color={theme.buttonText} />
+              <ThemedText type="button" style={{ color: theme.buttonText, marginLeft: Spacing.xs }}>
+                Add Product
+              </ThemedText>
+            </Pressable>
+
+            <Card style={styles.inventoryCard}>
+              {inventory && inventory.length > 0 ? (
+                inventory.map(item => (
+                  <InventoryItemRow 
+                    key={item.id} 
+                    item={item}
+                    onUpdateStock={(id, newStock) => updateInventoryMutation.mutate({ inventoryId: id, stockCount: newStock })}
+                    isUpdating={updatingInventoryId === item.id}
+                    onEditComplete={() => setUpdatingInventoryId(null)}
+                  />
+                ))
+              ) : (
+                <View style={styles.emptyInventory}>
+                  <Feather name="box" size={32} color={theme.textSecondary} />
+                  <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.sm }}>
+                    No inventory items. Add products to get started.
+                  </ThemedText>
+                </View>
+              )}
+            </Card>
+          </>
         )}
       </ScrollView>
+
+      <AddProductModal
+        visible={showAddProduct}
+        onClose={() => setShowAddProduct(false)}
+        onAddProduct={(productId, stock) => addProductMutation.mutate({ productId, stockCount: stock })}
+        existingProductIds={existingProductIds}
+        isAdding={addProductMutation.isPending}
+      />
     </ThemedView>
   );
 }
@@ -367,10 +674,26 @@ const styles = StyleSheet.create({
   itemsList: { marginBottom: Spacing.md },
   orderFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   actionButton: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.sm },
+  addProductButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: Spacing.md, borderRadius: BorderRadius.md, marginBottom: Spacing.md },
   inventoryCard: { padding: Spacing.md },
-  inventoryRow: { flexDirection: "row", alignItems: "center", paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: "#eee" },
+  inventoryRow: { flexDirection: "row", alignItems: "center", paddingVertical: Spacing.sm, borderBottomWidth: 1 },
   inventoryInfo: { flex: 1 },
-  stockBadge: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm, minWidth: 50, alignItems: "center" },
+  stockBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm, minWidth: 60 },
+  editStockContainer: { flexDirection: "row", alignItems: "center", gap: Spacing.xs },
+  stockInput: { width: 60, height: 36, borderWidth: 1, borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.sm, textAlign: "center" },
+  stockSaveButton: { width: 36, height: 36, borderRadius: BorderRadius.sm, alignItems: "center", justifyContent: "center" },
+  stockCancelButton: { width: 36, height: 36, borderRadius: BorderRadius.sm, alignItems: "center", justifyContent: "center" },
   emptyCard: { alignItems: "center", padding: Spacing.xxl },
   emptyInventory: { alignItems: "center", padding: Spacing.xl },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  modalContent: { borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.lg, maxHeight: "80%" },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.lg },
+  productList: { maxHeight: 300 },
+  productOption: { flexDirection: "row", alignItems: "center", padding: Spacing.md, borderWidth: 1, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
+  productOptionInfo: { flex: 1 },
+  emptyProducts: { alignItems: "center", padding: Spacing.xl },
+  stockInputSection: { marginTop: Spacing.lg },
+  stockInputLarge: { borderWidth: 1, borderRadius: BorderRadius.md, padding: Spacing.md, fontSize: 16 },
+  modalActions: { flexDirection: "row", gap: Spacing.md, marginTop: Spacing.lg },
+  modalButton: { flex: 1, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, alignItems: "center" },
 });
