@@ -16,6 +16,85 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 
 WebBrowser.maybeCompleteAuthSession();
 
+const HAS_GOOGLE_CONFIG = !!(
+  process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+  process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+  process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
+  process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
+);
+
+interface GoogleSignInButtonProps {
+  onSuccess: () => void;
+  onError: (error: string) => void;
+  onLoadingChange: (loading: boolean) => void;
+  theme: any;
+}
+
+function GoogleSignInButton({ onSuccess, onError, onLoadingChange, theme }: GoogleSignInButtonProps) {
+  const { loginWithGoogle } = useAuth();
+  
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+  });
+
+  useEffect(() => {
+    const handleResponse = async () => {
+      if (response?.type === "success") {
+        const { authentication } = response;
+        if (authentication?.accessToken) {
+          try {
+            onLoadingChange(true);
+            const userInfoResponse = await fetch(
+              "https://www.googleapis.com/userinfo/v2/me",
+              { headers: { Authorization: `Bearer ${authentication.accessToken}` } }
+            );
+            const userInfo = await userInfoResponse.json();
+            const result = await loginWithGoogle(userInfo.id, userInfo.email, userInfo.name);
+            onLoadingChange(false);
+            if (result.success) {
+              onSuccess();
+            } else {
+              onError(result.error || "Google Sign-In failed");
+            }
+          } catch (e) {
+            onLoadingChange(false);
+            onError("Failed to get Google user info");
+          }
+        }
+      } else if (response?.type === "error") {
+        onError("Google Sign-In was cancelled or failed");
+      }
+    };
+    handleResponse();
+  }, [response]);
+
+  const handlePress = async () => {
+    if (!request) {
+      onError("Google Sign-In is not ready. Please try again.");
+      return;
+    }
+    try {
+      await promptAsync();
+    } catch (e) {
+      onError("Google Sign-In failed to start");
+    }
+  };
+
+  return (
+    <Pressable
+      style={[styles.socialButton, { backgroundColor: theme.backgroundDefault }]}
+      onPress={handlePress}
+    >
+      <Feather name="mail" size={24} color={theme.text} />
+      <ThemedText type="body" style={styles.socialButtonText}>
+        Google
+      </ThemedText>
+    </Pressable>
+  );
+}
+
 interface PhoneSignupScreenProps {
   onComplete: () => void;
 }
@@ -32,54 +111,6 @@ export default function PhoneSignupScreen({ onComplete }: PhoneSignupScreenProps
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [error, setError] = useState<string | null>(null);
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    expoClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-  });
-
-  useEffect(() => {
-    handleGoogleResponse();
-  }, [response]);
-
-  const handleGoogleResponse = async () => {
-    if (response?.type === "success") {
-      const { authentication } = response;
-      if (authentication?.accessToken) {
-        try {
-          setIsLoading(true);
-          const userInfoResponse = await fetch(
-            "https://www.googleapis.com/userinfo/v2/me",
-            {
-              headers: { Authorization: `Bearer ${authentication.accessToken}` },
-            }
-          );
-          const userInfo = await userInfoResponse.json();
-          
-          const result = await loginWithGoogle(
-            userInfo.id,
-            userInfo.email,
-            userInfo.name
-          );
-          
-          setIsLoading(false);
-          
-          if (result.success) {
-            onComplete();
-          } else {
-            setError(result.error || "Google Sign-In failed");
-          }
-        } catch (e) {
-          setIsLoading(false);
-          setError("Failed to get Google user info");
-        }
-      }
-    } else if (response?.type === "error") {
-      setError("Google Sign-In was cancelled or failed");
-    }
-  };
 
   const fullPhone = `+62${phone}`;
 
@@ -144,54 +175,32 @@ export default function PhoneSignupScreen({ onComplete }: PhoneSignupScreenProps
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setError(null);
-    const hasGoogleConfig = !!(
-      process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
-      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
-      process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
-      process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
-    );
-    
-    if (!hasGoogleConfig) {
-      Alert.alert(
-        "Google Sign-In Setup Required",
-        "To enable Google Sign-In, you need to configure Google OAuth credentials in your Google Cloud Console and add them as environment variables (EXPO_PUBLIC_GOOGLE_CLIENT_ID, EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID).\n\nFor now, please use Phone OTP or Apple Sign-In (iOS only).",
-        [
-          { text: "OK" },
-          {
-            text: "Demo Login",
-            onPress: async () => {
-              setIsLoading(true);
-              const demoGoogleId = `demo_google_${Date.now()}`;
-              const result = await loginWithGoogle(
-                demoGoogleId,
-                "demo@gmail.com",
-                "Demo User"
-              );
-              setIsLoading(false);
-              if (result.success) {
-                onComplete();
-              } else {
-                setError(result.error || "Demo login failed");
-              }
-            },
+  const handleGoogleFallback = () => {
+    Alert.alert(
+      "Google Sign-In Setup Required",
+      "To enable Google Sign-In, you need to configure Google OAuth credentials in your Google Cloud Console and add them as environment variables (EXPO_PUBLIC_GOOGLE_CLIENT_ID, EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID).\n\nFor now, please use Phone OTP or Apple Sign-In (iOS only).",
+      [
+        { text: "OK" },
+        {
+          text: "Demo Login",
+          onPress: async () => {
+            setIsLoading(true);
+            const demoGoogleId = `demo_google_${Date.now()}`;
+            const result = await loginWithGoogle(
+              demoGoogleId,
+              "demo@gmail.com",
+              "Demo User"
+            );
+            setIsLoading(false);
+            if (result.success) {
+              onComplete();
+            } else {
+              setError(result.error || "Demo login failed");
+            }
           },
-        ]
-      );
-      return;
-    }
-    
-    if (!request) {
-      setError("Google Sign-In is not ready. Please try again.");
-      return;
-    }
-    
-    try {
-      await promptAsync();
-    } catch (e) {
-      setError("Google Sign-In failed to start");
-    }
+        },
+      ]
+    );
   };
 
   return (
@@ -338,15 +347,24 @@ export default function PhoneSignupScreen({ onComplete }: PhoneSignupScreenProps
         </View>
         
         <View style={styles.socialButtons}>
-          <Pressable
-            style={[styles.socialButton, { backgroundColor: theme.backgroundDefault }]}
-            onPress={handleGoogleLogin}
-          >
-            <Feather name="mail" size={24} color={theme.text} />
-            <ThemedText type="body" style={styles.socialButtonText}>
-              Google
-            </ThemedText>
-          </Pressable>
+          {HAS_GOOGLE_CONFIG ? (
+            <GoogleSignInButton
+              onSuccess={onComplete}
+              onError={setError}
+              onLoadingChange={setIsLoading}
+              theme={theme}
+            />
+          ) : (
+            <Pressable
+              style={[styles.socialButton, { backgroundColor: theme.backgroundDefault }]}
+              onPress={handleGoogleFallback}
+            >
+              <Feather name="mail" size={24} color={theme.text} />
+              <ThemedText type="body" style={styles.socialButtonText}>
+                Google
+              </ThemedText>
+            </Pressable>
+          )}
           
           {Platform.OS === "ios" ? (
             <AppleAuthentication.AppleAuthenticationButton

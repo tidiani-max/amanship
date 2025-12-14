@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Image, TextInput, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
+import { CartToast } from "@/components/CartToast";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
@@ -100,8 +101,13 @@ export default function HomeScreen() {
     navigation.navigate("ProductDetail", { product });
   };
 
+  const [toastVisible, setToastVisible] = useState(false);
+  const [lastAddedProduct, setLastAddedProduct] = useState<string>("");
+
   const handleAddToCart = (product: Product) => {
     addToCart(product, 1);
+    setLastAddedProduct(product.name);
+    setToastVisible(true);
   };
 
   const formatPrice = (price: number) => {
@@ -111,8 +117,9 @@ export default function HomeScreen() {
   const isLoading = categoriesLoading || productsLoading;
 
   return (
+    <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
     <ScrollView
-      style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
+      style={{ flex: 1 }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
         paddingBottom: tabBarHeight + Spacing.xl + 80,
@@ -298,6 +305,13 @@ export default function HomeScreen() {
         </View>
       </View>
     </ScrollView>
+
+      <CartToast
+        visible={toastVisible}
+        productName={lastAddedProduct}
+        onDismiss={() => setToastVisible(false)}
+      />
+    </View>
   );
 }
 
