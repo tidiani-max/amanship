@@ -6,6 +6,7 @@ interface User {
   id: string;
   username: string;
   phone: string | null;
+  email: string | null;
   role: string;
 }
 
@@ -15,6 +16,9 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signup: (username: string, password: string, phone?: string) => Promise<{ success: boolean; error?: string }>;
+  sendOtp: (phone: string) => Promise<{ success: boolean; code?: string; error?: string }>;
+  verifyOtp: (phone: string, code: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithApple: (appleId: string, email?: string, fullName?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateProfile: (data: { username?: string; phone?: string }) => Promise<{ success: boolean; error?: string }>;
 }
@@ -108,6 +112,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const sendOtp = async (phone: string) => {
+    try {
+      const response = await apiRequest("POST", "/api/auth/otp/send", { phone });
+      const data = await response.json();
+      
+      if (response.ok) {
+        return { success: true, code: data.code };
+      } else {
+        return { success: false, error: data.error || "Failed to send OTP" };
+      }
+    } catch (error) {
+      return { success: false, error: "Network error. Please try again." };
+    }
+  };
+
+  const verifyOtp = async (phone: string, code: string) => {
+    try {
+      const response = await apiRequest("POST", "/api/auth/otp/verify", { phone, code });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUser(data.user);
+        await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || "Invalid OTP" };
+      }
+    } catch (error) {
+      return { success: false, error: "Network error. Please try again." };
+    }
+  };
+
+  const loginWithApple = async (appleId: string, email?: string, fullName?: string) => {
+    try {
+      const response = await apiRequest("POST", "/api/auth/apple", { appleId, email, fullName });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUser(data.user);
+        await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || "Apple sign-in failed" };
+      }
+    } catch (error) {
+      return { success: false, error: "Network error. Please try again." };
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -116,6 +169,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         login,
         signup,
+        sendOtp,
+        verifyOtp,
+        loginWithApple,
         logout,
         updateProfile,
       }}

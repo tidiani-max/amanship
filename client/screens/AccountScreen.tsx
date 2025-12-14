@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -10,6 +10,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useLanguage } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
@@ -52,17 +53,47 @@ export default function AccountScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
   const { t } = useLanguage();
+  const { user, isAuthenticated, logout } = useAuth();
 
   const getInitial = () => {
+    if (user?.username) {
+      return user.username.charAt(0).toUpperCase();
+    }
     return "G";
   };
 
   const getDisplayName = () => {
+    if (user?.username) {
+      return user.username;
+    }
     return "Guest";
   };
 
   const getPhoneNumber = () => {
+    if (user?.phone) {
+      return user.phone;
+    }
+    if (user?.email) {
+      return user.email;
+    }
     return t.account.noPhone;
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Logout", 
+          style: "destructive",
+          onPress: async () => {
+            await logout();
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -182,6 +213,18 @@ export default function AccountScreen() {
             />
           </Card>
         </View>
+
+        {isAuthenticated ? (
+          <Pressable 
+            style={[styles.logoutButton, { borderColor: theme.error }]}
+            onPress={handleLogout}
+          >
+            <Feather name="log-out" size={20} color={theme.error} />
+            <ThemedText type="body" style={{ color: theme.error }}>
+              Logout
+            </ThemedText>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </ThemedView>
   );

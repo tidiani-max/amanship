@@ -1,9 +1,9 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
-import { eq } from "drizzle-orm";
+import { eq, and, gt } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { categories, products, vouchers, users, stores, storeStaff, storeInventory } from "@shared/schema";
+import { categories, products, vouchers, users, stores, storeStaff, storeInventory, otpCodes } from "@shared/schema";
 import { findNearestAvailableStore, getStoresWithAvailability, estimateDeliveryTime } from "./storeAvailability";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -529,6 +529,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Profile update error:", error);
       res.status(500).json({ error: "Profile update failed" });
+    }
+  });
+
+  // OTP Authentication
+  // NOTE: This is a demo implementation. In production:
+  // - Integrate Twilio/other SMS provider to send OTP via SMS
+  // - Remove the code from the response
+  // - Add rate limiting to prevent abuse
+  // - Use secure random number generation
+  app.post("/api/auth/otp/send", async (req: Request, res: Response) => {
+    try {
+      const { phone } = req.body;
+      if (!phone) {
+        return res.status(400).json({ error: "Phone number is required" });
+      }
+      
+      // Generate 6-digit OTP
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+      
+      // Store OTP in database
+      await db.insert(otpCodes).values({
+        phone,
+        code,
+        expiresAt,
+      });
+      
+      // DEMO ONLY: Return code in response for testing
+      // In production, send SMS via Twilio and only return { success: true }
+      res.json({ success: true, code, message: "OTP sent (demo mode - code shown for testing)" });
+    } catch (error) {
+      console.error("OTP send error:", error);
+      res.status(500).json({ error: "Failed to send OTP" });
+    }
+  });
+
+  app.post("/api/auth/otp/verify", async (req: Request, res: Response) => {
+    try {
+      const { phone, code } = req.body;
+      if (!phone || !code) {
+        return res.status(400).json({ error: "Phone and code are required" });
+      }
+      
+      // Find valid OTP
+      const validOtp = await db.select().from(otpCodes)
+        .where(and(
+          eq(otpCodes.phone, phone),
+          eq(otpCodes.code, code),
+          eq(otpCodes.verified, false),
+          gt(otpCodes.expiresAt, new Date())
+        ))
+        .limit(1);
+      
+      if (validOtp.length === 0) {
+        return res.status(400).json({ error: "Invalid or expired OTP" });
+      }
+      
+      // Mark OTP as verified
+      await db.update(otpCodes)
+        .set({ verified: true })
+        .where(eq(otpCodes.id, validOtp[0].id));
+      
+      // Find or create user
+      let user = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+      
+      if (user.length === 0) {
+        const newUser = await db.insert(users).values({
+          username: `user_${phone.slice(-4)}`,
+          password: Math.random().toString(36).slice(-8),
+          phone,
+          role: "customer",
+        }).returning();
+        user = newUser;
+      }
+      
+      res.json({
+        user: {
+          id: user[0].id,
+          username: user[0].username,
+          phone: user[0].phone,
+          email: user[0].email,
+          role: user[0].role,
+        },
+      });
+    } catch (error) {
+      console.error("OTP verify error:", error);
+      res.status(500).json({ error: "Failed to verify OTP" });
+    }
+  });
+
+  // Apple Sign-In
+  // NOTE: This is a demo implementation. In production:
+  // - Validate the identity token using Apple's public keys
+  // - Verify the token signature and claims
+  // - Check token expiration and audience
+  app.post("/api/auth/apple", async (req: Request, res: Response) => {
+    try {
+      const { appleId, email, fullName } = req.body;
+      if (!appleId) {
+        return res.status(400).json({ error: "Apple ID is required" });
+      }
+      
+      // In production, validate the identity token here
+      // using Apple's public keys (https://appleid.apple.com/auth/keys)
+      
+      // Find or create user
+      let user = await db.select().from(users).where(eq(users.appleId, appleId)).limit(1);
+      
+      if (user.length === 0) {
+        const username = fullName || email?.split("@")[0] || `apple_${appleId.slice(-6)}`;
+        const newUser = await db.insert(users).values({
+          username,
+          password: Math.random().toString(36).slice(-8),
+          appleId,
+          email: email || null,
+          role: "customer",
+        }).returning();
+        user = newUser;
+      }
+      
+      res.json({
+        user: {
+          id: user[0].id,
+          username: user[0].username,
+          phone: user[0].phone,
+          email: user[0].email,
+          role: user[0].role,
+        },
+      });
+    } catch (error) {
+      console.error("Apple auth error:", error);
+      res.status(500).json({ error: "Apple authentication failed" });
     }
   });
 
