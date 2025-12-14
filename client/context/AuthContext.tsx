@@ -19,6 +19,7 @@ interface AuthContextType {
   sendOtp: (phone: string) => Promise<{ success: boolean; code?: string; error?: string }>;
   verifyOtp: (phone: string, code: string) => Promise<{ success: boolean; error?: string }>;
   loginWithApple: (appleId: string, email?: string, fullName?: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: (googleId: string, email?: string, name?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateProfile: (data: { username?: string; phone?: string }) => Promise<{ success: boolean; error?: string }>;
 }
@@ -161,6 +162,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loginWithGoogle = async (googleId: string, email?: string, name?: string) => {
+    try {
+      const response = await apiRequest("POST", "/api/auth/google", { googleId, email, name });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUser(data.user);
+        await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || "Google sign-in failed" };
+      }
+    } catch (error) {
+      return { success: false, error: "Network error. Please try again." };
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -172,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sendOtp,
         verifyOtp,
         loginWithApple,
+        loginWithGoogle,
         logout,
         updateProfile,
       }}

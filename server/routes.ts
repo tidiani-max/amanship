@@ -664,6 +664,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Google Sign-In
+  // NOTE: This is a demo implementation. In production:
+  // - Validate the Google ID token using Google's tokeninfo endpoint
+  // - Verify the token audience matches your client ID
+  app.post("/api/auth/google", async (req: Request, res: Response) => {
+    try {
+      const { googleId, email, name } = req.body;
+      if (!googleId) {
+        return res.status(400).json({ error: "Google ID is required" });
+      }
+      
+      // In production, validate the ID token here
+      // using Google's tokeninfo endpoint or google-auth-library
+      
+      // Find or create user
+      let user = await db.select().from(users).where(eq(users.googleId, googleId)).limit(1);
+      
+      if (user.length === 0) {
+        // Check if user exists with same email
+        if (email) {
+          const existingUser = await db.select().from(users).where(eq(users.email, email)).limit(1);
+          if (existingUser.length > 0) {
+            // Link Google account to existing user
+            await db.update(users)
+              .set({ googleId })
+              .where(eq(users.id, existingUser[0].id));
+            user = await db.select().from(users).where(eq(users.id, existingUser[0].id)).limit(1);
+          }
+        }
+        
+        // Create new user if not found
+        if (user.length === 0) {
+          const username = name || email?.split("@")[0] || `google_${googleId.slice(-6)}`;
+          const newUser = await db.insert(users).values({
+            username,
+            password: Math.random().toString(36).slice(-8),
+            googleId,
+            email: email || null,
+            role: "customer",
+          }).returning();
+          user = newUser;
+        }
+      }
+      
+      res.json({
+        user: {
+          id: user[0].id,
+          username: user[0].username,
+          phone: user[0].phone,
+          email: user[0].email,
+          role: user[0].role,
+        },
+      });
+    } catch (error) {
+      console.error("Google auth error:", error);
+      res.status(500).json({ error: "Google authentication failed" });
+    }
+  });
+
   // Seed data endpoint (for initial data population)
   app.post("/api/seed", async (_req: Request, res: Response) => {
     try {
