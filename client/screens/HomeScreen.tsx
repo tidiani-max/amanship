@@ -16,6 +16,7 @@ import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Category, Product } from "@/types";
 import { mockPromotions } from "@/data/mockData";
 import { useCart } from "@/context/CartContext";
+import { getImageUrl } from "@/lib/image-url";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -150,7 +151,7 @@ export default function HomeScreen() {
             >
               <View style={[styles.categoryIcon, { backgroundColor: category.color + "20", overflow: "hidden" }]}>
                 {category.image ? (
-                  <Image source={{ uri: category.image }} style={styles.categoryImage} />
+                  <Image source={{ uri: getImageUrl(category.image) }} style={styles.categoryImage} />
                 ) : (
                   <Feather name={category.icon as any} size={24} color={category.color} />
                 )}
@@ -201,7 +202,7 @@ export default function HomeScreen() {
             >
               <View style={[styles.productImageContainer, { backgroundColor: theme.backgroundDefault }]}>
                 {product.image ? (
-                  <Image source={{ uri: product.image }} style={styles.productImage} />
+                  <Image source={{ uri: getImageUrl(product.image) }} style={styles.productImage} />
                 ) : (
                   <Feather name="package" size={32} color={theme.textSecondary} />
                 )}

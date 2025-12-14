@@ -13,6 +13,7 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Product } from "@/types";
 import { useCart } from "@/context/CartContext";
+import { getImageUrl } from "@/lib/image-url";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type CategoryRouteProp = RouteProp<RootStackParamList, "Category">;
@@ -81,7 +82,7 @@ export default function CategoryScreen() {
     >
       <View style={[styles.productImageContainer, { backgroundColor: theme.backgroundDefault }]}>
         {item.image ? (
-          <Image source={{ uri: item.image }} style={styles.productImage} />
+          <Image source={{ uri: getImageUrl(item.image) }} style={styles.productImage} />
         ) : (
           <Feather name="package" size={32} color={theme.textSecondary} />
         )}
