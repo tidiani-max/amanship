@@ -1,9 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, StyleSheet, TextInput, Pressable, Platform, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
 import * as AppleAuthentication from "expo-apple-authentication";
+import * as Google from "expo-auth-session/providers/google";
+import * as WebBrowser from "expo-web-browser";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -11,6 +13,8 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
+
+WebBrowser.maybeCompleteAuthSession();
 
 interface PhoneSignupScreenProps {
   onComplete: () => void;
@@ -20,7 +24,7 @@ export default function PhoneSignupScreen({ onComplete }: PhoneSignupScreenProps
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
-  const { sendOtp, verifyOtp, loginWithApple } = useAuth();
+  const { sendOtp, verifyOtp, loginWithApple, loginWithGoogle } = useAuth();
   
   const [phone, setPhone] = useState("");
   const [otpCode, setOtpCode] = useState("");
@@ -28,6 +32,54 @@ export default function PhoneSignupScreen({ onComplete }: PhoneSignupScreenProps
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [error, setError] = useState<string | null>(null);
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    expoClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+  });
+
+  useEffect(() => {
+    handleGoogleResponse();
+  }, [response]);
+
+  const handleGoogleResponse = async () => {
+    if (response?.type === "success") {
+      const { authentication } = response;
+      if (authentication?.accessToken) {
+        try {
+          setIsLoading(true);
+          const userInfoResponse = await fetch(
+            "https://www.googleapis.com/userinfo/v2/me",
+            {
+              headers: { Authorization: `Bearer ${authentication.accessToken}` },
+            }
+          );
+          const userInfo = await userInfoResponse.json();
+          
+          const result = await loginWithGoogle(
+            userInfo.id,
+            userInfo.email,
+            userInfo.name
+          );
+          
+          setIsLoading(false);
+          
+          if (result.success) {
+            onComplete();
+          } else {
+            setError(result.error || "Google Sign-In failed");
+          }
+        } catch (e) {
+          setIsLoading(false);
+          setError("Failed to get Google user info");
+        }
+      }
+    } else if (response?.type === "error") {
+      setError("Google Sign-In was cancelled or failed");
+    }
+  };
 
   const fullPhone = `+62${phone}`;
 
@@ -92,8 +144,54 @@ export default function PhoneSignupScreen({ onComplete }: PhoneSignupScreenProps
     }
   };
 
-  const handleGoogleLogin = () => {
-    Alert.alert("Coming Soon", "Google Sign-In will be available soon!");
+  const handleGoogleLogin = async () => {
+    setError(null);
+    const hasGoogleConfig = !!(
+      process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+      process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
+      process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
+    );
+    
+    if (!hasGoogleConfig) {
+      Alert.alert(
+        "Google Sign-In Setup Required",
+        "To enable Google Sign-In, you need to configure Google OAuth credentials in your Google Cloud Console and add them as environment variables (EXPO_PUBLIC_GOOGLE_CLIENT_ID, EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID).\n\nFor now, please use Phone OTP or Apple Sign-In (iOS only).",
+        [
+          { text: "OK" },
+          {
+            text: "Demo Login",
+            onPress: async () => {
+              setIsLoading(true);
+              const demoGoogleId = `demo_google_${Date.now()}`;
+              const result = await loginWithGoogle(
+                demoGoogleId,
+                "demo@gmail.com",
+                "Demo User"
+              );
+              setIsLoading(false);
+              if (result.success) {
+                onComplete();
+              } else {
+                setError(result.error || "Demo login failed");
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+    
+    if (!request) {
+      setError("Google Sign-In is not ready. Please try again.");
+      return;
+    }
+    
+    try {
+      await promptAsync();
+    } catch (e) {
+      setError("Google Sign-In failed to start");
+    }
   };
 
   return (
