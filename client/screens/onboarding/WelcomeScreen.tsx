@@ -1,8 +1,9 @@
 import React from "react";
-import { View, StyleSheet, Image } from "react-native";
+import { View, StyleSheet, Image, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { CommonActions } from "@react-navigation/native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -70,6 +71,14 @@ export default function WelcomeScreen() {
         <Button onPress={() => navigation.navigate("Location")}>
           Get Started
         </Button>
+        <Pressable
+          onPress={() => navigation.navigate("PhoneSignup")}
+          style={styles.skipLink}
+        >
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            Skip for Demo
+          </ThemedText>
+        </Pressable>
       </View>
     </ThemedView>
   );
@@ -110,5 +119,10 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: Spacing.lg,
+  },
+  skipLink: {
+    alignItems: "center",
+    paddingVertical: Spacing.md,
+    marginTop: Spacing.sm,
   },
 });

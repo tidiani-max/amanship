@@ -116,26 +116,47 @@ export const Fonts = Platform.select({
   },
 });
 
-export const Shadows = {
+const shadowStyles = {
   small: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    web: { boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)" },
+    native: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+    },
   },
   medium: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 4,
+    web: { boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.12)" },
+    native: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 6,
+      elevation: 4,
+    },
   },
   fab: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    web: { boxShadow: "0px 4px 16px rgba(0, 0, 0, 0.2)" },
+    native: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.2,
+      shadowRadius: 8,
+      elevation: 8,
+    },
+  },
+};
+
+export const Shadows = {
+  get small() {
+    return Platform.OS === "web" ? shadowStyles.small.web : shadowStyles.small.native;
+  },
+  get medium() {
+    return Platform.OS === "web" ? shadowStyles.medium.web : shadowStyles.medium.native;
+  },
+  get fab() {
+    return Platform.OS === "web" ? shadowStyles.fab.web : shadowStyles.fab.native;
   },
 };

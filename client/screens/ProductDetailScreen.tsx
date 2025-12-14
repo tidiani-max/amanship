@@ -11,6 +11,7 @@ import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { useCart } from "@/context/CartContext";
 
 type ProductDetailRouteProp = RouteProp<RootStackParamList, "ProductDetail">;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -23,12 +24,14 @@ export default function ProductDetailScreen() {
   const { product } = route.params;
   const [quantity, setQuantity] = useState(1);
   const [showNutrition, setShowNutrition] = useState(false);
+  const { addToCart } = useCart();
 
   const formatPrice = (price: number) => {
     return `Rp ${price.toLocaleString("id-ID")}`;
   };
 
   const handleAddToCart = () => {
+    addToCart(product, quantity);
     navigation.navigate("Cart");
   };
 

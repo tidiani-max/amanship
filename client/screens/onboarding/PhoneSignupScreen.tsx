@@ -112,6 +112,12 @@ export default function PhoneSignupScreen({ onComplete }: PhoneSignupScreenProps
             </ThemedText>
           </Pressable>
         </View>
+
+        <Pressable onPress={onComplete} style={styles.skipLink}>
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            Skip for Demo
+          </ThemedText>
+        </Pressable>
       </View>
       
       <ThemedText type="small" style={[styles.terms, { color: theme.textSecondary }]}>
@@ -185,6 +191,11 @@ const styles = StyleSheet.create({
   },
   socialButtonText: {
     fontWeight: "500",
+  },
+  skipLink: {
+    alignSelf: "center",
+    marginTop: Spacing.xl,
+    padding: Spacing.sm,
   },
   terms: {
     textAlign: "center",

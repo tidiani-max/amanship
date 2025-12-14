@@ -1,20 +1,35 @@
 import React from "react";
-import { View, StyleSheet, FlatList, Pressable } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Product } from "@/types";
-import { mockProducts } from "@/data/mockData";
+import { useCart } from "@/context/CartContext";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type CategoryRouteProp = RouteProp<RootStackParamList, "Category">;
+
+interface APIProduct {
+  id: string;
+  name: string;
+  brand: string;
+  price: number;
+  originalPrice: number | null;
+  image: string | null;
+  categoryId: string;
+  description: string | null;
+  nutrition: any;
+  inStock: boolean;
+  stockCount: number;
+}
 
 export default function CategoryScreen() {
   const insets = useSafeAreaInsets();
@@ -23,8 +38,29 @@ export default function CategoryScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<CategoryRouteProp>();
   const { category } = route.params;
+  const { addToCart } = useCart();
 
-  const products = mockProducts.filter((p) => p.category === category.id);
+  const { data: apiProducts = [], isLoading } = useQuery<APIProduct[]>({
+    queryKey: ["/api/products", `categoryId=${category.id}`],
+    queryFn: async () => {
+      const res = await fetch(`/api/products?categoryId=${category.id}`);
+      return res.json();
+    },
+  });
+
+  const products: Product[] = apiProducts.map((p) => ({
+    id: p.id,
+    name: p.name,
+    brand: p.brand,
+    price: p.price,
+    originalPrice: p.originalPrice || undefined,
+    image: p.image || "",
+    category: p.categoryId,
+    description: p.description || "",
+    nutrition: p.nutrition,
+    inStock: p.inStock,
+    stockCount: p.stockCount,
+  }));
 
   const formatPrice = (price: number) => {
     return `Rp ${price.toLocaleString("id-ID")}`;
@@ -32,6 +68,10 @@ export default function CategoryScreen() {
 
   const handleProductPress = (product: Product) => {
     navigation.navigate("ProductDetail", { product });
+  };
+
+  const handleAddToCart = (product: Product) => {
+    addToCart(product, 1);
   };
 
   const renderProduct = ({ item }: { item: Product }) => (
@@ -71,7 +111,13 @@ export default function CategoryScreen() {
             ) : null}
           </View>
           {item.inStock ? (
-            <Pressable style={[styles.addButton, { backgroundColor: theme.primary }]}>
+            <Pressable 
+              style={[styles.addButton, { backgroundColor: theme.primary }]}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleAddToCart(item);
+              }}
+            >
               <Feather name="plus" size={16} color={theme.buttonText} />
             </Pressable>
           ) : null}
@@ -79,6 +125,14 @@ export default function CategoryScreen() {
       </View>
     </Pressable>
   );
+
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: theme.backgroundRoot }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
@@ -159,5 +213,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: Spacing.xxl * 2,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

@@ -1,11 +1,12 @@
 import React from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image, TextInput } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Image, TextInput, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
@@ -13,9 +14,31 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Category, Product } from "@/types";
-import { mockCategories, mockProducts, mockPromotions } from "@/data/mockData";
+import { mockPromotions } from "@/data/mockData";
+import { useCart } from "@/context/CartContext";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+interface APICategory {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+}
+
+interface APIProduct {
+  id: string;
+  name: string;
+  brand: string;
+  price: number;
+  originalPrice: number | null;
+  image: string | null;
+  categoryId: string;
+  description: string | null;
+  nutrition: any;
+  inStock: boolean;
+  stockCount: number;
+}
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -23,6 +46,36 @@ export default function HomeScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
+  const { addToCart } = useCart();
+
+  const { data: apiCategories = [], isLoading: categoriesLoading } = useQuery<APICategory[]>({
+    queryKey: ["/api/categories"],
+  });
+
+  const { data: apiProducts = [], isLoading: productsLoading } = useQuery<APIProduct[]>({
+    queryKey: ["/api/products"],
+  });
+
+  const categories: Category[] = apiCategories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    icon: c.icon,
+    color: c.color,
+  }));
+
+  const products: Product[] = apiProducts.map((p) => ({
+    id: p.id,
+    name: p.name,
+    brand: p.brand,
+    price: p.price,
+    originalPrice: p.originalPrice || undefined,
+    image: p.image || "",
+    category: p.categoryId,
+    description: p.description || "",
+    nutrition: p.nutrition,
+    inStock: p.inStock,
+    stockCount: p.stockCount,
+  }));
 
   const handleCategoryPress = (category: Category) => {
     navigation.navigate("Category", { category });
@@ -32,9 +85,15 @@ export default function HomeScreen() {
     navigation.navigate("ProductDetail", { product });
   };
 
+  const handleAddToCart = (product: Product) => {
+    addToCart(product, 1);
+  };
+
   const formatPrice = (price: number) => {
     return `Rp ${price.toLocaleString("id-ID")}`;
   };
+
+  const isLoading = categoriesLoading || productsLoading;
 
   return (
     <ScrollView
@@ -70,12 +129,18 @@ export default function HomeScreen() {
         </ThemedText>
       </View>
 
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
+      ) : null}
+
       <View style={styles.section}>
         <ThemedText type="h3" style={styles.sectionTitle}>
           Categories
         </ThemedText>
         <View style={styles.categoriesGrid}>
-          {mockCategories.map((category) => (
+          {categories.map((category) => (
             <Pressable
               key={category.id}
               style={styles.categoryItem}
@@ -122,7 +187,7 @@ export default function HomeScreen() {
           Popular Items
         </ThemedText>
         <View style={styles.productsGrid}>
-          {mockProducts.slice(0, 6).map((product) => (
+          {products.slice(0, 6).map((product) => (
             <Pressable
               key={product.id}
               style={[styles.productCard, { backgroundColor: theme.cardBackground }]}
@@ -142,7 +207,13 @@ export default function HomeScreen() {
                   <ThemedText type="body" style={{ fontWeight: "600", color: theme.primary }}>
                     {formatPrice(product.price)}
                   </ThemedText>
-                  <Pressable style={[styles.addButton, { backgroundColor: theme.primary }]}>
+                  <Pressable 
+                    style={[styles.addButton, { backgroundColor: theme.primary }]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleAddToCart(product);
+                    }}
+                  >
                     <Feather name="plus" size={16} color={theme.buttonText} />
                   </Pressable>
                 </View>
@@ -261,6 +332,11 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingContainer: {
+    padding: Spacing.xxl,
     alignItems: "center",
     justifyContent: "center",
   },

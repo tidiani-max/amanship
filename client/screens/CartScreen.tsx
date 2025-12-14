@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, StyleSheet, FlatList, Pressable } from "react-native";
+import React from "react";
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
@@ -13,46 +13,33 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { CartItem } from "@/types";
-import { mockProducts } from "@/data/mockData";
+import { useCart } from "@/context/CartContext";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+interface CartItemWithId extends CartItem {
+  cartItemId?: string;
+}
 
 export default function CartScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
-  
-  const [cartItems, setCartItems] = useState<CartItem[]>([
-    { product: mockProducts[0], quantity: 2 },
-    { product: mockProducts[1], quantity: 1 },
-    { product: mockProducts[5], quantity: 3 },
-  ]);
+  const { items, isLoading, updateQuantity, subtotal } = useCart();
 
   const formatPrice = (price: number) => {
     return `Rp ${price.toLocaleString("id-ID")}`;
   };
 
-  const updateQuantity = (productId: string, newQuantity: number) => {
-    if (newQuantity <= 0) {
-      setCartItems(cartItems.filter((item) => item.product.id !== productId));
-    } else {
-      setCartItems(
-        cartItems.map((item) =>
-          item.product.id === productId ? { ...item, quantity: newQuantity } : item
-        )
-      );
-    }
+  const handleUpdateQuantity = (productId: string, newQuantity: number) => {
+    updateQuantity(productId, newQuantity);
   };
 
-  const subtotal = cartItems.reduce(
-    (sum, item) => sum + item.product.price * item.quantity,
-    0
-  );
   const deliveryFee = 10000;
   const total = subtotal + deliveryFee;
 
-  const renderCartItem = ({ item }: { item: CartItem }) => (
+  const renderCartItem = ({ item }: { item: CartItemWithId }) => (
     <Card style={styles.cartItemCard}>
       <View style={styles.cartItemContent}>
         <View style={[styles.productImage, { backgroundColor: theme.backgroundDefault }]}>
@@ -72,7 +59,7 @@ export default function CartScreen() {
         <View style={styles.quantityContainer}>
           <Pressable
             style={[styles.quantityBtn, { backgroundColor: theme.backgroundDefault }]}
-            onPress={() => updateQuantity(item.product.id, item.quantity - 1)}
+            onPress={() => handleUpdateQuantity(item.product.id, item.quantity - 1)}
           >
             <Feather
               name={item.quantity === 1 ? "trash-2" : "minus"}
@@ -85,7 +72,7 @@ export default function CartScreen() {
           </ThemedText>
           <Pressable
             style={[styles.quantityBtn, { backgroundColor: theme.primary }]}
-            onPress={() => updateQuantity(item.product.id, item.quantity + 1)}
+            onPress={() => handleUpdateQuantity(item.product.id, item.quantity + 1)}
           >
             <Feather name="plus" size={14} color={theme.buttonText} />
           </Pressable>
@@ -94,10 +81,18 @@ export default function CartScreen() {
     </Card>
   );
 
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: theme.backgroundRoot }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
       <FlatList
-        data={cartItems}
+        data={items as CartItemWithId[]}
         renderItem={renderCartItem}
         keyExtractor={(item) => item.product.id}
         contentContainerStyle={[
@@ -128,7 +123,7 @@ export default function CartScreen() {
         }
       />
       
-      {cartItems.length > 0 ? (
+      {items.length > 0 ? (
         <View
           style={[
             styles.footer,
@@ -233,5 +228,10 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
     borderTopWidth: 1,
     borderTopColor: "#E0E0E0",
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
