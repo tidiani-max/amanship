@@ -12,6 +12,7 @@ import { queryClient, apiRequest } from "@/lib/query-client";
 import RootStackNavigator from "@/navigation/RootStackNavigator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CartProvider } from "@/context/CartContext";
+import { LocationProvider } from "@/context/LocationContext";
 
 function SeedDataOnMount() {
   useEffect(() => {
@@ -25,17 +26,19 @@ export default function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <CartProvider>
-          <SeedDataOnMount />
-          <SafeAreaProvider>
-            <GestureHandlerRootView style={styles.root}>
-              <KeyboardProvider>
-                <NavigationContainer>
-                  <RootStackNavigator />
-                </NavigationContainer>
-                <StatusBar style="auto" />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </SafeAreaProvider>
+          <LocationProvider>
+            <SeedDataOnMount />
+            <SafeAreaProvider>
+              <GestureHandlerRootView style={styles.root}>
+                <KeyboardProvider>
+                  <NavigationContainer>
+                    <RootStackNavigator />
+                  </NavigationContainer>
+                  <StatusBar style="auto" />
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </SafeAreaProvider>
+          </LocationProvider>
         </CartProvider>
       </QueryClientProvider>
     </ErrorBoundary>

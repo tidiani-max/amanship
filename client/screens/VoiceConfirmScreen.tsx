@@ -1,5 +1,5 @@
-import React from "react";
-import { View, StyleSheet, FlatList, Pressable } from "react-native";
+import React, { useState } from "react";
+import { View, StyleSheet, FlatList, Pressable, Image, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -13,6 +13,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { CartItem } from "@/types";
+import { useCart } from "@/context/CartContext";
+import { getImageUrl } from "@/lib/image-url";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type VoiceConfirmRouteProp = RouteProp<RootStackParamList, "VoiceConfirm">;
@@ -23,7 +25,10 @@ export default function VoiceConfirmScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<VoiceConfirmRouteProp>();
-  const { items } = route.params;
+  const { items: routeItems } = route.params;
+  const { addToCart } = useCart();
+  const [items, setItems] = useState<CartItem[]>(routeItems);
+  const [isAdding, setIsAdding] = useState(false);
 
   const formatPrice = (price: number) => {
     return `Rp ${price.toLocaleString("id-ID")}`;
@@ -34,8 +39,37 @@ export default function VoiceConfirmScreen() {
     0
   );
 
-  const handleAddToCart = () => {
-    navigation.navigate("Cart");
+  const handleRemoveItem = (productId: string) => {
+    setItems((prev) => prev.filter((item) => item.product.id !== productId));
+  };
+
+  const handleUpdateQuantity = (productId: string, delta: number) => {
+    setItems((prev) =>
+      prev.map((item) =>
+        item.product.id === productId
+          ? { ...item, quantity: Math.max(1, item.quantity + delta) }
+          : item
+      )
+    );
+  };
+
+  const handleAddToCart = async () => {
+    if (items.length === 0) {
+      Alert.alert("No Items", "Please add items to your order.");
+      return;
+    }
+    
+    setIsAdding(true);
+    try {
+      for (const item of items) {
+        addToCart(item.product, item.quantity);
+      }
+      navigation.navigate("Cart");
+    } catch (error) {
+      Alert.alert("Error", "Failed to add items to cart.");
+    } finally {
+      setIsAdding(false);
+    }
   };
 
   const renderItem = ({ item }: { item: CartItem }) => (
@@ -61,10 +95,22 @@ export default function VoiceConfirmScreen() {
           </View>
         </View>
         <View style={styles.itemActions}>
-          <Pressable style={[styles.actionButton, { backgroundColor: theme.backgroundDefault }]}>
-            <Feather name="edit-2" size={16} color={theme.text} />
+          <Pressable 
+            style={[styles.actionButton, { backgroundColor: theme.backgroundDefault }]}
+            onPress={() => handleUpdateQuantity(item.product.id, -1)}
+          >
+            <Feather name="minus" size={16} color={theme.text} />
           </Pressable>
-          <Pressable style={[styles.actionButton, { backgroundColor: theme.error + "20" }]}>
+          <Pressable 
+            style={[styles.actionButton, { backgroundColor: theme.backgroundDefault }]}
+            onPress={() => handleUpdateQuantity(item.product.id, 1)}
+          >
+            <Feather name="plus" size={16} color={theme.text} />
+          </Pressable>
+          <Pressable 
+            style={[styles.actionButton, { backgroundColor: theme.error + "20" }]}
+            onPress={() => handleRemoveItem(item.product.id)}
+          >
             <Feather name="trash-2" size={16} color={theme.error} />
           </Pressable>
         </View>
@@ -120,8 +166,8 @@ export default function VoiceConfirmScreen() {
               {formatPrice(total)}
             </ThemedText>
           </View>
-          <Button onPress={handleAddToCart} style={styles.addButton}>
-            Add to Cart
+          <Button onPress={handleAddToCart} style={styles.addButton} disabled={isAdding || items.length === 0}>
+            {isAdding ? "Adding..." : "Add to Cart"}
           </Button>
         </View>
       </View>

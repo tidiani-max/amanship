@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
+import { useMutation } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
@@ -12,34 +13,101 @@ import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
-import { mockAddresses, mockPaymentMethods, mockProducts } from "@/data/mockData";
+import { mockAddresses } from "@/data/mockData";
+import { useCart } from "@/context/CartContext";
+import { useLocation } from "@/context/LocationContext";
+import { apiRequest } from "@/lib/query-client";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+interface PaymentOption {
+  id: string;
+  name: string;
+  icon: string;
+  type: "ewallet" | "bank" | "card" | "cod";
+}
+
+const paymentMethods: PaymentOption[] = [
+  { id: "gopay", name: "GoPay", icon: "credit-card", type: "ewallet" },
+  { id: "ovo", name: "OVO", icon: "credit-card", type: "ewallet" },
+  { id: "shopeepay", name: "ShopeePay", icon: "credit-card", type: "ewallet" },
+  { id: "dana", name: "DANA", icon: "credit-card", type: "ewallet" },
+  { id: "bca", name: "BCA Virtual Account", icon: "briefcase", type: "bank" },
+  { id: "card", name: "Credit Card", icon: "credit-card", type: "card" },
+];
+
+const codPaymentOption: PaymentOption = {
+  id: "cod",
+  name: "Cash on Delivery",
+  icon: "dollar-sign",
+  type: "cod",
+};
 
 export default function CheckoutScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
+  const { items, subtotal, clearCart } = useCart();
+  const { location, store, codAllowed, estimatedDeliveryMinutes } = useLocation();
   
   const [selectedAddress] = useState(mockAddresses[0]);
-  const [selectedPayment, setSelectedPayment] = useState(mockPaymentMethods[0]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentOption>(paymentMethods[0]);
 
-  const subtotal = 69000;
   const deliveryFee = 10000;
   const total = subtotal + deliveryFee;
+  const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+
+  const availablePayments = codAllowed 
+    ? [...paymentMethods, codPaymentOption] 
+    : paymentMethods;
 
   const formatPrice = (price: number) => {
     return `Rp ${price.toLocaleString("id-ID")}`;
   };
 
+  const orderMutation = useMutation({
+    mutationFn: async () => {
+      const orderItems = items.map((item) => ({
+        productId: item.product.id,
+        name: item.product.name,
+        price: item.product.price,
+        quantity: item.quantity,
+      }));
+
+      const res = await apiRequest("POST", "/api/orders", {
+        customerLat: location?.latitude,
+        customerLng: location?.longitude,
+        paymentMethod: selectedPayment.type === "cod" ? "cod" : "midtrans",
+        items: orderItems,
+        total,
+        deliveryFee,
+        addressId: selectedAddress.id,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      navigation.navigate("OrderSuccess", { orderId: data.orderNumber || data.id });
+    },
+    onError: (error: any) => {
+      Alert.alert(
+        "Order Failed",
+        error?.message || "Unable to place order. Please try again.",
+        [{ text: "OK" }]
+      );
+    },
+  });
+
   const handlePlaceOrder = () => {
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      navigation.navigate("OrderSuccess", { orderId: "KG-" + Math.random().toString().slice(2, 8) });
-    }, 1500);
+    if (!location) {
+      Alert.alert("Location Required", "Please enable location to place an order.");
+      return;
+    }
+    if (items.length === 0) {
+      Alert.alert("Empty Cart", "Please add items to your cart first.");
+      return;
+    }
+    orderMutation.mutate();
   };
 
   return (
@@ -92,10 +160,10 @@ export default function CheckoutScreen() {
             </View>
             <View>
               <ThemedText type="body" style={{ fontWeight: "600" }}>
-                15-Minute Delivery
+                {estimatedDeliveryMinutes ? `${estimatedDeliveryMinutes}-Minute Delivery` : "15-Minute Delivery"}
               </ThemedText>
               <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                Estimated arrival: 10:45 AM
+                {store ? `From ${store.name}` : "Finding nearest store..."}
               </ThemedText>
             </View>
           </View>
@@ -106,7 +174,7 @@ export default function CheckoutScreen() {
             Payment Method
           </ThemedText>
           <View style={styles.paymentMethods}>
-            {mockPaymentMethods.map((method) => (
+            {availablePayments.map((method) => (
               <Pressable
                 key={method.id}
                 style={[
@@ -119,12 +187,19 @@ export default function CheckoutScreen() {
                 ]}
                 onPress={() => setSelectedPayment(method)}
               >
-                <View style={[styles.paymentIcon, { backgroundColor: theme.backgroundDefault }]}>
-                  <Feather name={method.icon as any} size={20} color={theme.text} />
+                <View style={[styles.paymentIcon, { backgroundColor: method.type === "cod" ? theme.success + "20" : theme.backgroundDefault }]}>
+                  <Feather name={method.icon as any} size={20} color={method.type === "cod" ? theme.success : theme.text} />
                 </View>
-                <ThemedText type="body" style={{ flex: 1 }}>
-                  {method.name}
-                </ThemedText>
+                <View style={{ flex: 1 }}>
+                  <ThemedText type="body">
+                    {method.name}
+                  </ThemedText>
+                  {method.type === "cod" ? (
+                    <ThemedText type="small" style={{ color: theme.success }}>
+                      Pay when delivered
+                    </ThemedText>
+                  ) : null}
+                </View>
                 {selectedPayment.id === method.id ? (
                   <Feather name="check-circle" size={20} color={theme.primary} />
                 ) : null}
@@ -140,7 +215,7 @@ export default function CheckoutScreen() {
           <Card>
             <View style={styles.summaryRow}>
               <ThemedText type="body" style={{ color: theme.textSecondary }}>
-                Subtotal (4 items)
+                Subtotal ({itemCount} {itemCount === 1 ? "item" : "items"})
               </ThemedText>
               <ThemedText type="body">{formatPrice(subtotal)}</ThemedText>
             </View>
@@ -182,9 +257,9 @@ export default function CheckoutScreen() {
           <Button
             onPress={handlePlaceOrder}
             style={styles.placeOrderButton}
-            disabled={isLoading}
+            disabled={orderMutation.isPending || items.length === 0}
           >
-            {isLoading ? "Processing..." : "Place Order"}
+            {orderMutation.isPending ? "Processing..." : "Place Order"}
           </Button>
         </View>
       </View>

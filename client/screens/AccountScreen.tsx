@@ -156,6 +156,19 @@ export default function AccountScreen() {
           </Card>
         </View>
         
+        <View style={styles.section}>
+          <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+            Admin
+          </ThemedText>
+          <Card style={styles.menuCard}>
+            <MenuItem
+              icon="bar-chart-2"
+              label="Store Dashboard"
+              onPress={() => navigation.navigate("AdminDashboard")}
+            />
+          </Card>
+        </View>
+        
         <Pressable style={[styles.logoutButton, { borderColor: theme.error }]}>
           <Feather name="log-out" size={20} color={theme.error} />
           <ThemedText type="body" style={{ color: theme.error, fontWeight: "500" }}>

@@ -145,25 +145,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/orders", async (req: Request, res: Response) => {
     try {
+      const { customerLat, customerLng, paymentMethod, items, total, deliveryFee, addressId } = req.body;
+      
+      // Validate customer location is provided
+      const lat = parseFloat(customerLat);
+      const lng = parseFloat(customerLng);
+      
+      if (isNaN(lat) || isNaN(lng)) {
+        return res.status(400).json({ 
+          error: "Customer location required",
+          message: "Please enable location to place an order" 
+        });
+      }
+      
+      // Find nearest available store
+      const nearestStore = await findNearestAvailableStore(lat, lng);
+      
+      if (!nearestStore) {
+        return res.status(400).json({ 
+          error: "No stores available",
+          message: "Sorry, no stores are available in your area right now. Please try again later."
+        });
+      }
+      
+      // Get online picker and driver from the store
+      const onlineStaff = await storage.getOnlineStaffByStore(nearestStore.id);
+      
+      if (onlineStaff.pickers.length === 0 || onlineStaff.drivers.length === 0) {
+        return res.status(400).json({ 
+          error: "No staff available",
+          message: "Sorry, no pickers or drivers are available at the moment. Please try again later."
+        });
+      }
+      
+      // Assign first available picker and driver
+      const assignedPicker = onlineStaff.pickers[0];
+      const assignedDriver = onlineStaff.drivers[0];
+      
+      // Validate COD eligibility
+      const requestedPaymentMethod = paymentMethod || "midtrans";
+      let finalPaymentMethod = requestedPaymentMethod;
+      
+      if (requestedPaymentMethod === "cod" && !nearestStore.codAllowed) {
+        return res.status(400).json({
+          error: "COD not available",
+          message: "Cash on delivery is not available at this store. Please use another payment method."
+        });
+      }
+      
       const orderNumber = `KG-${Date.now().toString(36).toUpperCase()}`;
-      const estimatedDelivery = new Date(Date.now() + 15 * 60 * 1000);
+      const estimatedTime = estimateDeliveryTime(nearestStore.distanceKm);
+      const estimatedDelivery = new Date(Date.now() + estimatedTime * 60 * 1000);
+      
+      // Get driver user info for riderInfo
+      const driverUser = await storage.getUser(assignedDriver.userId);
       
       const order = await storage.createOrder({
-        ...req.body,
         userId: DEMO_USER_ID,
         orderNumber,
+        storeId: nearestStore.id,
+        pickerId: assignedPicker.userId,
+        driverId: assignedDriver.userId,
+        items,
+        total,
+        deliveryFee: deliveryFee || 10000,
+        addressId,
+        paymentMethod: finalPaymentMethod,
+        paymentStatus: finalPaymentMethod === "cod" ? "pending" : "pending",
+        customerLat: String(lat),
+        customerLng: String(lng),
         estimatedDelivery,
-        riderInfo: {
-          id: "1",
-          name: "Budi Santoso",
-          phone: "+62 812-3456-7890",
-          rating: 4.8,
-          vehicleNumber: "B 1234 ABC",
-        },
+        status: "pending",
       });
       
       await storage.clearCart(DEMO_USER_ID);
-      res.json(order);
+      
+      // Return order with additional info for the client
+      res.json({
+        ...order,
+        store: {
+          id: nearestStore.id,
+          name: nearestStore.name,
+        },
+        riderInfo: driverUser ? {
+          id: driverUser.id,
+          name: driverUser.username,
+          phone: driverUser.phone || "+62 812-0000-0000",
+          rating: 4.8,
+          vehicleNumber: "B 1234 ABC",
+        } : null,
+        estimatedDeliveryMinutes: estimatedTime,
+      });
     } catch (error) {
       console.error("Order error:", error);
       res.status(500).json({ error: "Failed to create order" });
@@ -250,6 +322,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(staff);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch store staff" });
+    }
+  });
+
+  // Admin Dashboard Metrics
+  app.get("/api/admin/metrics", async (_req: Request, res: Response) => {
+    try {
+      const allStores = await storage.getStores();
+      const allOrders = await storage.getAllOrders();
+      
+      // Get staff for each store and compile metrics
+      const storeMetrics = await Promise.all(
+        allStores.map(async (store) => {
+          const staff = await storage.getStoreStaff(store.id);
+          const onlineStaff = staff.filter((s) => s.status === "online");
+          const storeOrders = allOrders.filter((o) => o.storeId === store.id);
+          
+          return {
+            ...store,
+            totalStaff: staff.length,
+            onlineStaff: onlineStaff.length,
+            pickers: staff.filter((s) => s.role === "picker"),
+            drivers: staff.filter((s) => s.role === "driver"),
+            orderCount: storeOrders.length,
+            pendingOrders: storeOrders.filter((o) => o.status === "pending").length,
+            activeOrders: storeOrders.filter((o) => 
+              ["confirmed", "preparing", "ready", "on_the_way"].includes(o.status || "")
+            ).length,
+          };
+        })
+      );
+      
+      // Order summary
+      const orderSummary = {
+        total: allOrders.length,
+        pending: allOrders.filter((o) => o.status === "pending").length,
+        confirmed: allOrders.filter((o) => o.status === "confirmed").length,
+        preparing: allOrders.filter((o) => o.status === "preparing").length,
+        ready: allOrders.filter((o) => o.status === "ready").length,
+        onTheWay: allOrders.filter((o) => o.status === "on_the_way").length,
+        delivered: allOrders.filter((o) => o.status === "delivered").length,
+        cancelled: allOrders.filter((o) => o.status === "cancelled").length,
+      };
+      
+      res.json({
+        stores: storeMetrics,
+        orderSummary,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Admin metrics error:", error);
+      res.status(500).json({ error: "Failed to fetch admin metrics" });
     }
   });
 

@@ -10,12 +10,14 @@ import { useQuery } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
+import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Category, Product } from "@/types";
 import { mockPromotions } from "@/data/mockData";
 import { useCart } from "@/context/CartContext";
+import { useLocation } from "@/context/LocationContext";
 import { getImageUrl } from "@/lib/image-url";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -49,6 +51,14 @@ export default function HomeScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
   const { addToCart } = useCart();
+  const {
+    locationStatus,
+    store,
+    storeAvailable,
+    estimatedDeliveryMinutes,
+    isCheckingAvailability,
+    requestLocationPermission,
+  } = useLocation();
 
   const { data: apiCategories = [], isLoading: categoriesLoading } = useQuery<APICategory[]>({
     queryKey: ["/api/categories"],
@@ -125,12 +135,64 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      <View style={[styles.deliveryBadge, { backgroundColor: theme.primary }]}>
-        <Feather name="zap" size={16} color={theme.buttonText} />
-        <ThemedText type="caption" style={{ color: theme.buttonText, fontWeight: "600" }}>
-          15-minute delivery
-        </ThemedText>
-      </View>
+      {locationStatus === "denied" ? (
+        <Pressable
+          style={[styles.locationBanner, { backgroundColor: theme.warning + "20" }]}
+          onPress={requestLocationPermission}
+        >
+          <Feather name="map-pin" size={16} color={theme.warning} />
+          <View style={styles.locationBannerText}>
+            <ThemedText type="caption" style={{ fontWeight: "600" }}>
+              Enable location for faster delivery
+            </ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+              Tap to enable location access
+            </ThemedText>
+          </View>
+          <Feather name="chevron-right" size={16} color={theme.textSecondary} />
+        </Pressable>
+      ) : storeAvailable && store ? (
+        <View style={styles.storeInfoContainer}>
+          <View style={[styles.deliveryBadge, { backgroundColor: theme.primary }]}>
+            <Feather name="zap" size={16} color={theme.buttonText} />
+            <ThemedText type="caption" style={{ color: theme.buttonText, fontWeight: "600" }}>
+              {estimatedDeliveryMinutes ? `${estimatedDeliveryMinutes}-minute delivery` : "15-minute delivery"}
+            </ThemedText>
+          </View>
+          <View style={[styles.storeBadge, { backgroundColor: theme.backgroundDefault }]}>
+            <Feather name="map-pin" size={14} color={theme.primary} />
+            <ThemedText type="small" style={{ color: theme.textSecondary }} numberOfLines={1}>
+              {store.name}
+            </ThemedText>
+          </View>
+        </View>
+      ) : isCheckingAvailability ? (
+        <View style={[styles.deliveryBadge, { backgroundColor: theme.backgroundDefault }]}>
+          <ActivityIndicator size="small" color={theme.primary} />
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            Finding nearest store...
+          </ThemedText>
+        </View>
+      ) : locationStatus === "granted" && !storeAvailable ? (
+        <View style={[styles.unavailableBanner, { backgroundColor: theme.error + "20" }]}>
+          <Feather name="alert-circle" size={16} color={theme.error} />
+          <View style={styles.locationBannerText}>
+            <ThemedText type="caption" style={{ fontWeight: "600", color: theme.error }}>
+              No stores available nearby
+            </ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+              We are not yet available in your area
+            </ThemedText>
+          </View>
+        </View>
+      ) : (
+        <View style={[styles.deliveryBadge, { backgroundColor: theme.primary }]}>
+          <Feather name="zap" size={16} color={theme.buttonText} />
+          <ThemedText type="caption" style={{ color: theme.buttonText, fontWeight: "600" }}>
+            15-minute delivery
+          </ThemedText>
+        </View>
+      )}
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
@@ -263,16 +325,49 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  storeInfoContainer: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg,
+    gap: Spacing.sm,
+  },
   deliveryBadge: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    marginHorizontal: Spacing.lg,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.xs,
     gap: Spacing.xs,
+  },
+  storeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.xs,
+    gap: Spacing.xs,
+  },
+  locationBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: Spacing.lg,
     marginBottom: Spacing.lg,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    gap: Spacing.md,
+  },
+  locationBannerText: {
+    flex: 1,
+  },
+  unavailableBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    gap: Spacing.md,
   },
   section: {
     marginBottom: Spacing.xl,

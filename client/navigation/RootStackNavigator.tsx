@@ -14,6 +14,7 @@ import VoiceConfirmScreen from "@/screens/VoiceConfirmScreen";
 import EditAddressScreen from "@/screens/EditAddressScreen";
 import HelpCenterScreen from "@/screens/HelpCenterScreen";
 import VouchersScreen from "@/screens/VouchersScreen";
+import AdminDashboardScreen from "@/screens/AdminDashboardScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { Product, Category, Order, CartItem, Address, Voucher } from "@/types";
 
@@ -32,6 +33,7 @@ export type RootStackParamList = {
   EditAddress: { address?: Address };
   HelpCenter: undefined;
   Vouchers: undefined;
+  AdminDashboard: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -152,6 +154,13 @@ export default function RootStackNavigator() {
             component={VouchersScreen}
             options={{
               headerTitle: "My Vouchers",
+            }}
+          />
+          <Stack.Screen
+            name="AdminDashboard"
+            component={AdminDashboardScreen}
+            options={{
+              headerTitle: "Admin Dashboard",
             }}
           />
         </>
