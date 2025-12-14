@@ -336,24 +336,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const storeMetrics = await Promise.all(
         allStores.map(async (store) => {
           // Get only staff belonging to this specific store
-          const storeStaff = await storage.getStoreStaff(store.id);
-          const onlineStaff = storeStaff.filter((s) => s.status === "online");
+          const storeStaffRecords = await storage.getStoreStaff(store.id);
+          const onlineStaff = storeStaffRecords.filter((s) => s.status === "online");
           
           // Filter orders that belong to this specific store
           const storeOrders = allOrders.filter((o) => o.storeId === store.id);
           
+          // Enrich staff with user details (phone/email)
+          const enrichedStaff = await Promise.all(
+            storeStaffRecords.map(async (s) => {
+              const user = await storage.getUser(s.userId);
+              return {
+                ...s,
+                user: user ? { 
+                  id: user.id, 
+                  username: user.username, 
+                  phone: user.phone, 
+                  email: user.email 
+                } : null,
+              };
+            })
+          );
+          
           // Filter pickers and drivers for this store only
-          const storePickers = storeStaff.filter((s) => s.role === "picker");
-          const storeDrivers = storeStaff.filter((s) => s.role === "driver");
+          const storePickers = enrichedStaff.filter((s) => s.role === "picker");
+          const storeDrivers = enrichedStaff.filter((s) => s.role === "driver");
           
           return {
             id: store.id,
             name: store.name,
             address: store.address,
+            latitude: store.latitude,
+            longitude: store.longitude,
             isActive: store.isActive,
             codAllowed: store.codAllowed,
-            totalStaff: storeStaff.length,
+            totalStaff: storeStaffRecords.length,
             onlineStaff: onlineStaff.length,
+            staff: enrichedStaff,
             pickers: storePickers,
             drivers: storeDrivers,
             orderCount: storeOrders.length,
@@ -385,6 +404,128 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Admin metrics error:", error);
       res.status(500).json({ error: "Failed to fetch admin metrics" });
+    }
+  });
+
+  // ==================== ADMIN ENDPOINTS ====================
+  
+  // Create store (admin only - no owner required)
+  app.post("/api/admin/stores", async (req: Request, res: Response) => {
+    try {
+      const { name, address, latitude, longitude, codAllowed } = req.body;
+      
+      if (!name || !address || latitude === undefined || longitude === undefined) {
+        return res.status(400).json({ error: "name, address, latitude, and longitude are required" });
+      }
+      
+      const store = await storage.createStore({
+        name,
+        address,
+        latitude: String(latitude),
+        longitude: String(longitude),
+        ownerId: null,
+        codAllowed: codAllowed ?? true,
+        isActive: true,
+      });
+      
+      res.json(store);
+    } catch (error) {
+      console.error("Admin create store error:", error);
+      res.status(500).json({ error: "Failed to create store" });
+    }
+  });
+  
+  // Add staff to store by phone/email (admin only)
+  // This creates a placeholder user record that will be matched during login
+  app.post("/api/admin/stores/:storeId/staff", async (req: Request, res: Response) => {
+    try {
+      const { storeId } = req.params;
+      const { phone, email, role } = req.body;
+      
+      if (!role || !["picker", "driver"].includes(role)) {
+        return res.status(400).json({ error: "role (picker/driver) required" });
+      }
+      
+      if (!phone && !email) {
+        return res.status(400).json({ error: "Either phone or email is required" });
+      }
+      
+      const store = await storage.getStoreById(storeId);
+      if (!store) {
+        return res.status(404).json({ error: "Store not found" });
+      }
+      
+      // Normalize phone number (remove spaces, ensure +62 prefix)
+      let normalizedPhone = phone ? phone.replace(/\s/g, "") : null;
+      if (normalizedPhone && !normalizedPhone.startsWith("+")) {
+        if (normalizedPhone.startsWith("0")) {
+          normalizedPhone = "+62" + normalizedPhone.slice(1);
+        } else if (normalizedPhone.startsWith("62")) {
+          normalizedPhone = "+" + normalizedPhone;
+        } else {
+          normalizedPhone = "+62" + normalizedPhone;
+        }
+      }
+      
+      // Check if a user with this phone or email already exists
+      let existingUser = null;
+      if (normalizedPhone) {
+        existingUser = await storage.getUserByPhone(normalizedPhone);
+      }
+      if (!existingUser && email) {
+        existingUser = await storage.getUserByEmail(email);
+      }
+      
+      let staffUserId: string;
+      
+      if (existingUser) {
+        // Check if already assigned to a store
+        const existingAssignment = await storage.getStoreStaffByUserId(existingUser.id);
+        if (existingAssignment) {
+          return res.status(400).json({ error: "This user is already assigned to a store" });
+        }
+        staffUserId = existingUser.id;
+        
+        // Update user role if needed
+        if (existingUser.role !== role) {
+          await db.update(users).set({ role }).where(eq(users.id, existingUser.id));
+        }
+      } else {
+        // Create a placeholder user for this staff member
+        // They will complete their profile when they first login via OTP
+        const placeholderUsername = `staff_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const newStaffUser = await storage.createUser({
+          username: placeholderUsername,
+          password: "placeholder_will_login_via_otp",
+          phone: normalizedPhone,
+          email: email || null,
+          role,
+        });
+        staffUserId = newStaffUser.id;
+      }
+      
+      // Create the store staff assignment
+      const staffAssignment = await storage.createStoreStaff({
+        userId: staffUserId,
+        storeId,
+        role,
+        status: "offline",
+      });
+      
+      const staffUser = await storage.getUser(staffUserId);
+      
+      res.json({ 
+        ...staffAssignment, 
+        user: staffUser ? { 
+          id: staffUser.id, 
+          username: staffUser.username, 
+          phone: staffUser.phone,
+          email: staffUser.email 
+        } : null 
+      });
+    } catch (error) {
+      console.error("Admin add staff error:", error);
+      res.status(500).json({ error: "Failed to add staff" });
     }
   });
 
@@ -1083,6 +1224,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user = newUser;
       }
       
+      // Check if user has a staff assignment (picker/driver)
+      const staffRecord = await storage.getStoreStaffByUserId(user[0].id);
+      let staffInfo = null;
+      
+      if (staffRecord) {
+        const store = await storage.getStoreById(staffRecord.storeId);
+        staffInfo = {
+          storeId: staffRecord.storeId,
+          storeName: store?.name || "Unknown Store",
+          role: staffRecord.role,
+          status: staffRecord.status,
+        };
+        
+        // If user's role doesn't match their staff assignment, update it
+        if (user[0].role !== staffRecord.role && user[0].role !== "admin") {
+          await db.update(users).set({ role: staffRecord.role }).where(eq(users.id, user[0].id));
+          user[0] = { ...user[0], role: staffRecord.role };
+        }
+      }
+      
       res.json({
         user: {
           id: user[0].id,
@@ -1091,6 +1252,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: user[0].email,
           role: user[0].role,
         },
+        staffInfo,
       });
     } catch (error) {
       console.error("OTP verify error:", error);
@@ -1113,8 +1275,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // In production, validate the identity token here
       // using Apple's public keys (https://appleid.apple.com/auth/keys)
       
-      // Find or create user
+      // Find or create user - also check by email if Apple user not found
       let user = await db.select().from(users).where(eq(users.appleId, appleId)).limit(1);
+      
+      if (user.length === 0 && email) {
+        // Check if user exists with same email (may have been created as staff placeholder)
+        const existingUser = await db.select().from(users).where(eq(users.email, email)).limit(1);
+        if (existingUser.length > 0) {
+          // Link Apple account to existing user
+          await db.update(users).set({ appleId }).where(eq(users.id, existingUser[0].id));
+          user = await db.select().from(users).where(eq(users.id, existingUser[0].id)).limit(1);
+        }
+      }
       
       if (user.length === 0) {
         const username = fullName || email?.split("@")[0] || `apple_${appleId.slice(-6)}`;
@@ -1128,6 +1300,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user = newUser;
       }
       
+      // Check if user has a staff assignment (picker/driver)
+      const staffRecord = await storage.getStoreStaffByUserId(user[0].id);
+      let staffInfo = null;
+      
+      if (staffRecord) {
+        const store = await storage.getStoreById(staffRecord.storeId);
+        staffInfo = {
+          storeId: staffRecord.storeId,
+          storeName: store?.name || "Unknown Store",
+          role: staffRecord.role,
+          status: staffRecord.status,
+        };
+        
+        // If user's role doesn't match their staff assignment, update it
+        if (user[0].role !== staffRecord.role && user[0].role !== "admin") {
+          await db.update(users).set({ role: staffRecord.role }).where(eq(users.id, user[0].id));
+          user[0] = { ...user[0], role: staffRecord.role };
+        }
+      }
+      
       res.json({
         user: {
           id: user[0].id,
@@ -1136,6 +1328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: user[0].email,
           role: user[0].role,
         },
+        staffInfo,
       });
     } catch (error) {
       console.error("Apple auth error:", error);
