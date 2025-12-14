@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -13,6 +13,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { useCart } from "@/context/CartContext";
+import { getImageUrl } from "@/lib/image-url";
 
 type ProductDetailRouteProp = RouteProp<RootStackParamList, "ProductDetail">;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -47,7 +48,11 @@ export default function ProductDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.imageContainer, { backgroundColor: theme.backgroundDefault }]}>
-          <Feather name="package" size={80} color={theme.textSecondary} />
+          {product.image ? (
+            <Image source={{ uri: getImageUrl(product.image) }} style={styles.productImage} />
+          ) : (
+            <Feather name="package" size={80} color={theme.textSecondary} />
+          )}
           {product.originalPrice ? (
             <View style={[styles.discountBadge, { backgroundColor: theme.error }]}>
               <ThemedText type="small" style={{ color: "#FFFFFF", fontWeight: "600" }}>
@@ -195,6 +200,11 @@ const styles = StyleSheet.create({
     height: 280,
     alignItems: "center",
     justifyContent: "center",
+  },
+  productImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
   },
   discountBadge: {
     position: "absolute",
