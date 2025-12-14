@@ -15,6 +15,7 @@ import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Product } from "@/types";
 import { useCart } from "@/context/CartContext";
 import { getImageUrl } from "@/lib/image-url";
+import { getApiUrl } from "@/lib/query-client";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type CategoryRouteProp = RouteProp<RootStackParamList, "Category">;
@@ -46,7 +47,8 @@ export default function CategoryScreen() {
   const { data: apiProducts = [], isLoading } = useQuery<APIProduct[]>({
     queryKey: ["/api/products", `categoryId=${category.id}`],
     queryFn: async () => {
-      const res = await fetch(`/api/products?categoryId=${category.id}`);
+      const url = new URL(`/api/products?categoryId=${category.id}`, getApiUrl());
+      const res = await fetch(url.toString());
       return res.json();
     },
   });
