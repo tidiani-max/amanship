@@ -24,6 +24,7 @@ interface APICategory {
   name: string;
   icon: string;
   color: string;
+  image: string | null;
 }
 
 interface APIProduct {
@@ -61,6 +62,7 @@ export default function HomeScreen() {
     name: c.name,
     icon: c.icon,
     color: c.color,
+    image: c.image || undefined,
   }));
 
   const products: Product[] = apiProducts.map((p) => ({
@@ -146,8 +148,12 @@ export default function HomeScreen() {
               style={styles.categoryItem}
               onPress={() => handleCategoryPress(category)}
             >
-              <View style={[styles.categoryIcon, { backgroundColor: category.color + "20" }]}>
-                <Feather name={category.icon as any} size={24} color={category.color} />
+              <View style={[styles.categoryIcon, { backgroundColor: category.color + "20", overflow: "hidden" }]}>
+                {category.image ? (
+                  <Image source={{ uri: category.image }} style={styles.categoryImage} />
+                ) : (
+                  <Feather name={category.icon as any} size={24} color={category.color} />
+                )}
               </View>
               <ThemedText type="small" style={styles.categoryLabel} numberOfLines={1}>
                 {category.name}
@@ -194,7 +200,11 @@ export default function HomeScreen() {
               onPress={() => handleProductPress(product)}
             >
               <View style={[styles.productImageContainer, { backgroundColor: theme.backgroundDefault }]}>
-                <Feather name="package" size={32} color={theme.textSecondary} />
+                {product.image ? (
+                  <Image source={{ uri: product.image }} style={styles.productImage} />
+                ) : (
+                  <Feather name="package" size={32} color={theme.textSecondary} />
+                )}
               </View>
               <View style={styles.productInfo}>
                 <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
@@ -288,6 +298,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: Spacing.xs,
   },
+  categoryImage: {
+    width: 56,
+    height: 56,
+    borderRadius: BorderRadius.sm,
+  },
   categoryLabel: {
     textAlign: "center",
   },
@@ -315,6 +330,12 @@ const styles = StyleSheet.create({
     height: 100,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  productImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
   },
   productInfo: {
     padding: Spacing.sm,

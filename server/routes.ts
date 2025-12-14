@@ -208,22 +208,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ message: "Data already seeded" });
       }
 
-      await db.insert(users).values({
-        id: DEMO_USER_ID,
-        username: "demo",
-        password: "demo",
-        phone: "+62123456789",
-      });
+      const existingUser = await storage.getUser(DEMO_USER_ID);
+      if (!existingUser) {
+        await db.insert(users).values({
+          id: DEMO_USER_ID,
+          username: "demo",
+          password: "demo",
+          phone: "+62123456789",
+        });
+      }
 
       const seedCategories = [
-        { id: "1", name: "Milk", icon: "droplet", color: "#4A90E2" },
-        { id: "2", name: "Eggs", icon: "circle", color: "#FF9800" },
-        { id: "3", name: "Snacks", icon: "box", color: "#9C27B0" },
-        { id: "4", name: "Fruits", icon: "sun", color: "#4CAF50" },
-        { id: "5", name: "Frozen", icon: "thermometer", color: "#00BCD4" },
-        { id: "6", name: "Drinks", icon: "coffee", color: "#F44336" },
-        { id: "7", name: "Veggies", icon: "feather", color: "#8BC34A" },
-        { id: "8", name: "Meat", icon: "target", color: "#E91E63" },
+        { id: "1", name: "Milk", icon: "droplet", color: "#4A90E2", image: "/images/dairy_milk_products__f381a151.jpg" },
+        { id: "2", name: "Eggs", icon: "circle", color: "#FF9800", image: "/images/fresh_eggs_basket_fa_e1b74097.jpg" },
+        { id: "3", name: "Snacks", icon: "box", color: "#9C27B0", image: "/images/assorted_snacks_chip_5803ca41.jpg" },
+        { id: "4", name: "Fruits", icon: "sun", color: "#4CAF50", image: "/images/fresh_colorful_fruit_e3789c47.jpg" },
+        { id: "5", name: "Frozen", icon: "thermometer", color: "#00BCD4", image: "/images/frozen_food_products_880da67b.jpg" },
+        { id: "6", name: "Drinks", icon: "coffee", color: "#F44336", image: "/images/beverages_drinks_bot_7c35199f.jpg" },
+        { id: "7", name: "Veggies", icon: "feather", color: "#8BC34A", image: "/images/fresh_vegetables_gre_e9d9592a.jpg" },
+        { id: "8", name: "Meat", icon: "target", color: "#E91E63", image: "/images/raw_meat_beef_pork_c_4724e26c.jpg" },
       ];
 
       await db.insert(categories).values(seedCategories);
@@ -235,7 +238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           brand: "Ultra Milk",
           price: 18500,
           originalPrice: 22000,
-          image: "",
+          image: "/images/fresh_milk_carton_bo_dc357425.jpg",
           categoryId: "1",
           description: "Fresh pasteurized full cream milk, rich in calcium and vitamin D.",
           nutrition: { calories: "120 kcal", protein: "8g", carbs: "12g", fat: "5g" },
@@ -248,7 +251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           brand: "Happy Farm",
           price: 32000,
           originalPrice: null,
-          image: "",
+          image: "/images/organic_eggs_in_cart_70f17317.jpg",
           categoryId: "2",
           description: "Premium organic eggs from free-range hens.",
           nutrition: { calories: "70 kcal", protein: "6g", carbs: "0.5g", fat: "5g" },
@@ -261,7 +264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           brand: "Chitato",
           price: 15000,
           originalPrice: null,
-          image: "",
+          image: "/images/potato_chips_snack_b_9bdc2b89.jpg",
           categoryId: "3",
           description: "Crispy potato chips with original flavor.",
           nutrition: null,
@@ -274,7 +277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           brand: "Local Farm",
           price: 8000,
           originalPrice: null,
-          image: "",
+          image: "/images/fresh_ripe_yellow_ba_dd4d6986.jpg",
           categoryId: "4",
           description: "Sweet and ripe bananas, perfect for snacking.",
           nutrition: null,
@@ -287,7 +290,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           brand: "Fiesta",
           price: 45000,
           originalPrice: 52000,
-          image: "",
+          image: "/images/frozen_chicken_nugge_202dc2ea.jpg",
           categoryId: "5",
           description: "Crispy chicken nuggets, ready to fry.",
           nutrition: null,
@@ -300,7 +303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           brand: "Aqua",
           price: 5500,
           originalPrice: null,
-          image: "",
+          image: "/images/mineral_water_bottle_9a3bc0d8.jpg",
           categoryId: "6",
           description: "Pure mineral water from natural springs.",
           nutrition: null,
@@ -313,7 +316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           brand: "Organic Green",
           price: 12000,
           originalPrice: null,
-          image: "",
+          image: "/images/fresh_green_spinach__093ac523.jpg",
           categoryId: "7",
           description: "Fresh organic spinach, washed and ready to cook.",
           nutrition: null,
@@ -326,7 +329,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           brand: "Kokita",
           price: 35000,
           originalPrice: null,
-          image: "",
+          image: "/images/beef_rendang_indones_fb8c9020.jpg",
           categoryId: "8",
           description: "Ready-to-eat beef rendang with authentic Indonesian taste.",
           nutrition: null,

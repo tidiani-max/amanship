@@ -20,6 +20,7 @@ export const categories = pgTable("categories", {
   name: text("name").notNull(),
   icon: text("icon").notNull(),
   color: text("color").notNull(),
+  image: text("image"),
 });
 
 export const products = pgTable("products", {
@@ -145,6 +146,7 @@ export const insertCategorySchema = createInsertSchema(categories).pick({
   name: true,
   icon: true,
   color: true,
+  image: true,
 });
 
 export const insertProductSchema = createInsertSchema(products).omit({

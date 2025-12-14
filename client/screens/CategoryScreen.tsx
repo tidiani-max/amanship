@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -79,8 +79,12 @@ export default function CategoryScreen() {
       style={[styles.productCard, { backgroundColor: theme.cardBackground }]}
       onPress={() => handleProductPress(item)}
     >
-      <View style={[styles.productImage, { backgroundColor: theme.backgroundDefault }]}>
-        <Feather name="package" size={32} color={theme.textSecondary} />
+      <View style={[styles.productImageContainer, { backgroundColor: theme.backgroundDefault }]}>
+        {item.image ? (
+          <Image source={{ uri: item.image }} style={styles.productImage} />
+        ) : (
+          <Feather name="package" size={32} color={theme.textSecondary} />
+        )}
         {!item.inStock ? (
           <View style={[styles.outOfStock, { backgroundColor: theme.error }]}>
             <ThemedText type="small" style={{ color: "#FFFFFF", fontSize: 10 }}>
@@ -176,10 +180,16 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     overflow: "hidden",
   },
-  productImage: {
+  productImageContainer: {
     height: 120,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  productImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
   },
   outOfStock: {
     position: "absolute",
