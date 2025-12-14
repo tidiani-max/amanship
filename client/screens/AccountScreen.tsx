@@ -252,6 +252,37 @@ export default function AccountScreen() {
           </View>
         ) : null}
 
+        <View style={styles.section}>
+          <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+            TEST DASHBOARDS
+          </ThemedText>
+          <Card style={styles.menuCard}>
+            <MenuItem
+              icon="home"
+              label="Owner Dashboard"
+              onPress={() => navigation.navigate("OwnerDashboard")}
+            />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            <MenuItem
+              icon="package"
+              label="Picker Dashboard"
+              onPress={() => navigation.navigate("PickerDashboard")}
+            />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            <MenuItem
+              icon="truck"
+              label="Driver Dashboard"
+              onPress={() => navigation.navigate("DriverDashboard")}
+            />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            <MenuItem
+              icon="bar-chart-2"
+              label="Admin Dashboard"
+              onPress={() => navigation.navigate("AdminDashboard")}
+            />
+          </Card>
+        </View>
+
         {isAuthenticated ? (
           <Pressable 
             style={[styles.logoutButton, { borderColor: theme.error }]}
