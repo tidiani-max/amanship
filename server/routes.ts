@@ -388,6 +388,485 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== OWNER ENDPOINTS ====================
+  
+  // Get owner's stores
+  app.get("/api/owner/stores", async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) {
+        return res.status(400).json({ error: "userId query parameter required" });
+      }
+      
+      const user = await storage.getUser(userId as string);
+      if (!user || user.role !== "owner") {
+        return res.status(403).json({ error: "Only owners can access this endpoint" });
+      }
+      
+      const ownerStores = await storage.getStoresByOwner(userId as string);
+      
+      // Get staff for each store
+      const storesWithStaff = await Promise.all(
+        ownerStores.map(async (store) => {
+          const staff = await storage.getStoreStaff(store.id);
+          const staffWithUsers = await Promise.all(
+            staff.map(async (s) => {
+              const staffUser = await storage.getUser(s.userId);
+              return { ...s, user: staffUser ? { id: staffUser.id, username: staffUser.username, phone: staffUser.phone } : null };
+            })
+          );
+          return { ...store, staff: staffWithUsers };
+        })
+      );
+      
+      res.json(storesWithStaff);
+    } catch (error) {
+      console.error("Owner stores error:", error);
+      res.status(500).json({ error: "Failed to fetch owner stores" });
+    }
+  });
+  
+  // Create store (owner only)
+  app.post("/api/owner/stores", async (req: Request, res: Response) => {
+    try {
+      const { userId, name, address, latitude, longitude, codAllowed } = req.body;
+      
+      if (!userId || !name || !address || latitude === undefined || longitude === undefined) {
+        return res.status(400).json({ error: "userId, name, address, latitude, and longitude are required" });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // If user is not owner, upgrade them to owner role
+      if (user.role !== "owner" && user.role !== "admin") {
+        await db.update(users).set({ role: "owner" }).where(eq(users.id, userId));
+      }
+      
+      const store = await storage.createStore({
+        name,
+        address,
+        latitude: String(latitude),
+        longitude: String(longitude),
+        ownerId: userId,
+        codAllowed: codAllowed ?? true,
+        isActive: true,
+      });
+      
+      res.json(store);
+    } catch (error) {
+      console.error("Create store error:", error);
+      res.status(500).json({ error: "Failed to create store" });
+    }
+  });
+  
+  // Add staff to store (owner only)
+  app.post("/api/owner/stores/:storeId/staff", async (req: Request, res: Response) => {
+    try {
+      const { storeId } = req.params;
+      const { userId, staffUsername, staffPassword, staffPhone, staffRole } = req.body;
+      
+      if (!userId || !staffRole || !["picker", "driver"].includes(staffRole)) {
+        return res.status(400).json({ error: "userId and staffRole (picker/driver) required" });
+      }
+      
+      const owner = await storage.getUser(userId);
+      if (!owner || (owner.role !== "owner" && owner.role !== "admin")) {
+        return res.status(403).json({ error: "Only owners can add staff" });
+      }
+      
+      const store = await storage.getStoreById(storeId);
+      if (!store) {
+        return res.status(404).json({ error: "Store not found" });
+      }
+      
+      if (store.ownerId !== userId && owner.role !== "admin") {
+        return res.status(403).json({ error: "You can only add staff to your own stores" });
+      }
+      
+      // Create staff user if username provided
+      let staffUserId = req.body.staffUserId;
+      
+      if (!staffUserId && staffUsername && staffPassword) {
+        const existingUser = await storage.getUserByUsername(staffUsername);
+        if (existingUser) {
+          return res.status(400).json({ error: "Username already taken" });
+        }
+        
+        const newStaffUser = await storage.createUser({
+          username: staffUsername,
+          password: staffPassword,
+          phone: staffPhone || null,
+          role: staffRole,
+        });
+        staffUserId = newStaffUser.id;
+      }
+      
+      if (!staffUserId) {
+        return res.status(400).json({ error: "Either staffUserId or staffUsername/staffPassword required" });
+      }
+      
+      // Check if staff already assigned to a store
+      const existingAssignment = await storage.getStoreStaffByUserId(staffUserId);
+      if (existingAssignment) {
+        return res.status(400).json({ error: "This user is already assigned to a store" });
+      }
+      
+      const staffAssignment = await storage.createStoreStaff({
+        userId: staffUserId,
+        storeId,
+        role: staffRole,
+        status: "offline",
+      });
+      
+      const staffUser = await storage.getUser(staffUserId);
+      
+      res.json({ 
+        ...staffAssignment, 
+        user: staffUser ? { id: staffUser.id, username: staffUser.username, phone: staffUser.phone } : null 
+      });
+    } catch (error) {
+      console.error("Add staff error:", error);
+      res.status(500).json({ error: "Failed to add staff" });
+    }
+  });
+  
+  // Get store staff (owner only)
+  app.get("/api/owner/stores/:storeId/staff", async (req: Request, res: Response) => {
+    try {
+      const { storeId } = req.params;
+      const { userId } = req.query;
+      
+      if (!userId) {
+        return res.status(400).json({ error: "userId query parameter required" });
+      }
+      
+      const owner = await storage.getUser(userId as string);
+      if (!owner || (owner.role !== "owner" && owner.role !== "admin")) {
+        return res.status(403).json({ error: "Only owners can access this endpoint" });
+      }
+      
+      const store = await storage.getStoreById(storeId);
+      if (!store) {
+        return res.status(404).json({ error: "Store not found" });
+      }
+      
+      if (store.ownerId !== userId && owner.role !== "admin") {
+        return res.status(403).json({ error: "You can only view staff for your own stores" });
+      }
+      
+      const staff = await storage.getStoreStaff(storeId);
+      const staffWithUsers = await Promise.all(
+        staff.map(async (s) => {
+          const staffUser = await storage.getUser(s.userId);
+          return { ...s, user: staffUser ? { id: staffUser.id, username: staffUser.username, phone: staffUser.phone } : null };
+        })
+      );
+      
+      res.json(staffWithUsers);
+    } catch (error) {
+      console.error("Get staff error:", error);
+      res.status(500).json({ error: "Failed to fetch store staff" });
+    }
+  });
+
+  // ==================== PICKER ENDPOINTS ====================
+  
+  // Get picker dashboard data
+  app.get("/api/picker/dashboard", async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) {
+        return res.status(400).json({ error: "userId query parameter required" });
+      }
+      
+      const user = await storage.getUser(userId as string);
+      if (!user || user.role !== "picker") {
+        return res.status(403).json({ error: "Only pickers can access this endpoint" });
+      }
+      
+      const staffRecord = await storage.getStoreStaffByUserId(userId as string);
+      if (!staffRecord) {
+        return res.status(404).json({ error: "Picker not assigned to any store" });
+      }
+      
+      const store = await storage.getStoreById(staffRecord.storeId);
+      const orders = await storage.getOrdersByPicker(userId as string);
+      
+      // Get pending and active orders (orders that need picking)
+      const pendingOrders = orders.filter(o => o.status === "pending" || o.status === "confirmed");
+      const activeOrders = orders.filter(o => o.status === "picking");
+      const completedOrders = orders.filter(o => ["packed", "delivering", "delivered"].includes(o.status || ""));
+      
+      res.json({
+        user: { id: user.id, username: user.username, phone: user.phone, role: user.role },
+        staffRecord,
+        store,
+        orders: {
+          pending: pendingOrders,
+          active: activeOrders,
+          completed: completedOrders,
+        },
+      });
+    } catch (error) {
+      console.error("Picker dashboard error:", error);
+      res.status(500).json({ error: "Failed to fetch picker dashboard" });
+    }
+  });
+  
+  // Get picker's store inventory
+  app.get("/api/picker/inventory", async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) {
+        return res.status(400).json({ error: "userId query parameter required" });
+      }
+      
+      const user = await storage.getUser(userId as string);
+      if (!user || user.role !== "picker") {
+        return res.status(403).json({ error: "Only pickers can access this endpoint" });
+      }
+      
+      const staffRecord = await storage.getStoreStaffByUserId(userId as string);
+      if (!staffRecord) {
+        return res.status(404).json({ error: "Picker not assigned to any store" });
+      }
+      
+      const inventory = await storage.getStoreInventoryWithProducts(staffRecord.storeId);
+      res.json(inventory);
+    } catch (error) {
+      console.error("Picker inventory error:", error);
+      res.status(500).json({ error: "Failed to fetch inventory" });
+    }
+  });
+  
+  // Update inventory item (picker)
+  app.put("/api/picker/inventory/:id", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { userId, stockCount, isAvailable } = req.body;
+      
+      if (!userId) {
+        return res.status(400).json({ error: "userId required" });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user || user.role !== "picker") {
+        return res.status(403).json({ error: "Only pickers can update inventory" });
+      }
+      
+      const updated = await storage.updateStoreInventory(id, stockCount ?? 0, isAvailable ?? true);
+      if (!updated) {
+        return res.status(404).json({ error: "Inventory item not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Update inventory error:", error);
+      res.status(500).json({ error: "Failed to update inventory" });
+    }
+  });
+  
+  // Add product to store inventory (picker)
+  app.post("/api/picker/inventory", async (req: Request, res: Response) => {
+    try {
+      const { userId, productId, stockCount } = req.body;
+      
+      if (!userId || !productId) {
+        return res.status(400).json({ error: "userId and productId required" });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user || user.role !== "picker") {
+        return res.status(403).json({ error: "Only pickers can manage inventory" });
+      }
+      
+      const staffRecord = await storage.getStoreStaffByUserId(userId);
+      if (!staffRecord) {
+        return res.status(404).json({ error: "Picker not assigned to any store" });
+      }
+      
+      const inventory = await storage.createStoreInventory({
+        storeId: staffRecord.storeId,
+        productId,
+        stockCount: stockCount ?? 10,
+        isAvailable: true,
+      });
+      
+      res.json(inventory);
+    } catch (error) {
+      console.error("Add inventory error:", error);
+      res.status(500).json({ error: "Failed to add to inventory" });
+    }
+  });
+  
+  // Get picker's assigned orders
+  app.get("/api/picker/orders", async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) {
+        return res.status(400).json({ error: "userId query parameter required" });
+      }
+      
+      const user = await storage.getUser(userId as string);
+      if (!user || user.role !== "picker") {
+        return res.status(403).json({ error: "Only pickers can access this endpoint" });
+      }
+      
+      const orders = await storage.getOrdersByPicker(userId as string);
+      res.json(orders);
+    } catch (error) {
+      console.error("Picker orders error:", error);
+      res.status(500).json({ error: "Failed to fetch orders" });
+    }
+  });
+  
+  // Update order status (picker - picking, packed)
+  app.put("/api/picker/orders/:orderId/status", async (req: Request, res: Response) => {
+    try {
+      const { orderId } = req.params;
+      const { userId, status } = req.body;
+      
+      if (!userId || !status) {
+        return res.status(400).json({ error: "userId and status required" });
+      }
+      
+      if (!["picking", "packed"].includes(status)) {
+        return res.status(400).json({ error: "Pickers can only set status to picking or packed" });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user || user.role !== "picker") {
+        return res.status(403).json({ error: "Only pickers can update order status" });
+      }
+      
+      const order = await storage.getOrderById(orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      if (order.pickerId !== userId) {
+        return res.status(403).json({ error: "You can only update orders assigned to you" });
+      }
+      
+      const timestamp = status === "picking" ? "pickedAt" : "packedAt";
+      const updated = await storage.updateOrderWithTimestamp(orderId, status, timestamp);
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Picker order status error:", error);
+      res.status(500).json({ error: "Failed to update order status" });
+    }
+  });
+
+  // ==================== DRIVER ENDPOINTS ====================
+  
+  // Get driver dashboard data
+  app.get("/api/driver/dashboard", async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) {
+        return res.status(400).json({ error: "userId query parameter required" });
+      }
+      
+      const user = await storage.getUser(userId as string);
+      if (!user || user.role !== "driver") {
+        return res.status(403).json({ error: "Only drivers can access this endpoint" });
+      }
+      
+      const staffRecord = await storage.getStoreStaffByUserId(userId as string);
+      if (!staffRecord) {
+        return res.status(404).json({ error: "Driver not assigned to any store" });
+      }
+      
+      const store = await storage.getStoreById(staffRecord.storeId);
+      const orders = await storage.getOrdersByDriver(userId as string);
+      
+      // Filter orders by status
+      const readyOrders = orders.filter(o => o.status === "packed");
+      const activeOrders = orders.filter(o => o.status === "delivering");
+      const completedOrders = orders.filter(o => o.status === "delivered");
+      
+      res.json({
+        user: { id: user.id, username: user.username, phone: user.phone, role: user.role },
+        staffRecord,
+        store,
+        orders: {
+          ready: readyOrders,
+          active: activeOrders,
+          completed: completedOrders,
+        },
+      });
+    } catch (error) {
+      console.error("Driver dashboard error:", error);
+      res.status(500).json({ error: "Failed to fetch driver dashboard" });
+    }
+  });
+  
+  // Get driver's assigned orders
+  app.get("/api/driver/orders", async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) {
+        return res.status(400).json({ error: "userId query parameter required" });
+      }
+      
+      const user = await storage.getUser(userId as string);
+      if (!user || user.role !== "driver") {
+        return res.status(403).json({ error: "Only drivers can access this endpoint" });
+      }
+      
+      const orders = await storage.getOrdersByDriver(userId as string);
+      res.json(orders);
+    } catch (error) {
+      console.error("Driver orders error:", error);
+      res.status(500).json({ error: "Failed to fetch orders" });
+    }
+  });
+  
+  // Update order status (driver - delivering, delivered)
+  app.put("/api/driver/orders/:orderId/status", async (req: Request, res: Response) => {
+    try {
+      const { orderId } = req.params;
+      const { userId, status } = req.body;
+      
+      if (!userId || !status) {
+        return res.status(400).json({ error: "userId and status required" });
+      }
+      
+      if (!["delivering", "delivered"].includes(status)) {
+        return res.status(400).json({ error: "Drivers can only set status to delivering or delivered" });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user || user.role !== "driver") {
+        return res.status(403).json({ error: "Only drivers can update delivery status" });
+      }
+      
+      const order = await storage.getOrderById(orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      if (order.driverId !== userId) {
+        return res.status(403).json({ error: "You can only update orders assigned to you" });
+      }
+      
+      if (status === "delivered") {
+        const updated = await storage.updateOrderWithTimestamp(orderId, status, "deliveredAt");
+        res.json(updated);
+      } else {
+        const updated = await storage.updateOrderStatus(orderId, status);
+        res.json(updated);
+      }
+    } catch (error) {
+      console.error("Driver order status error:", error);
+      res.status(500).json({ error: "Failed to update order status" });
+    }
+  });
+
   // Vouchers
   app.get("/api/vouchers", async (_req: Request, res: Response) => {
     try {

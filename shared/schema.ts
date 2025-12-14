@@ -4,7 +4,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // User roles enum
-export const userRoles = ["customer", "picker", "driver", "admin"] as const;
+export const userRoles = ["customer", "picker", "driver", "owner", "admin"] as const;
 export type UserRole = typeof userRoles[number];
 
 // Staff status enum
@@ -53,6 +53,7 @@ export const stores = pgTable("stores", {
   address: text("address").notNull(),
   latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
   longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
+  ownerId: varchar("owner_id").references(() => users.id),
   codAllowed: boolean("cod_allowed").default(true).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -172,9 +173,14 @@ export const usersRelations = relations(users, ({ many }) => ({
   cartItems: many(cartItems),
   orders: many(orders),
   storeStaff: many(storeStaff),
+  ownedStores: many(stores),
 }));
 
-export const storesRelations = relations(stores, ({ many }) => ({
+export const storesRelations = relations(stores, ({ one, many }) => ({
+  owner: one(users, {
+    fields: [stores.ownerId],
+    references: [users.id],
+  }),
   staff: many(storeStaff),
   inventory: many(storeInventory),
   orders: many(orders),

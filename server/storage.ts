@@ -86,6 +86,16 @@ export interface IStorage {
   getStoreInventoryWithProducts(storeId: string): Promise<(StoreInventory & { product: Product })[]>;
   createStoreInventory(inventory: InsertStoreInventory): Promise<StoreInventory>;
   updateStoreInventory(id: string, stockCount: number, isAvailable: boolean): Promise<StoreInventory | undefined>;
+  deleteStoreInventory(id: string): Promise<void>;
+  
+  // Owner methods
+  getStoresByOwner(ownerId: string): Promise<Store[]>;
+  updateStore(id: string, updates: Partial<Store>): Promise<Store | undefined>;
+  
+  // Picker/Driver specific methods
+  getOrdersByPicker(pickerId: string): Promise<Order[]>;
+  getOrdersByDriver(driverId: string): Promise<Order[]>;
+  updateOrderWithTimestamp(id: string, status: string, timestamp: 'pickedAt' | 'packedAt' | 'deliveredAt'): Promise<Order | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -316,6 +326,43 @@ export class DatabaseStorage implements IStorage {
     const result = await db.update(storeInventory)
       .set({ stockCount, isAvailable })
       .where(eq(storeInventory.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteStoreInventory(id: string): Promise<void> {
+    await db.delete(storeInventory).where(eq(storeInventory.id, id));
+  }
+
+  // Owner methods
+  async getStoresByOwner(ownerId: string): Promise<Store[]> {
+    return db.select().from(stores).where(eq(stores.ownerId, ownerId));
+  }
+
+  async updateStore(id: string, updates: Partial<Store>): Promise<Store | undefined> {
+    const result = await db.update(stores)
+      .set(updates)
+      .where(eq(stores.id, id))
+      .returning();
+    return result[0];
+  }
+
+  // Picker/Driver specific methods
+  async getOrdersByPicker(pickerId: string): Promise<Order[]> {
+    return db.select().from(orders).where(eq(orders.pickerId, pickerId));
+  }
+
+  async getOrdersByDriver(driverId: string): Promise<Order[]> {
+    return db.select().from(orders).where(eq(orders.driverId, driverId));
+  }
+
+  async updateOrderWithTimestamp(id: string, status: string, timestamp: 'pickedAt' | 'packedAt' | 'deliveredAt'): Promise<Order | undefined> {
+    const updateData: Record<string, unknown> = { status };
+    updateData[timestamp] = new Date();
+    
+    const result = await db.update(orders)
+      .set(updateData)
+      .where(eq(orders.id, id))
       .returning();
     return result[0];
   }
