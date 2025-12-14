@@ -13,8 +13,10 @@ KilatGo is a 15-minute grocery delivery app for the Indonesian market featuring 
 - **Shopping Cart**: Item management, quantity controls, checkout flow
 - **Checkout**: COD payment option when eligible, real API integration
 - **Order Tracking**: Rider tracking with store assignment
-- **Account Screen**: User profile, admin dashboard access
+- **Account Screen**: User profile with logout, admin dashboard access
 - **Admin Dashboard**: Read-only store/staff/order metrics
+- **Phone OTP Authentication**: Real OTP verification flow with 6-digit codes
+- **Apple Sign-In**: Native Apple authentication (iOS only)
 
 ### Backend Features
 - **Store Management**: Stores with location, COD eligibility, active status
@@ -59,6 +61,9 @@ KilatGo is a 15-minute grocery delivery app for the Indonesian market featuring 
 - `POST /api/orders` - Create order with store/staff assignment
 - `GET /api/admin/metrics` - Admin dashboard metrics
 - `POST /api/staff/toggle-status` - Toggle staff online/offline
+- `POST /api/auth/otp/send` - Send OTP to phone number
+- `POST /api/auth/otp/verify` - Verify OTP and login/register
+- `POST /api/auth/apple` - Apple Sign-In authentication
 
 ## Project Structure
 ```
