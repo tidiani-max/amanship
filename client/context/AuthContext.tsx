@@ -1,0 +1,134 @@
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
+
+interface User {
+  id: string;
+  username: string;
+  phone: string | null;
+  role: string;
+}
+
+interface AuthContextType {
+  user: User | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signup: (username: string, password: string, phone?: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  updateProfile: (data: { username?: string; phone?: string }) => Promise<{ success: boolean; error?: string }>;
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
+
+const AUTH_STORAGE_KEY = "@kilatgo_auth";
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadStoredAuth();
+  }, []);
+
+  const loadStoredAuth = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
+      if (stored) {
+        const userData = JSON.parse(stored);
+        setUser(userData);
+      }
+    } catch (error) {
+      console.error("Failed to load auth:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const login = async (username: string, password: string) => {
+    try {
+      const response = await apiRequest("POST", "/api/auth/login", { username, password });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUser(data.user);
+        await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || "Login failed" };
+      }
+    } catch (error) {
+      return { success: false, error: "Network error. Please try again." };
+    }
+  };
+
+  const signup = async (username: string, password: string, phone?: string) => {
+    try {
+      const response = await apiRequest("POST", "/api/auth/register", { username, password, phone });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUser(data.user);
+        await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || "Signup failed" };
+      }
+    } catch (error) {
+      return { success: false, error: "Network error. Please try again." };
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+      setUser(null);
+    } catch (error) {
+      console.error("Failed to logout:", error);
+    }
+  };
+
+  const updateProfile = async (data: { username?: string; phone?: string }) => {
+    if (!user) return { success: false, error: "Not authenticated" };
+    
+    try {
+      const response = await apiRequest("PUT", "/api/auth/profile", { userId: user.id, ...data });
+      const result = await response.json();
+      
+      if (response.ok) {
+        const updatedUser = { ...user, ...data };
+        setUser(updatedUser);
+        await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updatedUser));
+        return { success: true };
+      } else {
+        return { success: false, error: result.error || "Update failed" };
+      }
+    } catch (error) {
+      return { success: false, error: "Network error. Please try again." };
+    }
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isAuthenticated: !!user,
+        login,
+        signup,
+        logout,
+        updateProfile,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+}
