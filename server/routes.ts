@@ -217,6 +217,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (existingStores.length === 0) {
           const allProducts = await storage.getProducts();
           
+          // Only proceed if products exist
+          if (allProducts.length === 0) {
+            return res.json({ message: "Cannot seed store data: no products found" });
+          }
+          
           // Create demo store
           await db.insert(stores).values({
             id: DEMO_STORE_ID_CHECK,
@@ -228,41 +233,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
             isActive: true,
           });
 
-          // Create picker and driver users
-          await db.insert(users).values([
-            {
+          // Check if picker/driver users exist before creating
+          const existingPicker = await storage.getUser(DEMO_PICKER_ID_CHECK);
+          const existingDriver = await storage.getUser(DEMO_DRIVER_ID_CHECK);
+          
+          if (!existingPicker) {
+            await db.insert(users).values({
               id: DEMO_PICKER_ID_CHECK,
               username: "picker1",
               password: "picker123",
               phone: "+6281234567890",
               role: "picker",
-            },
-            {
+            });
+          }
+          
+          if (!existingDriver) {
+            await db.insert(users).values({
               id: DEMO_DRIVER_ID_CHECK,
               username: "driver1",
               password: "driver123",
               phone: "+6281234567891",
               role: "driver",
-            },
-          ]);
+            });
+          }
 
-          // Create store staff
-          await db.insert(storeStaff).values([
-            {
-              id: "staff-picker-1",
-              userId: DEMO_PICKER_ID_CHECK,
-              storeId: DEMO_STORE_ID_CHECK,
-              role: "picker",
-              status: "online",
-            },
-            {
-              id: "staff-driver-1",
-              userId: DEMO_DRIVER_ID_CHECK,
-              storeId: DEMO_STORE_ID_CHECK,
-              role: "driver",
-              status: "online",
-            },
-          ]);
+          // Create store staff (check if not exists)
+          const existingStaff = await storage.getStoreStaff(DEMO_STORE_ID_CHECK);
+          if (existingStaff.length === 0) {
+            await db.insert(storeStaff).values([
+              {
+                id: "staff-picker-1",
+                userId: DEMO_PICKER_ID_CHECK,
+                storeId: DEMO_STORE_ID_CHECK,
+                role: "picker",
+                status: "online",
+              },
+              {
+                id: "staff-driver-1",
+                userId: DEMO_DRIVER_ID_CHECK,
+                storeId: DEMO_STORE_ID_CHECK,
+                role: "driver",
+                status: "online",
+              },
+            ]);
+          }
 
           // Create inventory for all products
           const inventoryEntries = allProducts.map((product, index) => ({
