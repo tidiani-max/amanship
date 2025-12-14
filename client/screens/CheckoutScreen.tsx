@@ -17,6 +17,7 @@ import { mockAddresses } from "@/data/mockData";
 import { useCart } from "@/context/CartContext";
 import { useLocation } from "@/context/LocationContext";
 import { apiRequest } from "@/lib/query-client";
+import { useLanguage } from "@/context/LanguageContext";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -50,6 +51,7 @@ export default function CheckoutScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { items, subtotal, clearCart } = useCart();
   const { location, store, codAllowed, estimatedDeliveryMinutes } = useLocation();
+  const { t } = useLanguage();
   
   const [selectedAddress] = useState(mockAddresses[0]);
   const [selectedPayment, setSelectedPayment] = useState<PaymentOption>(paymentMethods[0]);
@@ -124,10 +126,10 @@ export default function CheckoutScreen() {
       >
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <ThemedText type="h3">Delivery Address</ThemedText>
+            <ThemedText type="h3">{t.checkout.deliveryAddress}</ThemedText>
             <Pressable onPress={() => navigation.navigate("EditAddress", { address: selectedAddress })}>
               <ThemedText type="caption" style={{ color: theme.primary }}>
-                Change
+                {t.home.change}
               </ThemedText>
             </Pressable>
           </View>
@@ -160,10 +162,10 @@ export default function CheckoutScreen() {
             </View>
             <View>
               <ThemedText type="body" style={{ fontWeight: "600" }}>
-                {estimatedDeliveryMinutes ? `${estimatedDeliveryMinutes}-Minute Delivery` : "15-Minute Delivery"}
+                {estimatedDeliveryMinutes ? `${estimatedDeliveryMinutes}-${t.home.minuteDelivery}` : `15-${t.home.minuteDelivery}`}
               </ThemedText>
               <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                {store ? `From ${store.name}` : "Finding nearest store..."}
+                {store ? `${t.home.fromStore} ${store.name}` : t.home.findingStore}
               </ThemedText>
             </View>
           </View>
@@ -171,7 +173,7 @@ export default function CheckoutScreen() {
         
         <View style={styles.section}>
           <ThemedText type="h3" style={styles.sectionTitle}>
-            Payment Method
+            {t.checkout.paymentMethod}
           </ThemedText>
           <View style={styles.paymentMethods}>
             {availablePayments.map((method) => (
@@ -196,7 +198,7 @@ export default function CheckoutScreen() {
                   </ThemedText>
                   {method.type === "cod" ? (
                     <ThemedText type="small" style={{ color: theme.success }}>
-                      Pay when delivered
+                      {t.home.payWhenDelivered}
                     </ThemedText>
                   ) : null}
                 </View>
@@ -210,23 +212,23 @@ export default function CheckoutScreen() {
         
         <View style={styles.section}>
           <ThemedText type="h3" style={styles.sectionTitle}>
-            Order Summary
+            {t.checkout.orderSummary}
           </ThemedText>
           <Card>
             <View style={styles.summaryRow}>
               <ThemedText type="body" style={{ color: theme.textSecondary }}>
-                Subtotal ({itemCount} {itemCount === 1 ? "item" : "items"})
+                {t.checkout.subtotal} ({itemCount} {itemCount === 1 ? t.home.item : t.home.items})
               </ThemedText>
               <ThemedText type="body">{formatPrice(subtotal)}</ThemedText>
             </View>
             <View style={styles.summaryRow}>
               <ThemedText type="body" style={{ color: theme.textSecondary }}>
-                Delivery Fee
+                {t.checkout.deliveryFee}
               </ThemedText>
               <ThemedText type="body">{formatPrice(deliveryFee)}</ThemedText>
             </View>
             <View style={[styles.summaryRow, styles.totalRow]}>
-              <ThemedText type="h3">Total</ThemedText>
+              <ThemedText type="h3">{t.checkout.total}</ThemedText>
               <ThemedText type="h3" style={{ color: theme.primary }}>
                 {formatPrice(total)}
               </ThemedText>
@@ -248,7 +250,7 @@ export default function CheckoutScreen() {
         <View style={styles.footerContent}>
           <View>
             <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-              Total Payment
+              {t.home.totalPayment}
             </ThemedText>
             <ThemedText type="h2" style={{ color: theme.primary }}>
               {formatPrice(total)}
@@ -259,7 +261,7 @@ export default function CheckoutScreen() {
             style={styles.placeOrderButton}
             disabled={orderMutation.isPending || items.length === 0}
           >
-            {orderMutation.isPending ? "Processing..." : "Place Order"}
+            {orderMutation.isPending ? t.checkout.processing : t.checkout.placeOrder}
           </Button>
         </View>
       </View>

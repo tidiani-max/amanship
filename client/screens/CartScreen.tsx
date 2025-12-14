@@ -14,6 +14,7 @@ import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { CartItem } from "@/types";
 import { useCart } from "@/context/CartContext";
+import { useLanguage } from "@/context/LanguageContext";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -27,6 +28,7 @@ export default function CartScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
   const { items, isLoading, updateQuantity, subtotal } = useCart();
+  const { t } = useLanguage();
 
   const formatPrice = (price: number) => {
     return `Rp ${price.toLocaleString("id-ID")}`;
@@ -107,17 +109,17 @@ export default function CartScreen() {
           <View style={styles.emptyState}>
             <Feather name="shopping-cart" size={64} color={theme.textSecondary} />
             <ThemedText type="h3" style={{ marginTop: Spacing.lg }}>
-              Your cart is empty
+              {t.cart.empty}
             </ThemedText>
             <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.sm }}>
-              Add some items to get started
+              {t.cart.emptyDescription}
             </ThemedText>
             <Button
               variant="secondary"
               onPress={() => navigation.goBack()}
               style={{ marginTop: Spacing.xl }}
             >
-              Browse Products
+              {t.home.browseProducts}
             </Button>
           </View>
         }
@@ -137,25 +139,25 @@ export default function CartScreen() {
           <View style={styles.priceBreakdown}>
             <View style={styles.priceRow}>
               <ThemedText type="body" style={{ color: theme.textSecondary }}>
-                Subtotal
+                {t.checkout.subtotal}
               </ThemedText>
               <ThemedText type="body">{formatPrice(subtotal)}</ThemedText>
             </View>
             <View style={styles.priceRow}>
               <ThemedText type="body" style={{ color: theme.textSecondary }}>
-                Delivery Fee
+                {t.checkout.deliveryFee}
               </ThemedText>
               <ThemedText type="body">{formatPrice(deliveryFee)}</ThemedText>
             </View>
             <View style={[styles.priceRow, styles.totalRow]}>
-              <ThemedText type="h3">Total</ThemedText>
+              <ThemedText type="h3">{t.checkout.total}</ThemedText>
               <ThemedText type="h3" style={{ color: theme.primary }}>
                 {formatPrice(total)}
               </ThemedText>
             </View>
           </View>
           <Button onPress={() => navigation.navigate("Checkout")}>
-            Proceed to Checkout
+            {t.cart.checkout}
           </Button>
         </View>
       ) : null}

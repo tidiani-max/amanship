@@ -19,6 +19,7 @@ import { mockPromotions } from "@/data/mockData";
 import { useCart } from "@/context/CartContext";
 import { useLocation } from "@/context/LocationContext";
 import { getImageUrl } from "@/lib/image-url";
+import { useLanguage } from "@/context/LanguageContext";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -51,6 +52,7 @@ export default function HomeScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
   const { addToCart } = useCart();
+  const { t } = useLanguage();
   const {
     locationStatus,
     store,
@@ -123,7 +125,7 @@ export default function HomeScreen() {
           <Feather name="search" size={20} color={theme.textSecondary} />
           <TextInput
             style={[styles.searchInput, { color: theme.text }]}
-            placeholder="Search groceries..."
+            placeholder={t.home.searchPlaceholder}
             placeholderTextColor={theme.textSecondary}
           />
         </View>
@@ -143,10 +145,10 @@ export default function HomeScreen() {
           <Feather name="map-pin" size={16} color={theme.warning} />
           <View style={styles.locationBannerText}>
             <ThemedText type="caption" style={{ fontWeight: "600" }}>
-              Enable location for faster delivery
+              {t.home.enableLocationTitle}
             </ThemedText>
             <ThemedText type="small" style={{ color: theme.textSecondary }}>
-              Tap to enable location access
+              {t.home.enableLocationSubtitle}
             </ThemedText>
           </View>
           <Feather name="chevron-right" size={16} color={theme.textSecondary} />
@@ -156,7 +158,7 @@ export default function HomeScreen() {
           <View style={[styles.deliveryBadge, { backgroundColor: theme.primary }]}>
             <Feather name="zap" size={16} color={theme.buttonText} />
             <ThemedText type="caption" style={{ color: theme.buttonText, fontWeight: "600" }}>
-              {estimatedDeliveryMinutes ? `${estimatedDeliveryMinutes}-minute delivery` : "15-minute delivery"}
+              {estimatedDeliveryMinutes ? `${estimatedDeliveryMinutes}-${t.home.minuteDelivery}` : `15-${t.home.minuteDelivery}`}
             </ThemedText>
           </View>
           <View style={[styles.storeBadge, { backgroundColor: theme.backgroundDefault }]}>
@@ -170,7 +172,7 @@ export default function HomeScreen() {
         <View style={[styles.deliveryBadge, { backgroundColor: theme.backgroundDefault }]}>
           <ActivityIndicator size="small" color={theme.primary} />
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            Finding nearest store...
+            {t.home.findingStore}
           </ThemedText>
         </View>
       ) : locationStatus === "granted" && !storeAvailable ? (
@@ -178,10 +180,10 @@ export default function HomeScreen() {
           <Feather name="alert-circle" size={16} color={theme.error} />
           <View style={styles.locationBannerText}>
             <ThemedText type="caption" style={{ fontWeight: "600", color: theme.error }}>
-              No stores available nearby
+              {t.home.noStoresNearby}
             </ThemedText>
             <ThemedText type="small" style={{ color: theme.textSecondary }}>
-              We are not yet available in your area
+              {t.home.notAvailableInArea}
             </ThemedText>
           </View>
         </View>
@@ -189,7 +191,7 @@ export default function HomeScreen() {
         <View style={[styles.deliveryBadge, { backgroundColor: theme.primary }]}>
           <Feather name="zap" size={16} color={theme.buttonText} />
           <ThemedText type="caption" style={{ color: theme.buttonText, fontWeight: "600" }}>
-            15-minute delivery
+            {`15-${t.home.minuteDelivery}`}
           </ThemedText>
         </View>
       )}
@@ -202,7 +204,7 @@ export default function HomeScreen() {
 
       <View style={styles.section}>
         <ThemedText type="h3" style={styles.sectionTitle}>
-          Categories
+          {t.home.categories}
         </ThemedText>
         <View style={styles.categoriesGrid}>
           {categories.map((category) => (
@@ -228,7 +230,7 @@ export default function HomeScreen() {
 
       <View style={styles.section}>
         <ThemedText type="h3" style={styles.sectionTitle}>
-          Today's Deals
+          {t.home.todaysDeals}
         </ThemedText>
         <ScrollView
           horizontal
@@ -253,7 +255,7 @@ export default function HomeScreen() {
 
       <View style={styles.section}>
         <ThemedText type="h3" style={styles.sectionTitle}>
-          Popular Items
+          {t.home.popularItems}
         </ThemedText>
         <View style={styles.productsGrid}>
           {products.slice(0, 6).map((product) => (
