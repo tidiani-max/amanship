@@ -8,6 +8,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useLanguage } from "@/context/LanguageContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 
 interface StoreMetrics {
@@ -70,7 +71,7 @@ function MetricCard({
   );
 }
 
-function StoreCard({ store }: { store: StoreMetrics }) {
+function StoreCard({ store, t }: { store: StoreMetrics; t: any }) {
   const { theme } = useTheme();
   
   const onlinePickers = store.pickers.filter((p) => p.status === "online").length;
@@ -96,7 +97,7 @@ function StoreCard({ store }: { store: StoreMetrics }) {
           <ThemedText type="small" style={{ 
             color: store.isActive ? theme.success : theme.error 
           }}>
-            {store.isActive ? "Active" : "Inactive"}
+            {store.isActive ? t.admin.activeStores : t.admin.inactive}
           </ThemedText>
         </View>
       </View>
@@ -107,7 +108,7 @@ function StoreCard({ store }: { store: StoreMetrics }) {
         <View style={styles.statItem}>
           <Feather name="user" size={16} color={theme.secondary} />
           <ThemedText type="body" style={styles.statLabel}>
-            Pickers
+            {t.admin.pickers}
           </ThemedText>
           <ThemedText type="body" style={{ color: theme.text }}>
             {onlinePickers}/{store.pickers.length}
@@ -117,7 +118,7 @@ function StoreCard({ store }: { store: StoreMetrics }) {
         <View style={styles.statItem}>
           <Feather name="truck" size={16} color={theme.primary} />
           <ThemedText type="body" style={styles.statLabel}>
-            Drivers
+            {t.admin.drivers}
           </ThemedText>
           <ThemedText type="body" style={{ color: theme.text }}>
             {onlineDrivers}/{store.drivers.length}
@@ -127,7 +128,7 @@ function StoreCard({ store }: { store: StoreMetrics }) {
         <View style={styles.statItem}>
           <Feather name="package" size={16} color={theme.warning} />
           <ThemedText type="body" style={styles.statLabel}>
-            Orders
+            {t.admin.orders}
           </ThemedText>
           <ThemedText type="body" style={{ color: theme.text }}>
             {store.orderCount}
@@ -139,14 +140,14 @@ function StoreCard({ store }: { store: StoreMetrics }) {
         {store.codAllowed ? (
           <View style={[styles.tag, { backgroundColor: theme.success + "20" }]}>
             <ThemedText type="small" style={{ color: theme.success }}>
-              COD Allowed
+              {t.admin.codAllowed}
             </ThemedText>
           </View>
         ) : null}
         {store.activeOrders > 0 ? (
           <View style={[styles.tag, { backgroundColor: theme.warning + "20" }]}>
             <ThemedText type="small" style={{ color: theme.warning }}>
-              {store.activeOrders} Active Order{store.activeOrders > 1 ? "s" : ""}
+              {store.activeOrders} {t.orders.active}
             </ThemedText>
           </View>
         ) : null}
@@ -158,6 +159,7 @@ function StoreCard({ store }: { store: StoreMetrics }) {
 export default function AdminDashboardScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   
   const { data: metrics, isLoading, refetch, isRefetching } = useQuery<AdminMetrics>({
     queryKey: ["/api/admin/metrics"],
@@ -169,7 +171,7 @@ export default function AdminDashboardScreen() {
       <ThemedView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.primary} />
         <ThemedText type="body" style={{ marginTop: Spacing.md, color: theme.textSecondary }}>
-          Loading dashboard...
+          {t.common.loading}
         </ThemedText>
       </ThemedView>
     );
@@ -199,30 +201,30 @@ export default function AdminDashboardScreen() {
       >
         <View style={styles.section}>
           <ThemedText type="h3" style={styles.sectionTitle}>
-            Order Summary
+            {t.checkout.orderSummary}
           </ThemedText>
           <View style={styles.metricsGrid}>
             <MetricCard
               icon="shopping-bag"
-              label="Total Orders"
+              label={t.admin.totalOrders}
               value={orderSummary?.total || 0}
               color={theme.secondary}
             />
             <MetricCard
               icon="clock"
-              label="Pending"
+              label={t.orders.pending}
               value={orderSummary?.pending || 0}
               color={theme.warning}
             />
             <MetricCard
               icon="check-circle"
-              label="Delivered"
+              label={t.orders.delivered}
               value={orderSummary?.delivered || 0}
               color={theme.success}
             />
             <MetricCard
               icon="x-circle"
-              label="Cancelled"
+              label={t.orders.cancelled}
               value={orderSummary?.cancelled || 0}
               color={theme.error}
             />
@@ -231,13 +233,13 @@ export default function AdminDashboardScreen() {
         
         <View style={styles.section}>
           <ThemedText type="h3" style={styles.sectionTitle}>
-            Active Pipeline
+            {t.admin.activePipeline}
           </ThemedText>
           <Card style={styles.pipelineCard}>
             <View style={styles.pipelineRow}>
               <View style={styles.pipelineItem}>
                 <View style={[styles.pipelineDot, { backgroundColor: theme.secondary }]} />
-                <ThemedText type="body">Confirmed</ThemedText>
+                <ThemedText type="body">{t.orders.confirmed}</ThemedText>
                 <ThemedText type="h3" style={{ color: theme.secondary }}>
                   {orderSummary?.confirmed || 0}
                 </ThemedText>
@@ -245,7 +247,7 @@ export default function AdminDashboardScreen() {
               <Feather name="arrow-right" size={16} color={theme.textSecondary} />
               <View style={styles.pipelineItem}>
                 <View style={[styles.pipelineDot, { backgroundColor: theme.warning }]} />
-                <ThemedText type="body">Preparing</ThemedText>
+                <ThemedText type="body">{t.orders.preparing}</ThemedText>
                 <ThemedText type="h3" style={{ color: theme.warning }}>
                   {orderSummary?.preparing || 0}
                 </ThemedText>
@@ -253,7 +255,7 @@ export default function AdminDashboardScreen() {
               <Feather name="arrow-right" size={16} color={theme.textSecondary} />
               <View style={styles.pipelineItem}>
                 <View style={[styles.pipelineDot, { backgroundColor: theme.success }]} />
-                <ThemedText type="body">Ready</ThemedText>
+                <ThemedText type="body">{t.orders.ready}</ThemedText>
                 <ThemedText type="h3" style={{ color: theme.success }}>
                   {orderSummary?.ready || 0}
                 </ThemedText>
@@ -261,7 +263,7 @@ export default function AdminDashboardScreen() {
               <Feather name="arrow-right" size={16} color={theme.textSecondary} />
               <View style={styles.pipelineItem}>
                 <View style={[styles.pipelineDot, { backgroundColor: theme.primary }]} />
-                <ThemedText type="body">On The Way</ThemedText>
+                <ThemedText type="body">{t.orders.onTheWay}</ThemedText>
                 <ThemedText type="h3" style={{ color: theme.primary }}>
                   {orderSummary?.onTheWay || 0}
                 </ThemedText>
@@ -272,16 +274,16 @@ export default function AdminDashboardScreen() {
         
         <View style={styles.section}>
           <ThemedText type="h3" style={styles.sectionTitle}>
-            Stores ({stores.length})
+            {t.admin.stores} ({stores.length})
           </ThemedText>
           {stores.map((store) => (
-            <StoreCard key={store.id} store={store} />
+            <StoreCard key={store.id} store={store} t={t} />
           ))}
           {stores.length === 0 ? (
             <Card style={styles.emptyCard}>
               <Feather name="map-pin" size={32} color={theme.textSecondary} />
               <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.sm }}>
-                No stores found
+                {t.admin.noStoresFound}
               </ThemedText>
             </Card>
           ) : null}
@@ -289,7 +291,7 @@ export default function AdminDashboardScreen() {
         
         {metrics?.timestamp ? (
           <ThemedText type="small" style={[styles.timestamp, { color: theme.textSecondary }]}>
-            Last updated: {new Date(metrics.timestamp).toLocaleTimeString()}
+            {t.admin.lastUpdated}: {new Date(metrics.timestamp).toLocaleTimeString()}
           </ThemedText>
         ) : null}
       </ScrollView>

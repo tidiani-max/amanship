@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
+import { useLanguage } from "@/context/LanguageContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Product } from "@/types";
@@ -36,6 +37,7 @@ export default function CategoryScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<CategoryRouteProp>();
   const { category } = route.params;
@@ -89,7 +91,7 @@ export default function CategoryScreen() {
         {!item.inStock ? (
           <View style={[styles.outOfStock, { backgroundColor: theme.error }]}>
             <ThemedText type="small" style={{ color: "#FFFFFF", fontSize: 10 }}>
-              Out of Stock
+              {t.product.outOfStock}
             </ThemedText>
           </View>
         ) : null}
@@ -159,7 +161,7 @@ export default function CategoryScreen() {
           <View style={styles.emptyState}>
             <Feather name="package" size={48} color={theme.textSecondary} />
             <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
-              No products in this category
+              {t.category.noProducts}
             </ThemedText>
           </View>
         }

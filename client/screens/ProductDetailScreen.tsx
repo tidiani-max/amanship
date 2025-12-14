@@ -9,6 +9,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useLanguage } from "@/context/LanguageContext";
 import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { useCart } from "@/context/CartContext";
@@ -19,6 +20,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export default function ProductDetailScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const route = useRoute<ProductDetailRouteProp>();
   const navigation = useNavigation<NavigationProp>();
   const { product } = route.params;
@@ -49,7 +51,7 @@ export default function ProductDetailScreen() {
           {product.originalPrice ? (
             <View style={[styles.discountBadge, { backgroundColor: theme.error }]}>
               <ThemedText type="small" style={{ color: "#FFFFFF", fontWeight: "600" }}>
-                {Math.round((1 - product.price / product.originalPrice) * 100)}% OFF
+                {Math.round((1 - product.price / product.originalPrice) * 100)}% {t.product.percentOff}
               </ThemedText>
             </View>
           ) : null}
@@ -78,7 +80,7 @@ export default function ProductDetailScreen() {
           </View>
           
           <View style={styles.quantityContainer}>
-            <ThemedText type="body">Quantity:</ThemedText>
+            <ThemedText type="body">{t.product.quantity}:</ThemedText>
             <View style={styles.quantityControls}>
               <Pressable
                 style={[styles.quantityButton, { backgroundColor: theme.backgroundDefault }]}
@@ -101,7 +103,7 @@ export default function ProductDetailScreen() {
           <View style={styles.divider} />
           
           <ThemedText type="h3" style={styles.sectionTitle}>
-            Description
+            {t.product.description}
           </ThemedText>
           <ThemedText type="body" style={{ color: theme.textSecondary }}>
             {product.description}
@@ -113,7 +115,7 @@ export default function ProductDetailScreen() {
                 style={styles.nutritionHeader}
                 onPress={() => setShowNutrition(!showNutrition)}
               >
-                <ThemedText type="h3">Nutrition Facts</ThemedText>
+                <ThemedText type="h3">{t.product.nutritionFacts}</ThemedText>
                 <Feather
                   name={showNutrition ? "chevron-up" : "chevron-down"}
                   size={20}
@@ -123,25 +125,25 @@ export default function ProductDetailScreen() {
               {showNutrition ? (
                 <Card style={styles.nutritionCard}>
                   <View style={styles.nutritionRow}>
-                    <ThemedText type="body">Calories</ThemedText>
+                    <ThemedText type="body">{t.product.calories}</ThemedText>
                     <ThemedText type="body" style={{ fontWeight: "600" }}>
                       {product.nutrition.calories}
                     </ThemedText>
                   </View>
                   <View style={styles.nutritionRow}>
-                    <ThemedText type="body">Protein</ThemedText>
+                    <ThemedText type="body">{t.product.protein}</ThemedText>
                     <ThemedText type="body" style={{ fontWeight: "600" }}>
                       {product.nutrition.protein}
                     </ThemedText>
                   </View>
                   <View style={styles.nutritionRow}>
-                    <ThemedText type="body">Carbs</ThemedText>
+                    <ThemedText type="body">{t.product.carbs}</ThemedText>
                     <ThemedText type="body" style={{ fontWeight: "600" }}>
                       {product.nutrition.carbs}
                     </ThemedText>
                   </View>
                   <View style={styles.nutritionRow}>
-                    <ThemedText type="body">Fat</ThemedText>
+                    <ThemedText type="body">{t.product.fat}</ThemedText>
                     <ThemedText type="body" style={{ fontWeight: "600" }}>
                       {product.nutrition.fat}
                     </ThemedText>
@@ -166,7 +168,7 @@ export default function ProductDetailScreen() {
         <View style={styles.footerContent}>
           <View>
             <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-              Total
+              {t.checkout.total}
             </ThemedText>
             <ThemedText type="h3" style={{ color: theme.primary }}>
               {formatPrice(product.price * quantity)}
@@ -177,7 +179,7 @@ export default function ProductDetailScreen() {
             style={styles.addToCartButton}
             disabled={!product.inStock}
           >
-            {product.inStock ? "Add to Cart" : "Out of Stock"}
+            {product.inStock ? t.product.addToCart : t.product.outOfStock}
           </Button>
         </View>
       </View>

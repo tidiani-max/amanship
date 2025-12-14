@@ -17,6 +17,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
+import { useLanguage } from "@/context/LanguageContext";
 import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { mockProducts } from "@/data/mockData";
@@ -34,6 +35,7 @@ const samplePhrases = [
 export default function VoiceOrderModal() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const navigation = useNavigation<NavigationProp>();
   
   const [isListening, setIsListening] = useState(false);
@@ -125,10 +127,10 @@ export default function VoiceOrderModal() {
       <View style={styles.header}>
         <Pressable onPress={handleCancel} style={styles.headerButton}>
           <ThemedText type="body" style={{ color: theme.error }}>
-            Cancel
+            {t.account.cancel}
           </ThemedText>
         </Pressable>
-        <ThemedText type="h3">Voice Order</ThemedText>
+        <ThemedText type="h3">{t.voice.title}</ThemedText>
         <Pressable
           onPress={transcript ? handleConfirm : undefined}
           style={styles.headerButton}
@@ -138,7 +140,7 @@ export default function VoiceOrderModal() {
             type="body"
             style={{ color: transcript ? theme.primary : theme.textSecondary }}
           >
-            Done
+            {t.common.done}
           </ThemedText>
         </Pressable>
       </View>
@@ -156,7 +158,7 @@ export default function VoiceOrderModal() {
             </ThemedText>
           ) : (
             <ThemedText type="body" style={[styles.placeholder, { color: theme.textSecondary }]}>
-              Tap the microphone and tell us what you need
+              {t.voice.speakNow}
             </ThemedText>
           )}
         </View>
@@ -188,7 +190,7 @@ export default function VoiceOrderModal() {
             </Pressable>
           </Animated.View>
           <ThemedText type="body" style={[styles.micLabel, { color: theme.textSecondary }]}>
-            {isListening ? "Listening..." : "Tap to speak"}
+            {isListening ? t.voice.listening : t.voice.tapToSpeak}
           </ThemedText>
         </View>
         
@@ -212,14 +214,14 @@ export default function VoiceOrderModal() {
       
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.xl }]}>
         {transcript ? (
-          <Button onPress={handleConfirm}>Confirm Order</Button>
+          <Button onPress={handleConfirm}>{t.common.confirm}</Button>
         ) : (
           <View style={styles.tipsContainer}>
             <ThemedText type="caption" style={{ color: theme.textSecondary, marginBottom: Spacing.sm }}>
-              Try saying:
+              {t.voice.trySaying}
             </ThemedText>
             <ThemedText type="body" style={{ color: theme.text, fontStyle: "italic" }}>
-              "2 cartons of milk and a dozen eggs"
+              "{t.voice.samplePhrase}"
             </ThemedText>
           </View>
         )}

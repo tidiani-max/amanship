@@ -16,6 +16,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
+import { useLanguage } from "@/context/LanguageContext";
 import { Spacing } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
@@ -25,6 +26,7 @@ type OrderSuccessRouteProp = RouteProp<RootStackParamList, "OrderSuccess">;
 export default function OrderSuccessScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<OrderSuccessRouteProp>();
   const { orderId } = route.params;
@@ -79,16 +81,16 @@ export default function OrderSuccessScreen() {
           </View>
           
           <ThemedText type="h1" style={styles.title}>
-            Order Placed!
+            {t.orderSuccess.title}
           </ThemedText>
           
           <ThemedText type="body" style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Your order has been confirmed and is being prepared
+            {t.orderSuccess.orderConfirmed}
           </ThemedText>
           
           <View style={[styles.orderIdContainer, { backgroundColor: theme.backgroundDefault }]}>
             <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-              Order ID
+              {t.orderSuccess.orderId}
             </ThemedText>
             <ThemedText type="h3">{orderId}</ThemedText>
           </View>
@@ -97,10 +99,10 @@ export default function OrderSuccessScreen() {
             <Feather name="clock" size={20} color={theme.primary} />
             <View style={styles.estimateText}>
               <ThemedText type="body" style={{ fontWeight: "600" }}>
-                Estimated Delivery
+                {t.orderSuccess.estimatedDelivery}
               </ThemedText>
               <ThemedText type="h2" style={{ color: theme.primary }}>
-                15 minutes
+                15 {t.orderSuccess.minutes}
               </ThemedText>
             </View>
           </View>
@@ -108,9 +110,9 @@ export default function OrderSuccessScreen() {
       </View>
       
       <View style={styles.footer}>
-        <Button onPress={handleTrackOrder}>Track Order</Button>
+        <Button onPress={handleTrackOrder}>{t.orderSuccess.trackOrder}</Button>
         <Button variant="text" onPress={handleGoHome}>
-          Back to Home
+          {t.orderSuccess.backToHome}
         </Button>
       </View>
     </ThemedView>

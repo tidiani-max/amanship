@@ -10,6 +10,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useLanguage } from "@/context/LanguageContext";
 import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { CartItem } from "@/types";
@@ -23,6 +24,7 @@ export default function VoiceConfirmScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<VoiceConfirmRouteProp>();
   const { items: routeItems } = route.params;
@@ -55,7 +57,7 @@ export default function VoiceConfirmScreen() {
 
   const handleAddToCart = async () => {
     if (items.length === 0) {
-      Alert.alert("No Items", "Please add items to your order.");
+      Alert.alert(t.voice.noItemsFound, t.cart.emptyDescription);
       return;
     }
     
@@ -66,7 +68,7 @@ export default function VoiceConfirmScreen() {
       }
       navigation.navigate("Cart");
     } catch (error) {
-      Alert.alert("Error", "Failed to add items to cart.");
+      Alert.alert(t.common.error);
     } finally {
       setIsAdding(false);
     }
@@ -137,11 +139,11 @@ export default function VoiceConfirmScreen() {
             <View style={[styles.successBadge, { backgroundColor: theme.success + "20" }]}>
               <Feather name="check-circle" size={16} color={theme.success} />
               <ThemedText type="caption" style={{ color: theme.success, fontWeight: "500" }}>
-                {items.length} items detected from voice
+                {items.length} {t.voice.itemsFound}
               </ThemedText>
             </View>
             <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.sm }}>
-              Review and edit your order before adding to cart
+              {t.voice.orderConfirm}
             </ThemedText>
           </View>
         }
@@ -160,14 +162,14 @@ export default function VoiceConfirmScreen() {
         <View style={styles.footerContent}>
           <View>
             <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-              Total ({items.length} items)
+              {t.checkout.total} ({items.length} {t.cart.items})
             </ThemedText>
             <ThemedText type="h2" style={{ color: theme.primary }}>
               {formatPrice(total)}
             </ThemedText>
           </View>
           <Button onPress={handleAddToCart} style={styles.addButton} disabled={isAdding || items.length === 0}>
-            {isAdding ? "Adding..." : "Add to Cart"}
+            {isAdding ? t.common.loading : t.voice.addAllToCart}
           </Button>
         </View>
       </View>

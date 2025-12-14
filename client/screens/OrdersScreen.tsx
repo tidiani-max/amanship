@@ -9,6 +9,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useLanguage } from "@/context/LanguageContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Order } from "@/types";
@@ -19,6 +20,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export default function OrdersScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const navigation = useNavigation<NavigationProp>();
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
 
@@ -47,13 +49,13 @@ export default function OrdersScreen() {
   const getStatusText = (status: Order["status"]) => {
     switch (status) {
       case "pending":
-        return "Pending";
+        return t.orders.pending;
       case "preparing":
-        return "Preparing";
+        return t.orders.preparing;
       case "on_the_way":
-        return "On the way";
+        return t.orders.onTheWay;
       case "delivered":
-        return "Delivered";
+        return t.orders.delivered;
       default:
         return status;
     }
@@ -96,7 +98,7 @@ export default function OrdersScreen() {
       </View>
       
       <ThemedText type="caption" style={{ color: theme.textSecondary, marginBottom: Spacing.sm }}>
-        {formatDate(item.createdAt)} • {item.items.length} items
+        {formatDate(item.createdAt)} • {item.items.length} {t.cart.items}
       </ThemedText>
       
       <View style={styles.orderItems}>
@@ -107,7 +109,7 @@ export default function OrdersScreen() {
         ))}
         {item.items.length > 2 ? (
           <ThemedText type="small" style={{ color: theme.textSecondary }}>
-            +{item.items.length - 2} more items
+            +{item.items.length - 2} {t.orders.moreItems}
           </ThemedText>
         ) : null}
       </View>
@@ -119,7 +121,7 @@ export default function OrdersScreen() {
         {item.status === "on_the_way" ? (
           <View style={styles.trackButton}>
             <ThemedText type="caption" style={{ color: theme.primary, fontWeight: "600" }}>
-              Track Order
+              {t.orders.trackOrder}
             </ThemedText>
             <Feather name="chevron-right" size={16} color={theme.primary} />
           </View>
@@ -131,7 +133,7 @@ export default function OrdersScreen() {
   return (
     <ThemedView style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.lg }]}>
-        <ThemedText type="h2">My Orders</ThemedText>
+        <ThemedText type="h2">{t.orders.myOrders}</ThemedText>
       </View>
       
       <View style={styles.tabsContainer}>
@@ -149,7 +151,7 @@ export default function OrdersScreen() {
               color: activeTab === "active" ? theme.primary : theme.textSecondary,
             }}
           >
-            Active ({activeOrders.length})
+            {t.orders.active} ({activeOrders.length})
           </ThemedText>
         </Pressable>
         <Pressable
@@ -166,7 +168,7 @@ export default function OrdersScreen() {
               color: activeTab === "completed" ? theme.primary : theme.textSecondary,
             }}
           >
-            Completed ({completedOrders.length})
+            {t.orders.completed} ({completedOrders.length})
           </ThemedText>
         </Pressable>
       </View>
@@ -184,7 +186,7 @@ export default function OrdersScreen() {
           <View style={styles.emptyState}>
             <Feather name="shopping-bag" size={48} color={theme.textSecondary} />
             <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
-              No {activeTab} orders yet
+              {activeTab === "active" ? t.orders.noActiveOrders : t.orders.noCompletedOrders}
             </ThemedText>
           </View>
         }

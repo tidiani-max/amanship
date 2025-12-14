@@ -15,6 +15,7 @@ import Animated, {
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useLanguage } from "@/context/LanguageContext";
 import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { mockRider } from "@/data/mockData";
@@ -27,6 +28,7 @@ export default function OrderTrackingScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const route = useRoute<OrderTrackingRouteProp>();
   const { orderId } = route.params;
   
@@ -83,13 +85,13 @@ export default function OrderTrackingScreen() {
   const getStatusText = () => {
     switch (status) {
       case "preparing":
-        return "Preparing your order";
+        return t.tracking.preparingOrder;
       case "picked_up":
-        return "Rider picked up your order";
+        return t.tracking.riderPickedUp;
       case "on_the_way":
-        return "On the way to you";
+        return t.tracking.onTheWayToYou;
       case "arriving":
-        return "Almost there!";
+        return t.tracking.almostThere;
       default:
         return "";
     }
@@ -119,7 +121,7 @@ export default function OrderTrackingScreen() {
               <Feather name="shopping-bag" size={16} color="#FFFFFF" />
             </View>
             <ThemedText type="small" style={{ color: theme.textSecondary }}>
-              Store
+              {t.tracking.store}
             </ThemedText>
           </View>
           
@@ -137,7 +139,7 @@ export default function OrderTrackingScreen() {
               <Feather name="map-pin" size={16} color="#FFFFFF" />
             </View>
             <ThemedText type="small" style={{ color: theme.textSecondary }}>
-              You
+              {t.tracking.you}
             </ThemedText>
           </View>
         </View>
@@ -153,7 +155,7 @@ export default function OrderTrackingScreen() {
           </View>
           <ThemedText type="h3">{getStatusText()}</ThemedText>
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            Order {orderId}
+            {t.tracking.order} {orderId}
           </ThemedText>
         </View>
         
@@ -162,7 +164,7 @@ export default function OrderTrackingScreen() {
             <View style={[styles.progressDot, { backgroundColor: theme.success }]}>
               <Feather name="check" size={12} color="#FFFFFF" />
             </View>
-            <ThemedText type="small">Confirmed</ThemedText>
+            <ThemedText type="small">{t.orders.confirmed}</ThemedText>
           </View>
           <View style={[styles.progressLine, { backgroundColor: status !== "preparing" ? theme.success : theme.border }]} />
           <View style={styles.progressStep}>
@@ -174,7 +176,7 @@ export default function OrderTrackingScreen() {
                 <Feather name="check" size={12} color="#FFFFFF" />
               ) : null}
             </View>
-            <ThemedText type="small">Picked Up</ThemedText>
+            <ThemedText type="small">{t.tracking.pickedUp}</ThemedText>
           </View>
           <View style={[styles.progressLine, { backgroundColor: status === "on_the_way" || status === "arriving" ? theme.success : theme.border }]} />
           <View style={styles.progressStep}>
@@ -186,7 +188,7 @@ export default function OrderTrackingScreen() {
                 <Feather name="check" size={12} color="#FFFFFF" />
               ) : null}
             </View>
-            <ThemedText type="small">Delivered</ThemedText>
+            <ThemedText type="small">{t.orders.delivered}</ThemedText>
           </View>
         </View>
         
