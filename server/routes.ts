@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { categories, products, vouchers, users, stores, storeStaff, storeInventory } from "@shared/schema";
+import { findNearestAvailableStore, getStoresWithAvailability, estimateDeliveryTime } from "./storeAvailability";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Categories
@@ -166,6 +167,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Order error:", error);
       res.status(500).json({ error: "Failed to create order" });
+    }
+  });
+
+  // Store Availability
+  app.get("/api/stores/available", async (req: Request, res: Response) => {
+    try {
+      const lat = parseFloat(req.query.lat as string);
+      const lng = parseFloat(req.query.lng as string);
+      
+      if (isNaN(lat) || isNaN(lng)) {
+        return res.status(400).json({ error: "Valid lat and lng query parameters required" });
+      }
+      
+      const nearestStore = await findNearestAvailableStore(lat, lng);
+      
+      if (!nearestStore) {
+        return res.json({ 
+          available: false, 
+          message: "No stores available in your area",
+          stores: await getStoresWithAvailability(lat, lng)
+        });
+      }
+      
+      const estimatedTime = estimateDeliveryTime(nearestStore.distanceKm);
+      
+      res.json({
+        available: true,
+        store: nearestStore,
+        estimatedDeliveryMinutes: estimatedTime,
+        codAllowed: nearestStore.codAllowed,
+      });
+    } catch (error) {
+      console.error("Store availability error:", error);
+      res.status(500).json({ error: "Failed to check store availability" });
+    }
+  });
+
+  app.get("/api/stores", async (_req: Request, res: Response) => {
+    try {
+      const allStores = await storage.getStores();
+      res.json(allStores);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch stores" });
+    }
+  });
+
+  app.get("/api/stores/:id/inventory", async (req: Request, res: Response) => {
+    try {
+      const inventory = await storage.getStoreInventoryWithProducts(req.params.id);
+      res.json(inventory);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch store inventory" });
+    }
+  });
+
+  // Staff Status Toggle
+  app.post("/api/staff/toggle-status", async (req: Request, res: Response) => {
+    try {
+      const { userId, status } = req.body;
+      
+      if (!userId || !["online", "offline"].includes(status)) {
+        return res.status(400).json({ error: "Valid userId and status (online/offline) required" });
+      }
+      
+      const staffRecord = await storage.getStoreStaffByUserId(userId);
+      if (!staffRecord) {
+        return res.status(404).json({ error: "Staff record not found" });
+      }
+      
+      const updated = await storage.updateStaffStatus(staffRecord.id, status);
+      res.json(updated);
+    } catch (error) {
+      console.error("Staff status toggle error:", error);
+      res.status(500).json({ error: "Failed to update staff status" });
+    }
+  });
+
+  app.get("/api/stores/:id/staff", async (req: Request, res: Response) => {
+    try {
+      const staff = await storage.getStoreStaff(req.params.id);
+      res.json(staff);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch store staff" });
     }
   });
 
