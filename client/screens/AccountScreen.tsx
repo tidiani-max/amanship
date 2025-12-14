@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -9,9 +9,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
-import { useOnboarding } from "@/context/OnboardingContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
@@ -53,46 +51,17 @@ export default function AccountScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
-  const { user, isAuthenticated, logout } = useAuth();
   const { t } = useLanguage();
-  const { resetOnboarding } = useOnboarding();
-
-  const handleLogout = async () => {
-    Alert.alert(
-      t.account.logOut,
-      t.account.logOutConfirm,
-      [
-        { text: t.account.cancel, style: "cancel" },
-        {
-          text: t.account.logOut,
-          style: "destructive",
-          onPress: async () => {
-            await logout();
-            resetOnboarding();
-          },
-        },
-      ]
-    );
-  };
 
   const getInitial = () => {
-    if (user?.username) {
-      return user.username.charAt(0).toUpperCase();
-    }
     return "G";
   };
 
   const getDisplayName = () => {
-    if (user?.username) {
-      return user.username;
-    }
     return "Guest";
   };
 
   const getPhoneNumber = () => {
-    if (user?.phone) {
-      return user.phone;
-    }
     return t.account.noPhone;
   };
 
@@ -112,44 +81,24 @@ export default function AccountScreen() {
           <ThemedText type="h2">{t.account.title}</ThemedText>
         </View>
         
-        {isAuthenticated ? (
-          <Card style={styles.profileCard}>
-            <View style={styles.profileContent}>
-              <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
-                <ThemedText type="h2" style={{ color: theme.buttonText }}>
-                  {getInitial()}
-                </ThemedText>
-              </View>
-              <View style={styles.profileInfo}>
-                <ThemedText type="h3">{getDisplayName()}</ThemedText>
-                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  {getPhoneNumber()}
-                </ThemedText>
-              </View>
-              <Pressable style={styles.editButton}>
-                <Feather name="edit-2" size={18} color={theme.primary} />
-              </Pressable>
+        <Card style={styles.profileCard}>
+          <View style={styles.profileContent}>
+            <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
+              <ThemedText type="h2" style={{ color: theme.buttonText }}>
+                {getInitial()}
+              </ThemedText>
             </View>
-          </Card>
-        ) : (
-          <Card style={styles.profileCard}>
-            <Pressable 
-              style={styles.loginPrompt}
-              onPress={() => resetOnboarding()}
-            >
-              <View style={[styles.avatar, { backgroundColor: theme.textSecondary }]}>
-                <Feather name="user" size={24} color={theme.buttonText} />
-              </View>
-              <View style={styles.profileInfo}>
-                <ThemedText type="h3">{t.account.signIn}</ThemedText>
-                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  {t.account.signInPrompt}
-                </ThemedText>
-              </View>
-              <Feather name="chevron-right" size={20} color={theme.textSecondary} />
+            <View style={styles.profileInfo}>
+              <ThemedText type="h3">{getDisplayName()}</ThemedText>
+              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                {getPhoneNumber()}
+              </ThemedText>
+            </View>
+            <Pressable style={styles.editButton}>
+              <Feather name="edit-2" size={18} color={theme.primary} />
             </Pressable>
-          </Card>
-        )}
+          </View>
+        </Card>
         
         <View style={styles.section}>
           <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
@@ -221,32 +170,18 @@ export default function AccountScreen() {
           </Card>
         </View>
         
-        {user?.role === "admin" || user?.role === "customer" ? (
-          <View style={styles.section}>
-            <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-              {t.account.admin.toUpperCase()}
-            </ThemedText>
-            <Card style={styles.menuCard}>
-              <MenuItem
-                icon="bar-chart-2"
-                label={t.account.storeDashboard}
-                onPress={() => navigation.navigate("AdminDashboard")}
-              />
-            </Card>
-          </View>
-        ) : null}
-        
-        {isAuthenticated ? (
-          <Pressable 
-            style={[styles.logoutButton, { borderColor: theme.error }]}
-            onPress={handleLogout}
-          >
-            <Feather name="log-out" size={20} color={theme.error} />
-            <ThemedText type="body" style={{ color: theme.error, fontWeight: "500" }}>
-              {t.account.logOut}
-            </ThemedText>
-          </Pressable>
-        ) : null}
+        <View style={styles.section}>
+          <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+            {t.account.admin.toUpperCase()}
+          </ThemedText>
+          <Card style={styles.menuCard}>
+            <MenuItem
+              icon="bar-chart-2"
+              label={t.account.storeDashboard}
+              onPress={() => navigation.navigate("AdminDashboard")}
+            />
+          </Card>
+        </View>
       </ScrollView>
     </ThemedView>
   );
