@@ -331,19 +331,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allStores = await storage.getStores();
       const allOrders = await storage.getAllOrders();
       
-      // Get staff for each store and compile metrics
+      // Get staff for each store and compile metrics - properly scoped by storeId
       const storeMetrics = await Promise.all(
         allStores.map(async (store) => {
-          const staff = await storage.getStoreStaff(store.id);
-          const onlineStaff = staff.filter((s) => s.status === "online");
+          // Get only staff belonging to this specific store
+          const storeStaff = await storage.getStoreStaff(store.id);
+          const onlineStaff = storeStaff.filter((s) => s.status === "online");
+          
+          // Filter orders that belong to this specific store
           const storeOrders = allOrders.filter((o) => o.storeId === store.id);
           
+          // Filter pickers and drivers for this store only
+          const storePickers = storeStaff.filter((s) => s.role === "picker");
+          const storeDrivers = storeStaff.filter((s) => s.role === "driver");
+          
           return {
-            ...store,
-            totalStaff: staff.length,
+            id: store.id,
+            name: store.name,
+            address: store.address,
+            isActive: store.isActive,
+            codAllowed: store.codAllowed,
+            totalStaff: storeStaff.length,
             onlineStaff: onlineStaff.length,
-            pickers: staff.filter((s) => s.role === "picker"),
-            drivers: staff.filter((s) => s.role === "driver"),
+            pickers: storePickers,
+            drivers: storeDrivers,
             orderCount: storeOrders.length,
             pendingOrders: storeOrders.filter((o) => o.status === "pending").length,
             activeOrders: storeOrders.filter((o) => 
@@ -353,7 +364,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
       );
       
-      // Order summary
+      // Global order summary across all stores
       const orderSummary = {
         total: allOrders.length,
         pending: allOrders.filter((o) => o.status === "pending").length,
