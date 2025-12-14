@@ -16,6 +16,9 @@ import EditAddressScreen from "@/screens/EditAddressScreen";
 import HelpCenterScreen from "@/screens/HelpCenterScreen";
 import VouchersScreen from "@/screens/VouchersScreen";
 import AdminDashboardScreen from "@/screens/AdminDashboardScreen";
+import OwnerDashboardScreen from "@/screens/OwnerDashboardScreen";
+import PickerDashboardScreen from "@/screens/PickerDashboardScreen";
+import DriverDashboardScreen from "@/screens/DriverDashboardScreen";
 import NotificationsScreen from "@/screens/NotificationsScreen";
 import LanguageScreen from "@/screens/LanguageScreen";
 import AboutScreen from "@/screens/AboutScreen";
@@ -38,6 +41,9 @@ export type RootStackParamList = {
   HelpCenter: undefined;
   Vouchers: undefined;
   AdminDashboard: undefined;
+  OwnerDashboard: undefined;
+  PickerDashboard: undefined;
+  DriverDashboard: undefined;
   Notifications: undefined;
   Language: undefined;
   About: undefined;
@@ -161,6 +167,27 @@ export default function RootStackNavigator() {
             component={AdminDashboardScreen}
             options={{
               headerTitle: "Admin Dashboard",
+            }}
+          />
+          <Stack.Screen
+            name="OwnerDashboard"
+            component={OwnerDashboardScreen}
+            options={{
+              headerTitle: "Store Management",
+            }}
+          />
+          <Stack.Screen
+            name="PickerDashboard"
+            component={PickerDashboardScreen}
+            options={{
+              headerTitle: "Picker Dashboard",
+            }}
+          />
+          <Stack.Screen
+            name="DriverDashboard"
+            component={DriverDashboardScreen}
+            options={{
+              headerTitle: "Driver Dashboard",
             }}
           />
           <Stack.Screen

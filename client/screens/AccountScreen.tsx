@@ -201,18 +201,56 @@ export default function AccountScreen() {
           </Card>
         </View>
         
-        <View style={styles.section}>
-          <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-            {t.account.admin.toUpperCase()}
-          </ThemedText>
-          <Card style={styles.menuCard}>
-            <MenuItem
-              icon="bar-chart-2"
-              label={t.account.storeDashboard}
-              onPress={() => navigation.navigate("AdminDashboard")}
-            />
-          </Card>
-        </View>
+        {user?.role === "picker" ? (
+          <View style={styles.section}>
+            <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+              WORK
+            </ThemedText>
+            <Card style={styles.menuCard}>
+              <MenuItem
+                icon="package"
+                label="Picker Dashboard"
+                onPress={() => navigation.navigate("PickerDashboard")}
+              />
+            </Card>
+          </View>
+        ) : null}
+
+        {user?.role === "driver" ? (
+          <View style={styles.section}>
+            <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+              WORK
+            </ThemedText>
+            <Card style={styles.menuCard}>
+              <MenuItem
+                icon="truck"
+                label="Driver Dashboard"
+                onPress={() => navigation.navigate("DriverDashboard")}
+              />
+            </Card>
+          </View>
+        ) : null}
+
+        {user?.role === "owner" || user?.role === "admin" ? (
+          <View style={styles.section}>
+            <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+              MANAGEMENT
+            </ThemedText>
+            <Card style={styles.menuCard}>
+              <MenuItem
+                icon="home"
+                label="Store Management"
+                onPress={() => navigation.navigate("OwnerDashboard")}
+              />
+              <View style={[styles.divider, { backgroundColor: theme.border }]} />
+              <MenuItem
+                icon="bar-chart-2"
+                label={t.account.storeDashboard}
+                onPress={() => navigation.navigate("AdminDashboard")}
+              />
+            </Card>
+          </View>
+        ) : null}
 
         {isAuthenticated ? (
           <Pressable 

@@ -2,7 +2,7 @@ import { storage } from "./storage";
 import type { Store } from "@shared/schema";
 
 const EARTH_RADIUS_KM = 6371;
-const MAX_DELIVERY_RADIUS_KM = 5;
+const MAX_DELIVERY_RADIUS_KM = 3; // ~10 minute delivery distance
 
 function toRadians(degrees: number): number {
   return degrees * (Math.PI / 180);
