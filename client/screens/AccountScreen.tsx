@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -9,6 +9,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useAuth } from "@/context/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
@@ -50,6 +51,49 @@ export default function AccountScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
+  const { user, isAuthenticated, logout } = useAuth();
+
+  const handleLogout = async () => {
+    Alert.alert(
+      "Log Out",
+      "Are you sure you want to log out?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Log Out",
+          style: "destructive",
+          onPress: async () => {
+            await logout();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "Login" }],
+            });
+          },
+        },
+      ]
+    );
+  };
+
+  const getInitial = () => {
+    if (user?.username) {
+      return user.username.charAt(0).toUpperCase();
+    }
+    return "G";
+  };
+
+  const getDisplayName = () => {
+    if (user?.username) {
+      return user.username;
+    }
+    return "Guest";
+  };
+
+  const getPhoneNumber = () => {
+    if (user?.phone) {
+      return user.phone;
+    }
+    return "No phone number";
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -67,24 +111,44 @@ export default function AccountScreen() {
           <ThemedText type="h2">Account</ThemedText>
         </View>
         
-        <Card style={styles.profileCard}>
-          <View style={styles.profileContent}>
-            <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
-              <ThemedText type="h2" style={{ color: theme.buttonText }}>
-                J
-              </ThemedText>
+        {isAuthenticated ? (
+          <Card style={styles.profileCard}>
+            <View style={styles.profileContent}>
+              <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
+                <ThemedText type="h2" style={{ color: theme.buttonText }}>
+                  {getInitial()}
+                </ThemedText>
+              </View>
+              <View style={styles.profileInfo}>
+                <ThemedText type="h3">{getDisplayName()}</ThemedText>
+                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                  {getPhoneNumber()}
+                </ThemedText>
+              </View>
+              <Pressable style={styles.editButton}>
+                <Feather name="edit-2" size={18} color={theme.primary} />
+              </Pressable>
             </View>
-            <View style={styles.profileInfo}>
-              <ThemedText type="h3">John Doe</ThemedText>
-              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                +62 812-3456-7890
-              </ThemedText>
-            </View>
-            <Pressable style={styles.editButton}>
-              <Feather name="edit-2" size={18} color={theme.primary} />
+          </Card>
+        ) : (
+          <Card style={styles.profileCard}>
+            <Pressable 
+              style={styles.loginPrompt}
+              onPress={() => navigation.navigate("Login")}
+            >
+              <View style={[styles.avatar, { backgroundColor: theme.textSecondary }]}>
+                <Feather name="user" size={24} color={theme.buttonText} />
+              </View>
+              <View style={styles.profileInfo}>
+                <ThemedText type="h3">Sign In</ThemedText>
+                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                  Tap to sign in or create an account
+                </ThemedText>
+              </View>
+              <Feather name="chevron-right" size={20} color={theme.textSecondary} />
             </Pressable>
-          </View>
-        </Card>
+          </Card>
+        )}
         
         <View style={styles.section}>
           <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
@@ -139,42 +203,49 @@ export default function AccountScreen() {
             <MenuItem
               icon="bell"
               label="Notifications"
-              onPress={() => {}}
+              onPress={() => navigation.navigate("Notifications")}
             />
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <MenuItem
               icon="globe"
               label="Language"
-              onPress={() => {}}
+              onPress={() => navigation.navigate("Language")}
             />
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <MenuItem
               icon="info"
               label="About"
-              onPress={() => {}}
+              onPress={() => navigation.navigate("About")}
             />
           </Card>
         </View>
         
-        <View style={styles.section}>
-          <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-            Admin
-          </ThemedText>
-          <Card style={styles.menuCard}>
-            <MenuItem
-              icon="bar-chart-2"
-              label="Store Dashboard"
-              onPress={() => navigation.navigate("AdminDashboard")}
-            />
-          </Card>
-        </View>
+        {user?.role === "admin" || user?.role === "customer" ? (
+          <View style={styles.section}>
+            <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+              Admin
+            </ThemedText>
+            <Card style={styles.menuCard}>
+              <MenuItem
+                icon="bar-chart-2"
+                label="Store Dashboard"
+                onPress={() => navigation.navigate("AdminDashboard")}
+              />
+            </Card>
+          </View>
+        ) : null}
         
-        <Pressable style={[styles.logoutButton, { borderColor: theme.error }]}>
-          <Feather name="log-out" size={20} color={theme.error} />
-          <ThemedText type="body" style={{ color: theme.error, fontWeight: "500" }}>
-            Log Out
-          </ThemedText>
-        </Pressable>
+        {isAuthenticated ? (
+          <Pressable 
+            style={[styles.logoutButton, { borderColor: theme.error }]}
+            onPress={handleLogout}
+          >
+            <Feather name="log-out" size={20} color={theme.error} />
+            <ThemedText type="body" style={{ color: theme.error, fontWeight: "500" }}>
+              Log Out
+            </ThemedText>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </ThemedView>
   );
@@ -194,6 +265,10 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   profileContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  loginPrompt: {
     flexDirection: "row",
     alignItems: "center",
   },

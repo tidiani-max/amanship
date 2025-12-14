@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
+import { eq } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
 import { categories, products, vouchers, users, stores, storeStaff, storeInventory } from "@shared/schema";
@@ -406,6 +407,128 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(voucher);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch voucher" });
+    }
+  });
+
+  // Authentication endpoints
+  app.post("/api/auth/register", async (req: Request, res: Response) => {
+    try {
+      const { username, password, phone } = req.body;
+      
+      if (!username || !password) {
+        return res.status(400).json({ error: "Username and password are required" });
+      }
+      
+      if (username.length < 3) {
+        return res.status(400).json({ error: "Username must be at least 3 characters" });
+      }
+      
+      if (password.length < 4) {
+        return res.status(400).json({ error: "Password must be at least 4 characters" });
+      }
+      
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(400).json({ error: "Username already taken" });
+      }
+      
+      const newUser = await storage.createUser({
+        username,
+        password,
+        phone: phone || null,
+        role: "customer",
+      });
+      
+      res.json({
+        user: {
+          id: newUser.id,
+          username: newUser.username,
+          phone: newUser.phone,
+          role: newUser.role,
+        },
+      });
+    } catch (error) {
+      console.error("Registration error:", error);
+      res.status(500).json({ error: "Registration failed" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
+    try {
+      const { username, password } = req.body;
+      
+      if (!username || !password) {
+        return res.status(400).json({ error: "Username and password are required" });
+      }
+      
+      const user = await storage.getUserByUsername(username);
+      
+      if (!user) {
+        return res.status(401).json({ error: "Invalid username or password" });
+      }
+      
+      if (user.password !== password) {
+        return res.status(401).json({ error: "Invalid username or password" });
+      }
+      
+      res.json({
+        user: {
+          id: user.id,
+          username: user.username,
+          phone: user.phone,
+          role: user.role,
+        },
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  app.put("/api/auth/profile", async (req: Request, res: Response) => {
+    try {
+      const { userId, username, phone } = req.body;
+      
+      if (!userId) {
+        return res.status(400).json({ error: "User ID is required" });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      if (username && username !== user.username) {
+        const existingUser = await storage.getUserByUsername(username);
+        if (existingUser) {
+          return res.status(400).json({ error: "Username already taken" });
+        }
+      }
+      
+      const updates: { username?: string; phone?: string | null } = {};
+      if (username) updates.username = username;
+      if (phone !== undefined) updates.phone = phone;
+      
+      const updatedUser = await db.update(users)
+        .set(updates)
+        .where(eq(users.id, userId))
+        .returning();
+      
+      if (updatedUser.length === 0) {
+        return res.status(404).json({ error: "Failed to update user" });
+      }
+      
+      res.json({
+        user: {
+          id: updatedUser[0].id,
+          username: updatedUser[0].username,
+          phone: updatedUser[0].phone,
+          role: updatedUser[0].role,
+        },
+      });
+    } catch (error) {
+      console.error("Profile update error:", error);
+      res.status(500).json({ error: "Profile update failed" });
     }
   });
 

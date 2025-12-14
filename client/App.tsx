@@ -13,6 +13,7 @@ import RootStackNavigator from "@/navigation/RootStackNavigator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CartProvider } from "@/context/CartContext";
 import { LocationProvider } from "@/context/LocationContext";
+import { AuthProvider } from "@/context/AuthContext";
 
 function SeedDataOnMount() {
   useEffect(() => {
@@ -25,21 +26,23 @@ export default function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <CartProvider>
-          <LocationProvider>
-            <SeedDataOnMount />
-            <SafeAreaProvider>
-              <GestureHandlerRootView style={styles.root}>
-                <KeyboardProvider>
-                  <NavigationContainer>
-                    <RootStackNavigator />
-                  </NavigationContainer>
-                  <StatusBar style="auto" />
-                </KeyboardProvider>
-              </GestureHandlerRootView>
-            </SafeAreaProvider>
-          </LocationProvider>
-        </CartProvider>
+        <AuthProvider>
+          <CartProvider>
+            <LocationProvider>
+              <SeedDataOnMount />
+              <SafeAreaProvider>
+                <GestureHandlerRootView style={styles.root}>
+                  <KeyboardProvider>
+                    <NavigationContainer>
+                      <RootStackNavigator />
+                    </NavigationContainer>
+                    <StatusBar style="auto" />
+                  </KeyboardProvider>
+                </GestureHandlerRootView>
+              </SafeAreaProvider>
+            </LocationProvider>
+          </CartProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );

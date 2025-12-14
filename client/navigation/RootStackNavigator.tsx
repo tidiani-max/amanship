@@ -15,12 +15,19 @@ import EditAddressScreen from "@/screens/EditAddressScreen";
 import HelpCenterScreen from "@/screens/HelpCenterScreen";
 import VouchersScreen from "@/screens/VouchersScreen";
 import AdminDashboardScreen from "@/screens/AdminDashboardScreen";
+import LoginScreen from "@/screens/LoginScreen";
+import SignupScreen from "@/screens/SignupScreen";
+import NotificationsScreen from "@/screens/NotificationsScreen";
+import LanguageScreen from "@/screens/LanguageScreen";
+import AboutScreen from "@/screens/AboutScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { Product, Category, Order, CartItem, Address, Voucher } from "@/types";
 
 export type RootStackParamList = {
   Onboarding: undefined;
   Main: undefined;
+  Login: undefined;
+  Signup: undefined;
   Category: { category: Category };
   ProductDetail: { product: Product };
   Cart: undefined;
@@ -34,6 +41,9 @@ export type RootStackParamList = {
   HelpCenter: undefined;
   Vouchers: undefined;
   AdminDashboard: undefined;
+  Notifications: undefined;
+  Language: undefined;
+  About: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -67,6 +77,16 @@ export default function RootStackNavigator() {
           <Stack.Screen
             name="Main"
             component={MainTabNavigator}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Signup"
+            component={SignupScreen}
             options={{ headerShown: false }}
           />
           <Stack.Screen
@@ -161,6 +181,27 @@ export default function RootStackNavigator() {
             component={AdminDashboardScreen}
             options={{
               headerTitle: "Admin Dashboard",
+            }}
+          />
+          <Stack.Screen
+            name="Notifications"
+            component={NotificationsScreen}
+            options={{
+              headerTitle: "Notifications",
+            }}
+          />
+          <Stack.Screen
+            name="Language"
+            component={LanguageScreen}
+            options={{
+              headerTitle: "Language",
+            }}
+          />
+          <Stack.Screen
+            name="About"
+            component={AboutScreen}
+            options={{
+              headerTitle: "About",
             }}
           />
         </>
