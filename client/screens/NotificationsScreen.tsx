@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Switch, Alert, Platform, Linking } from "react-native";
+import { View, StyleSheet, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -8,7 +8,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { useLanguage } from "@/context/LanguageContext";
+import { Spacing } from "@/constants/theme";
 
 const NOTIFICATIONS_KEY = "@kilatgo_notifications";
 
@@ -16,14 +17,12 @@ interface NotificationSettings {
   orderUpdates: boolean;
   promotions: boolean;
   deliveryAlerts: boolean;
-  newProducts: boolean;
 }
 
 const defaultSettings: NotificationSettings = {
   orderUpdates: true,
   promotions: false,
   deliveryAlerts: true,
-  newProducts: false,
 };
 
 function SettingRow({
@@ -67,6 +66,7 @@ function SettingRow({
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [settings, setSettings] = useState<NotificationSettings>(defaultSettings);
 
   useEffect(() => {
@@ -109,8 +109,8 @@ export default function NotificationsScreen() {
         <Card style={styles.card}>
           <SettingRow
             icon="package"
-            title="Order Updates"
-            description="Get notified about your order status"
+            title={t.notifications.orderUpdates}
+            description={t.notifications.orderDescription}
             value={settings.orderUpdates}
             onValueChange={(value) => updateSetting("orderUpdates", value)}
           />
@@ -118,8 +118,8 @@ export default function NotificationsScreen() {
           
           <SettingRow
             icon="truck"
-            title="Delivery Alerts"
-            description="Know when your order is on the way"
+            title={t.notifications.deliveryAlerts}
+            description={t.notifications.deliveryDescription}
             value={settings.deliveryAlerts}
             onValueChange={(value) => updateSetting("deliveryAlerts", value)}
           />
@@ -127,25 +127,12 @@ export default function NotificationsScreen() {
           
           <SettingRow
             icon="tag"
-            title="Promotions"
-            description="Receive special offers and discounts"
+            title={t.notifications.promotions}
+            description={t.notifications.promotionsDescription}
             value={settings.promotions}
             onValueChange={(value) => updateSetting("promotions", value)}
           />
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
-          
-          <SettingRow
-            icon="box"
-            title="New Products"
-            description="Be the first to know about new arrivals"
-            value={settings.newProducts}
-            onValueChange={(value) => updateSetting("newProducts", value)}
-          />
         </Card>
-        
-        <ThemedText type="small" style={[styles.note, { color: theme.textSecondary }]}>
-          You can change these settings anytime. Some notifications may still be sent for important account updates.
-        </ThemedText>
       </View>
     </ThemedView>
   );
@@ -182,10 +169,5 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     marginHorizontal: Spacing.lg,
-  },
-  note: {
-    textAlign: "center",
-    marginTop: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
   },
 });

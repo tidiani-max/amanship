@@ -10,6 +10,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
@@ -52,15 +53,16 @@ export default function AccountScreen() {
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
   const { user, isAuthenticated, logout } = useAuth();
+  const { t } = useLanguage();
 
   const handleLogout = async () => {
     Alert.alert(
-      "Log Out",
-      "Are you sure you want to log out?",
+      t.account.logOut,
+      t.account.logOutConfirm,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t.account.cancel, style: "cancel" },
         {
-          text: "Log Out",
+          text: t.account.logOut,
           style: "destructive",
           onPress: async () => {
             await logout();
@@ -92,7 +94,7 @@ export default function AccountScreen() {
     if (user?.phone) {
       return user.phone;
     }
-    return "No phone number";
+    return t.account.noPhone;
   };
 
   return (
@@ -108,7 +110,7 @@ export default function AccountScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <ThemedText type="h2">Account</ThemedText>
+          <ThemedText type="h2">{t.account.title}</ThemedText>
         </View>
         
         {isAuthenticated ? (
@@ -140,9 +142,9 @@ export default function AccountScreen() {
                 <Feather name="user" size={24} color={theme.buttonText} />
               </View>
               <View style={styles.profileInfo}>
-                <ThemedText type="h3">Sign In</ThemedText>
+                <ThemedText type="h3">{t.account.signIn}</ThemedText>
                 <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  Tap to sign in or create an account
+                  {t.account.signInPrompt}
                 </ThemedText>
               </View>
               <Feather name="chevron-right" size={20} color={theme.textSecondary} />
@@ -152,24 +154,24 @@ export default function AccountScreen() {
         
         <View style={styles.section}>
           <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-            My Account
+            {t.account.myAccount.toUpperCase()}
           </ThemedText>
           <Card style={styles.menuCard}>
             <MenuItem
               icon="map-pin"
-              label="Saved Addresses"
+              label={t.account.savedAddresses}
               onPress={() => navigation.navigate("EditAddress", {})}
             />
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <MenuItem
               icon="credit-card"
-              label="Payment Methods"
+              label={t.account.paymentMethods}
               onPress={() => {}}
             />
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <MenuItem
               icon="tag"
-              label="My Vouchers"
+              label={t.account.myVouchers}
               onPress={() => navigation.navigate("Vouchers")}
               showBadge
             />
@@ -178,18 +180,18 @@ export default function AccountScreen() {
         
         <View style={styles.section}>
           <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-            Support
+            {t.account.support.toUpperCase()}
           </ThemedText>
           <Card style={styles.menuCard}>
             <MenuItem
               icon="help-circle"
-              label="Help Center"
+              label={t.account.helpCenter}
               onPress={() => navigation.navigate("HelpCenter")}
             />
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <MenuItem
               icon="message-circle"
-              label="Chat Support"
+              label={t.account.chatSupport}
               onPress={() => {}}
             />
           </Card>
@@ -197,24 +199,24 @@ export default function AccountScreen() {
         
         <View style={styles.section}>
           <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-            Settings
+            {t.account.settings.toUpperCase()}
           </ThemedText>
           <Card style={styles.menuCard}>
             <MenuItem
               icon="bell"
-              label="Notifications"
+              label={t.account.notifications}
               onPress={() => navigation.navigate("Notifications")}
             />
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <MenuItem
               icon="globe"
-              label="Language"
+              label={t.account.language}
               onPress={() => navigation.navigate("Language")}
             />
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <MenuItem
               icon="info"
-              label="About"
+              label={t.account.about}
               onPress={() => navigation.navigate("About")}
             />
           </Card>
@@ -223,12 +225,12 @@ export default function AccountScreen() {
         {user?.role === "admin" || user?.role === "customer" ? (
           <View style={styles.section}>
             <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-              Admin
+              {t.account.admin.toUpperCase()}
             </ThemedText>
             <Card style={styles.menuCard}>
               <MenuItem
                 icon="bar-chart-2"
-                label="Store Dashboard"
+                label={t.account.storeDashboard}
                 onPress={() => navigation.navigate("AdminDashboard")}
               />
             </Card>
@@ -242,7 +244,7 @@ export default function AccountScreen() {
           >
             <Feather name="log-out" size={20} color={theme.error} />
             <ThemedText type="body" style={{ color: theme.error, fontWeight: "500" }}>
-              Log Out
+              {t.account.logOut}
             </ThemedText>
           </Pressable>
         ) : null}

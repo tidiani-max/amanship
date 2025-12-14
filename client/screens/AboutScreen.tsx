@@ -7,7 +7,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { useLanguage } from "@/context/LanguageContext";
+import { Spacing } from "@/constants/theme";
 
 const APP_VERSION = "1.0.0";
 const BUILD_NUMBER = "1";
@@ -46,6 +47,7 @@ function LinkRow({ icon, label, onPress }: { icon: string; label: string; onPres
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { t } = useLanguage();
 
   const openLink = (url: string) => {
     Linking.openURL(url).catch((err) => console.error("Failed to open URL:", err));
@@ -70,42 +72,42 @@ export default function AboutScreen() {
           <ThemedText type="h2" style={styles.appName}>
             KilatGo
           </ThemedText>
-          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            15-Minute Grocery Delivery
+          <ThemedText type="caption" style={{ color: theme.textSecondary, textAlign: "center" }}>
+            {t.about.appDescription}
           </ThemedText>
         </View>
         
         <Card style={styles.card}>
-          <InfoRow label="Version" value={APP_VERSION} />
+          <InfoRow label={t.about.version} value={APP_VERSION} />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <InfoRow label="Build" value={BUILD_NUMBER} />
         </Card>
         
         <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-          LEGAL
+          {t.about.legal.toUpperCase()}
         </ThemedText>
         <Card style={styles.card}>
           <LinkRow
             icon="file-text"
-            label="Terms of Service"
+            label={t.about.termsOfService}
             onPress={() => openLink("https://kilatgo.com/terms")}
           />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <LinkRow
             icon="shield"
-            label="Privacy Policy"
+            label={t.about.privacyPolicy}
             onPress={() => openLink("https://kilatgo.com/privacy")}
           />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <LinkRow
             icon="book"
-            label="Licenses"
+            label={t.about.licenses}
             onPress={() => openLink("https://kilatgo.com/licenses")}
           />
         </Card>
         
         <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-          FOLLOW US
+          {t.about.followUs.toUpperCase()}
         </ThemedText>
         <Card style={styles.card}>
           <LinkRow
@@ -122,10 +124,7 @@ export default function AboutScreen() {
         </Card>
         
         <ThemedText type="small" style={[styles.copyright, { color: theme.textSecondary }]}>
-          Made with love in Indonesia
-        </ThemedText>
-        <ThemedText type="small" style={[styles.copyright, { color: theme.textSecondary }]}>
-          2024 KilatGo. All rights reserved.
+          2024 KilatGo. {t.about.allRightsReserved}.
         </ThemedText>
       </ScrollView>
     </ThemedView>
@@ -184,7 +183,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     marginBottom: Spacing.sm,
     marginLeft: Spacing.xs,
-    textTransform: "uppercase",
     letterSpacing: 1,
   },
   copyright: {

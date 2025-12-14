@@ -14,6 +14,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CartProvider } from "@/context/CartContext";
 import { LocationProvider } from "@/context/LocationContext";
 import { AuthProvider } from "@/context/AuthContext";
+import { LanguageProvider } from "@/context/LanguageContext";
 
 function SeedDataOnMount() {
   useEffect(() => {
@@ -27,8 +28,9 @@ export default function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <CartProvider>
-            <LocationProvider>
+          <LanguageProvider>
+            <CartProvider>
+              <LocationProvider>
               <SeedDataOnMount />
               <SafeAreaProvider>
                 <GestureHandlerRootView style={styles.root}>
@@ -40,8 +42,9 @@ export default function App() {
                   </KeyboardProvider>
                 </GestureHandlerRootView>
               </SafeAreaProvider>
-            </LocationProvider>
-          </CartProvider>
+              </LocationProvider>
+            </CartProvider>
+          </LanguageProvider>
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>

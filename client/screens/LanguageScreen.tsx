@@ -1,48 +1,57 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { View, StyleSheet, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { useLanguage } from "@/context/LanguageContext";
+import { Spacing } from "@/constants/theme";
+import { Language } from "@/constants/translations";
 
-const LANGUAGE_KEY = "@kilatgo_language";
-
-interface Language {
-  code: string;
+interface LanguageOption {
+  code: Language;
   name: string;
   nativeName: string;
 }
 
-const languages: Language[] = [
-  { code: "id", name: "Indonesian", nativeName: "Bahasa Indonesia" },
+const languages: LanguageOption[] = [
   { code: "en", name: "English", nativeName: "English" },
-  { code: "zh", name: "Chinese", nativeName: "Chinese" },
+  { code: "id", name: "Indonesian", nativeName: "Bahasa Indonesia" },
 ];
 
-function LanguageOption({
-  language,
+function LanguageOptionRow({
+  languageOption,
   isSelected,
   onSelect,
+  currentLabel,
 }: {
-  language: Language;
+  languageOption: LanguageOption;
   isSelected: boolean;
   onSelect: () => void;
+  currentLabel: string;
 }) {
   const { theme } = useTheme();
   
   return (
     <Pressable style={styles.languageRow} onPress={onSelect}>
       <View style={styles.languageInfo}>
-        <ThemedText type="body" style={{ fontWeight: "500" }}>
-          {language.name}
-        </ThemedText>
+        <View style={styles.labelRow}>
+          <ThemedText type="body" style={{ fontWeight: "500" }}>
+            {languageOption.name}
+          </ThemedText>
+          {isSelected ? (
+            <View style={[styles.currentBadge, { backgroundColor: theme.primary + "20" }]}>
+              <ThemedText type="small" style={{ color: theme.primary, fontWeight: "600" }}>
+                {currentLabel}
+              </ThemedText>
+            </View>
+          ) : null}
+        </View>
         <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-          {language.nativeName}
+          {languageOption.nativeName}
         </ThemedText>
       </View>
       {isSelected ? (
@@ -59,30 +68,10 @@ function LanguageOption({
 export default function LanguageScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const [selectedLanguage, setSelectedLanguage] = useState("id");
+  const { language, setLanguage, t } = useLanguage();
 
-  useEffect(() => {
-    loadLanguage();
-  }, []);
-
-  const loadLanguage = async () => {
-    try {
-      const stored = await AsyncStorage.getItem(LANGUAGE_KEY);
-      if (stored) {
-        setSelectedLanguage(stored);
-      }
-    } catch (error) {
-      console.error("Failed to load language:", error);
-    }
-  };
-
-  const selectLanguage = async (code: string) => {
-    setSelectedLanguage(code);
-    try {
-      await AsyncStorage.setItem(LANGUAGE_KEY, code);
-    } catch (error) {
-      console.error("Failed to save language:", error);
-    }
+  const handleSelectLanguage = async (code: Language) => {
+    await setLanguage(code);
   };
 
   return (
@@ -96,23 +85,30 @@ export default function LanguageScreen() {
           },
         ]}
       >
+        <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+          {t.language.selectLanguage.toUpperCase()}
+        </ThemedText>
+        
         <Card style={styles.card}>
-          {languages.map((language, index) => (
-            <React.Fragment key={language.code}>
-              <LanguageOption
-                language={language}
-                isSelected={selectedLanguage === language.code}
-                onSelect={() => selectLanguage(language.code)}
+          {languages.map((lang, index) => (
+            <View key={lang.code}>
+              <LanguageOptionRow
+                languageOption={lang}
+                isSelected={language === lang.code}
+                onSelect={() => handleSelectLanguage(lang.code)}
+                currentLabel={t.language.current}
               />
               {index < languages.length - 1 ? (
                 <View style={[styles.divider, { backgroundColor: theme.border }]} />
               ) : null}
-            </React.Fragment>
+            </View>
           ))}
         </Card>
         
         <ThemedText type="small" style={[styles.note, { color: theme.textSecondary }]}>
-          App will use your selected language for all content. Some content may still appear in the original language.
+          {language === "en" 
+            ? "App will use your selected language for all content."
+            : "Aplikasi akan menggunakan bahasa yang Anda pilih untuk semua konten."}
         </ThemedText>
       </View>
     </ThemedView>
@@ -127,6 +123,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: Spacing.lg,
   },
+  sectionTitle: {
+    marginBottom: Spacing.sm,
+    marginLeft: Spacing.xs,
+    letterSpacing: 1,
+  },
   card: {
     padding: 0,
   },
@@ -137,6 +138,16 @@ const styles = StyleSheet.create({
   },
   languageInfo: {
     flex: 1,
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  currentBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   checkCircle: {
     width: 24,
