@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Alert, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
@@ -18,6 +18,7 @@ import { useCart } from "@/context/CartContext";
 import { useLocation } from "@/context/LocationContext";
 import { apiRequest } from "@/lib/query-client";
 import { useLanguage } from "@/context/LanguageContext";
+import { getImageUrl } from "@/lib/image-url";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -170,6 +171,52 @@ export default function CheckoutScreen() {
             </View>
           </View>
         </View>
+        
+        {items.length > 0 ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <ThemedText type="h3">{t.cart.title}</ThemedText>
+              <Pressable onPress={() => navigation.navigate("Cart")}>
+                <ThemedText type="caption" style={{ color: theme.primary }}>
+                  {t.home.change}
+                </ThemedText>
+              </Pressable>
+            </View>
+            <Card>
+              {items.map((item, index) => (
+                <View 
+                  key={item.product.id}
+                  style={[
+                    styles.cartItemRow,
+                    index < items.length - 1 && styles.cartItemBorder,
+                  ]}
+                >
+                  <View style={[styles.cartItemImage, { backgroundColor: theme.backgroundDefault }]}>
+                    {item.product.image ? (
+                      <Image 
+                        source={{ uri: getImageUrl(item.product.image) }} 
+                        style={styles.cartItemImageContent} 
+                      />
+                    ) : (
+                      <Feather name="package" size={20} color={theme.textSecondary} />
+                    )}
+                  </View>
+                  <View style={styles.cartItemDetails}>
+                    <ThemedText type="caption" numberOfLines={1} style={{ fontWeight: "500" }}>
+                      {item.product.name}
+                    </ThemedText>
+                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                      {item.quantity}x {formatPrice(item.product.price)}
+                    </ThemedText>
+                  </View>
+                  <ThemedText type="body" style={{ fontWeight: "600", color: theme.primary }}>
+                    {formatPrice(item.product.price * item.quantity)}
+                  </ThemedText>
+                </View>
+              ))}
+            </Card>
+          </View>
+        ) : null}
         
         <View style={styles.section}>
           <ThemedText type="h3" style={styles.sectionTitle}>
@@ -357,5 +404,32 @@ const styles = StyleSheet.create({
   placeOrderButton: {
     flex: 1,
     marginLeft: Spacing.xl,
+  },
+  cartItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+  },
+  cartItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+  },
+  cartItemImage: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.xs,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  cartItemImageContent: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  cartItemDetails: {
+    flex: 1,
+    marginLeft: Spacing.md,
+    marginRight: Spacing.sm,
   },
 });

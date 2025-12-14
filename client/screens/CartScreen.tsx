@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
@@ -15,6 +15,7 @@ import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { CartItem } from "@/types";
 import { useCart } from "@/context/CartContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { getImageUrl } from "@/lib/image-url";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -45,7 +46,11 @@ export default function CartScreen() {
     <Card style={styles.cartItemCard}>
       <View style={styles.cartItemContent}>
         <View style={[styles.productImage, { backgroundColor: theme.backgroundDefault }]}>
-          <Feather name="package" size={24} color={theme.textSecondary} />
+          {item.product.image ? (
+            <Image source={{ uri: getImageUrl(item.product.image) }} style={styles.productImageContent} />
+          ) : (
+            <Feather name="package" size={24} color={theme.textSecondary} />
+          )}
         </View>
         <View style={styles.productDetails}>
           <ThemedText type="body" numberOfLines={2} style={{ fontWeight: "500" }}>
@@ -182,6 +187,12 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  productImageContent: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
   },
   productDetails: {
     flex: 1,
