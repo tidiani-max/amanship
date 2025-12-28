@@ -3,7 +3,7 @@
   "main": "client/index.js",
   "version": "1.0.0",
   "scripts": {
-    "start": "node dist/index.js",
+    "start": "node server/index.js",
     "build": "tsc",
     "expo:dev": "EXPO_PUBLIC_DOMAIN=10.30.0.208 npx expo start --tunnel",
     "server:dev": "NODE_ENV=development tsx --env-file=.env server/index.ts",

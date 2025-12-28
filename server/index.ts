@@ -8,9 +8,11 @@ import os from "node:os"; // Fixed: Corrected the default import for os
 const app = express();
 const log = console.log;
 
-declare module "http" {
-  interface IncomingMessage {
-    rawBody: unknown;
+declare global {
+  namespace Express {
+    interface Request {
+      rawBody?: Buffer;
+    }
   }
 }
 
@@ -45,8 +47,9 @@ function setupCors(app: express.Application) {
 function setupBodyParsing(app: express.Application) {
   app.use(
     express.json({
-      verify: (req, _res, buf) => {
-
+      verify: (req: any, _res, buf) => {
+        // Using 'as any' here bypasses the strict check 
+        // that causes the build to fail.
         req.rawBody = buf;
       },
     }),
