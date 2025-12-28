@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -14,6 +14,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
+
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 interface MenuItemProps {
@@ -27,7 +28,8 @@ function MenuItem({ icon, label, onPress, showBadge }: MenuItemProps) {
   const { theme } = useTheme();
   
   return (
-    <Pressable style={styles.menuItem} onPress={onPress}>
+    // Change <Pressable> to <TouchableOpacity>
+    <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.6}>
       <View style={[styles.menuIconContainer, { backgroundColor: theme.backgroundDefault }]}>
         <Feather name={icon as any} size={20} color={theme.text} />
       </View>
@@ -44,7 +46,7 @@ function MenuItem({ icon, label, onPress, showBadge }: MenuItemProps) {
         ) : null}
         <Feather name="chevron-right" size={20} color={theme.textSecondary} />
       </View>
-    </Pressable>
+    </TouchableOpacity>
   );
 }
 
@@ -79,21 +81,13 @@ export default function AccountScreen() {
     return t.account.noPhone;
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Logout", 
-          style: "destructive",
-          onPress: async () => {
-            await logout();
-          }
-        }
-      ]
-    );
+const handleLogout = async () => {
+    console.log("Logout triggered"); // CHECK YOUR LAPTOP CONSOLE FOR THIS
+    try {
+      await logout();
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
   };
 
   return (
@@ -125,9 +119,9 @@ export default function AccountScreen() {
                 {getPhoneNumber()}
               </ThemedText>
             </View>
-            <Pressable style={styles.editButton}>
+            <TouchableOpacity style={styles.editButton}>
               <Feather name="edit-2" size={18} color={theme.primary} />
-            </Pressable>
+            </TouchableOpacity>
           </View>
         </Card>
         
@@ -252,47 +246,17 @@ export default function AccountScreen() {
           </View>
         ) : null}
 
-        <View style={styles.section}>
-          <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-            TEST DASHBOARDS
-          </ThemedText>
-          <Card style={styles.menuCard}>
-            <MenuItem
-              icon="home"
-              label="Owner Dashboard"
-              onPress={() => navigation.navigate("OwnerDashboard")}
-            />
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            <MenuItem
-              icon="package"
-              label="Picker Dashboard"
-              onPress={() => navigation.navigate("PickerDashboard")}
-            />
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            <MenuItem
-              icon="truck"
-              label="Driver Dashboard"
-              onPress={() => navigation.navigate("DriverDashboard")}
-            />
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            <MenuItem
-              icon="bar-chart-2"
-              label="Admin Dashboard"
-              onPress={() => navigation.navigate("AdminDashboard")}
-            />
-          </Card>
-        </View>
-
         {isAuthenticated ? (
-          <Pressable 
-            style={[styles.logoutButton, { borderColor: theme.error }]}
+          <TouchableOpacity 
+            style={[styles.logoutButton, { borderColor: theme.error, backgroundColor: 'rgba(255,0,0,0.05)' }]}
             onPress={handleLogout}
+            activeOpacity={0.7}
           >
             <Feather name="log-out" size={20} color={theme.error} />
-            <ThemedText type="body" style={{ color: theme.error }}>
-              Logout
+            <ThemedText type="body" style={{ color: theme.error, fontWeight: 'bold' }}>
+              Logout Now
             </ThemedText>
-          </Pressable>
+          </TouchableOpacity>
         ) : null}
       </ScrollView>
     </ThemedView>
@@ -377,7 +341,7 @@ const styles = StyleSheet.create({
     height: 1,
     marginLeft: 60,
   },
-  logoutButton: {
+logoutButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -385,6 +349,9 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.lg,
     borderWidth: 1,
     borderRadius: BorderRadius.sm,
-    marginTop: Spacing.lg,
+    marginTop: Spacing.xl,
+    marginBottom: 60, // Increased margin to ensure it's not blocked
+    marginHorizontal: Spacing.lg,
+    zIndex: 100, // Make sure it's on top of everything
   },
 });

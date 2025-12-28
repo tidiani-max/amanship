@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/query-client";
 import { Product, CartItem as CartItemType } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 
 interface CartContextType {
   items: CartItemType[];
@@ -38,9 +39,16 @@ interface CartItemFromAPI {
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   
-  const { data: cartData = [], isLoading } = useQuery<CartItemFromAPI[]>({
-    queryKey: ["/api/cart"],
+const { data: cartData = [], isLoading } = useQuery<CartItemFromAPI[]>({
+    queryKey: ["/api/cart", user?.id], // Add user.id to the key
+    queryFn: async () => {
+      // Add the userId to the URL
+      const res = await apiRequest("GET", `/api/cart?userId=${user?.id}`);
+      return res.json();
+    },
+    enabled: !!user?.id, // Only fetch if user is logged in
   });
 
   const items: CartItemType[] = cartData.map((item) => ({
@@ -61,13 +69,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     cartItemId: item.id,
   }));
 
-  const addMutation = useMutation({
+const addMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: string; quantity: number }) => {
-      const res = await apiRequest("POST", "/api/cart", { productId, quantity });
+      // Include userId here!
+      const res = await apiRequest("POST", "/api/cart", { 
+        productId, 
+        quantity, 
+        userId: user?.id 
+      });
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cart", user?.id] });
     },
   });
 
@@ -81,23 +94,25 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
-  const removeMutation = useMutation({
+const removeMutation = useMutation({
     mutationFn: async (cartItemId: string) => {
+      // Ensure this is hitting the correct ID
       const res = await apiRequest("DELETE", `/api/cart/${cartItemId}`);
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cart", user?.id] });
     },
   });
 
-  const clearMutation = useMutation({
+const clearMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("DELETE", "/api/cart");
+      // Tell the backend WHICH user's cart to clear
+      const res = await apiRequest("DELETE", `/api/cart?userId=${user?.id}`);
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cart", user?.id] });
     },
   });
 

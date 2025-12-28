@@ -34,7 +34,13 @@ interface Store {
   staff: StoreStaff[];
 }
 
-function StaffCard({ staff }: { staff: StoreStaff }) {
+function StaffCard({ 
+  staff, 
+  onToggleStatus 
+}: { 
+  staff: StoreStaff; 
+  onToggleStatus: (userId: string, currentStatus: string) => void 
+}) {
   const { theme } = useTheme();
   const isOnline = staff.status === "online";
 
@@ -53,37 +59,51 @@ function StaffCard({ staff }: { staff: StoreStaff }) {
           {staff.role.charAt(0).toUpperCase() + staff.role.slice(1)}
         </ThemedText>
       </View>
-      <View style={[styles.statusBadge, { backgroundColor: isOnline ? theme.success + "20" : theme.textSecondary + "20" }]}>
+      {/* Added Pressable for status toggle */}
+      <Pressable 
+        onPress={() => onToggleStatus(staff.userId, staff.status)}
+        style={[styles.statusBadge, { backgroundColor: isOnline ? theme.success + "20" : theme.textSecondary + "20" }]}
+      >
         <View style={[styles.statusDot, { backgroundColor: isOnline ? theme.success : theme.textSecondary }]} />
         <ThemedText type="small" style={{ color: isOnline ? theme.success : theme.textSecondary }}>
           {isOnline ? "Online" : "Offline"}
         </ThemedText>
-      </View>
+      </Pressable>
     </View>
   );
 }
 
-function StoreCard({ store, onAddStaff }: { store: Store; onAddStaff: (storeId: string) => void }) {
+function StoreCard({ 
+  store, 
+  onAddStaff, 
+  onToggleActive,
+  onToggleStaffStatus 
+}: { 
+  store: Store; 
+  onAddStaff: (storeId: string) => void;
+  onToggleActive: (storeId: string, currentStatus: boolean) => void;
+  onToggleStaffStatus: (userId: string, currentStatus: string) => void;
+}) {
   const { theme } = useTheme();
   const pickers = store.staff.filter(s => s.role === "picker");
   const drivers = store.staff.filter(s => s.role === "driver");
-  const onlinePickers = pickers.filter(p => p.status === "online").length;
-  const onlineDrivers = drivers.filter(d => d.status === "online").length;
 
   return (
     <Card style={styles.storeCard}>
       <View style={styles.storeHeader}>
         <View style={styles.storeInfo}>
           <ThemedText type="h3">{store.name}</ThemedText>
-          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            {store.address}
-          </ThemedText>
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>{store.address}</ThemedText>
         </View>
-        <View style={[styles.activeBadge, { backgroundColor: store.isActive ? theme.success + "20" : theme.error + "20" }]}>
+        {/* Made this Pressable so Owner can Open/Close store */}
+        <Pressable 
+          onPress={() => onToggleActive(store.id, store.isActive)}
+          style={[styles.activeBadge, { backgroundColor: store.isActive ? theme.success + "20" : theme.error + "20" }]}
+        >
           <ThemedText type="small" style={{ color: store.isActive ? theme.success : theme.error }}>
             {store.isActive ? "Active" : "Inactive"}
           </ThemedText>
-        </View>
+        </Pressable>
       </View>
 
       <View style={[styles.divider, { backgroundColor: theme.border }]} />
@@ -91,37 +111,24 @@ function StoreCard({ store, onAddStaff }: { store: Store; onAddStaff: (storeId: 
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
           <Feather name="package" size={16} color={theme.secondary} />
-          <ThemedText type="caption" style={{ color: theme.textSecondary }}>Pickers</ThemedText>
-          <ThemedText type="body">{onlinePickers}/{pickers.length}</ThemedText>
+          <ThemedText type="body">{pickers.filter(p => p.status === "online").length}/{pickers.length}</ThemedText>
         </View>
         <View style={styles.statItem}>
           <Feather name="truck" size={16} color={theme.primary} />
-          <ThemedText type="caption" style={{ color: theme.textSecondary }}>Drivers</ThemedText>
-          <ThemedText type="body">{onlineDrivers}/{drivers.length}</ThemedText>
+          <ThemedText type="body">{drivers.filter(d => d.status === "online").length}/{drivers.length}</ThemedText>
         </View>
-        {store.codAllowed ? (
-          <View style={[styles.tag, { backgroundColor: theme.success + "20" }]}>
-            <ThemedText type="small" style={{ color: theme.success }}>COD</ThemedText>
-          </View>
-        ) : null}
       </View>
 
-      {store.staff.length > 0 ? (
+      {store.staff.length > 0 && (
         <>
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
-          <ThemedText type="caption" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-            STAFF ({store.staff.length})
-          </ThemedText>
           {store.staff.map(staff => (
-            <StaffCard key={staff.id} staff={staff} />
+            <StaffCard key={staff.id} staff={staff} onToggleStatus={onToggleStaffStatus} />
           ))}
         </>
-      ) : null}
+      )}
 
-      <Pressable
-        style={[styles.addStaffButton, { borderColor: theme.primary }]}
-        onPress={() => onAddStaff(store.id)}
-      >
+      <Pressable style={[styles.addStaffButton, { borderColor: theme.primary }]} onPress={() => onAddStaff(store.id)}>
         <Feather name="user-plus" size={16} color={theme.primary} />
         <ThemedText type="button" style={{ color: theme.primary }}>Add Staff</ThemedText>
       </Pressable>
@@ -394,6 +401,36 @@ export default function OwnerDashboardScreen() {
     },
   });
 
+// Mutation to toggle Store Active/Inactive
+  const toggleStoreMutation = useMutation({
+    mutationFn: async ({ storeId, isActive }: { storeId: string; isActive: boolean }) => {
+      return await apiRequest("PATCH", `/api/stores/${storeId}`, { isActive });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/owner/stores"] });
+    },
+  });
+
+  // Mutation to toggle Staff Online/Offline
+  const toggleStaffMutation = useMutation({
+    mutationFn: async ({ userId, status }: { userId: string; status: string }) => {
+      return await apiRequest("PATCH", "/api/staff/status", { userId, status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/owner/stores"] });
+    },
+  });
+
+  // Helper functions
+  const handleToggleStore = (storeId: string, current: boolean) => {
+    toggleStoreMutation.mutate({ storeId, isActive: !current });
+  };
+
+  const handleToggleStaff = (userId: string, current: string) => {
+    const nextStatus = current === "online" ? "offline" : "online";
+    toggleStaffMutation.mutate({ userId, status: nextStatus });
+  };
+
   const handleAddStaff = (storeId: string) => {
     setSelectedStoreId(storeId);
     setShowAddStaff(true);
@@ -449,7 +486,13 @@ export default function OwnerDashboardScreen() {
 
         {stores && stores.length > 0 ? (
           stores.map(store => (
-            <StoreCard key={store.id} store={store} onAddStaff={handleAddStaff} />
+            <StoreCard 
+              key={store.id} 
+              store={store} 
+              onAddStaff={handleAddStaff} 
+              onToggleActive={handleToggleStore}
+              onToggleStaffStatus={handleToggleStaff}
+            />
           ))
         ) : (
           <Card style={styles.emptyCard}>

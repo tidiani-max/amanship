@@ -273,7 +273,13 @@ function AddStaffModal({
   );
 }
 
-function StaffRow({ staff, onRemove }: { staff: StaffMember; onRemove: () => void }) {
+function StaffRow({ 
+  staff, 
+  onToggleStatus 
+}: { 
+  staff: StaffMember; 
+  onToggleStatus: (userId: string, currentStatus: string) => void 
+}) {
   const { theme } = useTheme();
   const isOnline = staff.status === "online";
   const isPicker = staff.role === "picker";
@@ -289,22 +295,27 @@ function StaffRow({ staff, onRemove }: { staff: StaffMember; onRemove: () => voi
           {staff.role.charAt(0).toUpperCase() + staff.role.slice(1)}
         </ThemedText>
       </View>
-      <View style={[styles.statusBadge, { backgroundColor: isOnline ? theme.success + "20" : theme.textSecondary + "20" }]}>
+      {/* Wrap this in Pressable so Admin can force Online/Offline */}
+      <Pressable 
+        onPress={() => onToggleStatus(staff.userId, staff.status)}
+        style={[styles.statusBadge, { backgroundColor: isOnline ? theme.success + "20" : theme.textSecondary + "20" }]}
+      >
         <View style={[styles.statusDot, { backgroundColor: isOnline ? theme.success : theme.textSecondary }]} />
         <ThemedText type="small" style={{ color: isOnline ? theme.success : theme.textSecondary }}>
           {isOnline ? "Online" : "Offline"}
         </ThemedText>
-      </View>
+      </Pressable>
     </View>
   );
 }
-
 function StoreCard({ 
   store, 
-  onAddStaff 
+  onAddStaff,
+  onToggleStatus // Add this prop
 }: { 
   store: StoreData; 
   onAddStaff: (storeId: string, storeName: string) => void;
+  onToggleStatus: (userId: string, currentStatus: string) => void; // Add this line
 }) {
   const { theme } = useTheme();
   const pickers = store.staff.filter(s => s.role === "picker");
@@ -356,7 +367,7 @@ function StoreCard({
               <ThemedText type="caption" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
                 PICKERS ({pickers.length})
               </ThemedText>
-              {pickers.map(p => <StaffRow key={p.id} staff={p} onRemove={() => {}} />)}
+              {pickers.map(p => <StaffRow key={p.id} staff={p} onToggleStatus={onToggleStatus} />)}
             </>
           ) : null}
 
@@ -366,7 +377,7 @@ function StoreCard({
               <ThemedText type="caption" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
                 DRIVERS ({drivers.length})
               </ThemedText>
-              {drivers.map(d => <StaffRow key={d.id} staff={d} onRemove={() => {}} />)}
+              {drivers.map(d => <StaffRow key={d.id} staff={d} onToggleStatus={onToggleStatus} />)}
             </>
           ) : null}
 
@@ -453,10 +464,23 @@ export default function AdminDashboardScreen() {
       Alert.alert("Error", error.message);
     },
   });
+  const toggleStaffStatusMutation = useMutation({
+  mutationFn: async ({ userId, status }: { userId: string; status: string }) => {
+    const response = await apiRequest("PATCH", "/api/staff/status", { userId, status });
+    return response.json();
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
+  },
+});
 
   const handleAddStaff = (storeId: string, storeName: string) => {
     setSelectedStore({ id: storeId, name: storeName });
     setShowAddStaff(true);
+  };
+  const handleToggleStatus = (userId: string, currentStatus: string) => {
+    const nextStatus = currentStatus === "online" ? "offline" : "online";
+    toggleStaffStatusMutation.mutate({ userId, status: nextStatus });
   };
 
   if (isLoading) {
@@ -499,8 +523,14 @@ export default function AdminDashboardScreen() {
             </Pressable>
           </View>
 
+          {/* Find this section at the bottom of your file and update it */}
           {stores.map((store) => (
-            <StoreCard key={store.id} store={store} onAddStaff={handleAddStaff} />
+            <StoreCard 
+              key={store.id} 
+              store={store} 
+              onAddStaff={handleAddStaff} 
+              onToggleStatus={handleToggleStatus} // <--- ADD THIS LINE TO FIX THE ERROR
+            />
           ))}
 
           {stores.length === 0 ? (
@@ -562,6 +592,7 @@ const styles = StyleSheet.create({
   tag: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.xs },
   sectionLabel: { marginBottom: Spacing.sm, letterSpacing: 1 },
   staffRow: { flexDirection: "row", alignItems: "center", paddingVertical: Spacing.sm },
+  
   staffIcon: { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center" },
   staffInfo: { flex: 1, marginLeft: Spacing.sm },
   statusBadge: { flexDirection: "row", alignItems: "center", gap: Spacing.xs, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.full },

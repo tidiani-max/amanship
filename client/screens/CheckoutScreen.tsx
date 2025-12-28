@@ -5,20 +5,19 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
-import { useMutation } from "@tanstack/react-query";
-
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
-import { mockAddresses } from "@/data/mockData";
 import { useCart } from "@/context/CartContext";
 import { useLocation } from "@/context/LocationContext";
 import { apiRequest } from "@/lib/query-client";
 import { useLanguage } from "@/context/LanguageContext";
-import { getImageUrl } from "@/lib/image-url";
+import { useAuth } from "@/context/AuthContext";
+import { Address } from "@shared/schema";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -50,16 +49,29 @@ export default function CheckoutScreen() {
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
-  const { items, subtotal, clearCart } = useCart();
+  const queryClient = useQueryClient();
+  const { items, subtotal } = useCart();
   const { location, store, codAllowed, estimatedDeliveryMinutes } = useLocation();
+  const { user } = useAuth();
   const { t } = useLanguage();
   
-  const [selectedAddress] = useState(mockAddresses[0]);
   const [selectedPayment, setSelectedPayment] = useState<PaymentOption>(paymentMethods[0]);
 
+  // Fetch user addresses
+  const { data: userAddresses, error, isLoading: isLoadingAddresses } = useQuery<Address[]>({
+    queryKey: ["/api/addresses", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const res = await apiRequest("GET", `/api/addresses?userId=${user.id}`);
+      if (!res.ok) throw new Error("Failed to fetch addresses");
+      return res.json();
+    },
+    enabled: !!user?.id,
+  });
+
+  const selectedAddress = userAddresses && userAddresses.length > 0 ? userAddresses[0] : null;
   const deliveryFee = 10000;
   const total = subtotal + deliveryFee;
-  const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   const availablePayments = codAllowed 
     ? [...paymentMethods, codPaymentOption] 
@@ -69,8 +81,84 @@ export default function CheckoutScreen() {
     return `Rp ${price.toLocaleString("id-ID")}`;
   };
 
-  const orderMutation = useMutation({
+  // Mutation to save address from GPS location
+  const saveAddressMutation = useMutation({
     mutationFn: async () => {
+      console.log("FRONTEND: Save address mutation started");
+      
+      if (!location) {
+        throw new Error("GPS Location not found. Please enable location services.");
+      }
+      
+      if (!user?.id) {
+        throw new Error("User not logged in");
+      }
+
+      console.log("FRONTEND: Sending address data:", {
+        userId: user.id,
+        label: "Current Location",
+        fullAddress: "Auto-detected from GPS",
+        latitude: location.latitude,
+        longitude: location.longitude,
+        isDefault: true
+      });
+
+      const res = await apiRequest("POST", "/api/addresses", {
+        userId: user.id,
+        label: "Current Location",
+        fullAddress: "Auto-detected from GPS",
+        latitude: location.latitude,
+        longitude: location.longitude,
+        isDefault: true
+      });
+
+      console.log("FRONTEND: Response status:", res.status);
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+        console.error("FRONTEND: Save address failed:", errorData);
+        throw new Error(errorData.error || "Failed to save address");
+      }
+
+      const savedAddress = await res.json();
+      console.log("FRONTEND: Address saved successfully:", savedAddress);
+      return savedAddress;
+    },
+    onSuccess: (savedAddress) => {
+      console.log("FRONTEND: Save Success, now placing order");
+      // Invalidate addresses query to refetch
+      queryClient.invalidateQueries({ queryKey: ["/api/addresses", user?.id] });
+      // Trigger order placement with the newly saved address
+      orderMutation.mutate(savedAddress.id);
+    },
+    onError: (err: any) => {
+      console.error("FRONTEND: Save Error:", err);
+      Alert.alert(
+        "Address Save Failed", 
+        err?.message || "Unable to save your location. Please check your GPS settings and try again."
+      );
+    }
+  });
+
+  // Mutation to place order
+  const orderMutation = useMutation({
+    mutationFn: async (addressId?: string) => {
+      console.log("FRONTEND: Order mutation started");
+      
+      const finalAddressId = addressId || selectedAddress?.id;
+      
+      if (!finalAddressId) {
+        throw new Error("No address available for delivery");
+      }
+
+      if (!user?.id) {
+        throw new Error("User not logged in");
+      }
+
+      if (!location) {
+        throw new Error("Location not available");
+      }
+
       const orderItems = items.map((item) => ({
         productId: item.product.id,
         name: item.product.name,
@@ -78,84 +166,138 @@ export default function CheckoutScreen() {
         quantity: item.quantity,
       }));
 
-      const res = await apiRequest("POST", "/api/orders", {
-        customerLat: location?.latitude,
-        customerLng: location?.longitude,
-        paymentMethod: selectedPayment.type === "cod" ? "cod" : "midtrans",
-        items: orderItems,
+      console.log("FRONTEND: Creating order with data:", {
+        userId: user.id,
+        addressId: finalAddressId,
+        itemCount: orderItems.length,
         total,
-        deliveryFee,
-        addressId: selectedAddress.id,
       });
+      console.log("SENDING TO DRIVER:", {
+      lat: selectedAddress?.latitude || location.latitude,
+      lng: selectedAddress?.longitude || location.longitude
+    });
+
+      // Inside orderMutation mutationFn
+// Inside orderMutation mutationFn in CheckoutScreen.tsx
+const res = await apiRequest("POST", "/api/orders", {
+  // Use .toString() to ensure the backend receives the full decimal precision
+  customerLat: (selectedAddress?.latitude || location.latitude).toString(),
+  customerLng: (selectedAddress?.longitude || location.longitude).toString(),
+  paymentMethod: selectedPayment.type === "cod" ? "cod" : "midtrans",
+  items: orderItems,
+  total,
+  deliveryFee,
+  addressId: finalAddressId,
+  userId: user.id,
+  storeId: store?.id
+});
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || "Failed to create order");
+      }
+
       return res.json();
     },
     onSuccess: (data) => {
+      console.log("FRONTEND: Order created successfully:", data);
       navigation.navigate("OrderSuccess", { orderId: data.orderNumber || data.id });
     },
     onError: (error: any) => {
-      Alert.alert(
-        "Order Failed",
-        error?.message || "Unable to place order. Please try again.",
-        [{ text: "OK" }]
-      );
+      console.error("FRONTEND: Order Error:", error);
+      Alert.alert("Order Failed", error?.message || "Unable to place order. Please try again.");
     },
   });
 
   const handlePlaceOrder = () => {
+    console.log("FRONTEND: Place Order clicked");
+    console.log("FRONTEND: Current state - User ID:", user?.id);
+    console.log("FRONTEND: Current state - Location:", location);
+    console.log("FRONTEND: Current state - Selected Address:", selectedAddress);
+    
+    // Check if user is logged in
+    if (!user?.id) {
+      Alert.alert("Not Logged In", "Please log in to place an order.");
+      return;
+    }
+
+    // Check if location is available
     if (!location) {
-      Alert.alert("Location Required", "Please enable location to place an order.");
+      Alert.alert(
+        "Location Required", 
+        "Please enable location services to place an order."
+      );
       return;
     }
-    if (items.length === 0) {
-      Alert.alert("Empty Cart", "Please add items to your cart first.");
+
+    // If no address exists, save GPS location as address first
+    if (!selectedAddress) {
+      console.log("FRONTEND: No address found, saving GPS location...");
+      saveAddressMutation.mutate();
       return;
     }
-    orderMutation.mutate();
+
+    // If address exists, place order directly
+    console.log("FRONTEND: Address exists, placing order...");
+    orderMutation.mutate(selectedAddress.id);
   };
+
+  const isProcessing = saveAddressMutation.isPending || orderMutation.isPending;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          {
-            paddingTop: headerHeight + Spacing.lg,
-            paddingBottom: 180,
-          },
+          { paddingTop: headerHeight + Spacing.lg, paddingBottom: 180 },
         ]}
-        showsVerticalScrollIndicator={false}
       >
+        {/* Delivery Address Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <ThemedText type="h3">{t.checkout.deliveryAddress}</ThemedText>
-            <Pressable onPress={() => navigation.navigate("EditAddress", { address: selectedAddress })}>
+            <Pressable 
+              onPress={() => navigation.navigate("EditAddress", { address: selectedAddress as any })}
+              disabled={isProcessing}
+            >
               <ThemedText type="caption" style={{ color: theme.primary }}>
-                {t.home.change}
+                {selectedAddress ? t.home.change : "Add"}
               </ThemedText>
             </Pressable>
           </View>
           <Card>
-            <View style={styles.addressContent}>
-              <View style={[styles.addressIcon, { backgroundColor: theme.primary + "20" }]}>
-                <Feather name="map-pin" size={20} color={theme.primary} />
-              </View>
-              <View style={styles.addressDetails}>
-                <ThemedText type="body" style={{ fontWeight: "600" }}>
-                  {selectedAddress.label}
-                </ThemedText>
-                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  {selectedAddress.fullAddress}
-                </ThemedText>
-                {selectedAddress.details ? (
-                  <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                    {selectedAddress.details}
+            {isLoadingAddresses ? (
+              <ThemedText type="body" style={{ textAlign: 'center', padding: Spacing.md }}>
+                Loading address...
+              </ThemedText>
+            ) : selectedAddress ? (
+              <View style={styles.addressContent}>
+                <View style={[styles.addressIcon, { backgroundColor: theme.primary + "20" }]}>
+                  <Feather name="map-pin" size={20} color={theme.primary} />
+                </View>
+                <View style={styles.addressDetails}>
+                  <ThemedText type="body" style={{ fontWeight: "600" }}>
+                    {selectedAddress.label}
                   </ThemedText>
-                ) : null}
+                  <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                    {selectedAddress.fullAddress}
+                  </ThemedText>
+                </View>
               </View>
-            </View>
+            ) : (
+              <View style={{ padding: Spacing.md }}>
+                <ThemedText type="body" style={{ textAlign: 'center', marginBottom: Spacing.sm }}>
+                  No delivery address yet
+                </ThemedText>
+                <ThemedText type="caption" style={{ textAlign: 'center', color: theme.textSecondary }}>
+                  We'll use your current GPS location when you place the order
+                </ThemedText>
+              </View>
+            )}
           </Card>
         </View>
-        
+
+        {/* Delivery Time Badge */}
         <View style={styles.section}>
           <View style={styles.deliveryBadge}>
             <View style={[styles.badgeIcon, { backgroundColor: theme.primary }]}>
@@ -171,53 +313,8 @@ export default function CheckoutScreen() {
             </View>
           </View>
         </View>
-        
-        {items.length > 0 ? (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <ThemedText type="h3">{t.cart.title}</ThemedText>
-              <Pressable onPress={() => navigation.navigate("Cart")}>
-                <ThemedText type="caption" style={{ color: theme.primary }}>
-                  {t.home.change}
-                </ThemedText>
-              </Pressable>
-            </View>
-            <Card>
-              {items.map((item, index) => (
-                <View 
-                  key={item.product.id}
-                  style={[
-                    styles.cartItemRow,
-                    index < items.length - 1 && styles.cartItemBorder,
-                  ]}
-                >
-                  <View style={[styles.cartItemImage, { backgroundColor: theme.backgroundDefault }]}>
-                    {item.product.image ? (
-                      <Image 
-                        source={{ uri: getImageUrl(item.product.image) }} 
-                        style={styles.cartItemImageContent} 
-                      />
-                    ) : (
-                      <Feather name="package" size={20} color={theme.textSecondary} />
-                    )}
-                  </View>
-                  <View style={styles.cartItemDetails}>
-                    <ThemedText type="caption" numberOfLines={1} style={{ fontWeight: "500" }}>
-                      {item.product.name}
-                    </ThemedText>
-                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                      {item.quantity}x {formatPrice(item.product.price)}
-                    </ThemedText>
-                  </View>
-                  <ThemedText type="body" style={{ fontWeight: "600", color: theme.primary }}>
-                    {formatPrice(item.product.price * item.quantity)}
-                  </ThemedText>
-                </View>
-              ))}
-            </Card>
-          </View>
-        ) : null}
-        
+
+        {/* Payment Method Section */}
         <View style={styles.section}>
           <ThemedText type="h3" style={styles.sectionTitle}>
             {t.checkout.paymentMethod}
@@ -227,51 +324,38 @@ export default function CheckoutScreen() {
               <Pressable
                 key={method.id}
                 style={[
-                  styles.paymentOption,
-                  { backgroundColor: theme.cardBackground },
-                  selectedPayment.id === method.id && {
-                    borderColor: theme.primary,
-                    borderWidth: 2,
-                  },
+                  styles.paymentOption, 
+                  { backgroundColor: theme.cardBackground }, 
+                  selectedPayment.id === method.id && { 
+                    borderColor: theme.primary, 
+                    borderWidth: 2 
+                  }
                 ]}
                 onPress={() => setSelectedPayment(method)}
+                disabled={isProcessing}
               >
-                <View style={[styles.paymentIcon, { backgroundColor: method.type === "cod" ? theme.success + "20" : theme.backgroundDefault }]}>
-                  <Feather name={method.icon as any} size={20} color={method.type === "cod" ? theme.success : theme.text} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="body">
-                    {method.name}
-                  </ThemedText>
-                  {method.type === "cod" ? (
-                    <ThemedText type="small" style={{ color: theme.success }}>
-                      {t.home.payWhenDelivered}
-                    </ThemedText>
-                  ) : null}
-                </View>
-                {selectedPayment.id === method.id ? (
+                <Feather name={method.icon as any} size={20} color={theme.text} />
+                <ThemedText type="body" style={{ flex: 1 }}>{method.name}</ThemedText>
+                {selectedPayment.id === method.id && (
                   <Feather name="check-circle" size={20} color={theme.primary} />
-                ) : null}
+                )}
               </Pressable>
             ))}
           </View>
         </View>
-        
+
+        {/* Order Summary Section */}
         <View style={styles.section}>
           <ThemedText type="h3" style={styles.sectionTitle}>
             {t.checkout.orderSummary}
           </ThemedText>
           <Card>
             <View style={styles.summaryRow}>
-              <ThemedText type="body" style={{ color: theme.textSecondary }}>
-                {t.checkout.subtotal} ({itemCount} {itemCount === 1 ? t.home.item : t.home.items})
-              </ThemedText>
+              <ThemedText type="body">{t.checkout.subtotal}</ThemedText>
               <ThemedText type="body">{formatPrice(subtotal)}</ThemedText>
             </View>
             <View style={styles.summaryRow}>
-              <ThemedText type="body" style={{ color: theme.textSecondary }}>
-                {t.checkout.deliveryFee}
-              </ThemedText>
+              <ThemedText type="body">Delivery Fee</ThemedText>
               <ThemedText type="body">{formatPrice(deliveryFee)}</ThemedText>
             </View>
             <View style={[styles.summaryRow, styles.totalRow]}>
@@ -283,32 +367,34 @@ export default function CheckoutScreen() {
           </Card>
         </View>
       </ScrollView>
-      
-      <View
-        style={[
-          styles.footer,
-          {
-            backgroundColor: theme.backgroundRoot,
-            paddingBottom: insets.bottom + Spacing.lg,
-          },
-          Shadows.medium,
-        ]}
-      >
+
+      {/* Footer with Place Order Button */}
+      <View style={[
+        styles.footer, 
+        { 
+          backgroundColor: theme.backgroundRoot, 
+          paddingBottom: insets.bottom + Spacing.lg 
+        }, 
+        Shadows.medium
+      ]}>
         <View style={styles.footerContent}>
           <View>
-            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-              {t.home.totalPayment}
-            </ThemedText>
+            <ThemedText type="caption">{t.home.totalPayment}</ThemedText>
             <ThemedText type="h2" style={{ color: theme.primary }}>
               {formatPrice(total)}
             </ThemedText>
           </View>
-          <Button
-            onPress={handlePlaceOrder}
-            style={styles.placeOrderButton}
-            disabled={orderMutation.isPending || items.length === 0}
+          <Button 
+            onPress={handlePlaceOrder} 
+            style={styles.placeOrderButton} 
+            loading={isProcessing}
+            disabled={isProcessing || items.length === 0}
           >
-            {orderMutation.isPending ? t.checkout.processing : t.checkout.placeOrder}
+            {saveAddressMutation.isPending 
+              ? "Detecting Location..." 
+              : orderMutation.isPending 
+                ? t.checkout.processing 
+                : t.checkout.placeOrder}
           </Button>
         </View>
       </View>
@@ -317,119 +403,67 @@ export default function CheckoutScreen() {
 }
 
 const styles = StyleSheet.create({
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
+  scrollContent: { paddingHorizontal: Spacing.lg },
+  section: { marginBottom: Spacing.xl },
+  sectionHeader: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    marginBottom: Spacing.md 
   },
-  section: {
-    marginBottom: Spacing.xl,
+  sectionTitle: { marginBottom: Spacing.md },
+  addressContent: { flexDirection: "row", alignItems: "flex-start" },
+  addressIcon: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    alignItems: "center", 
+    justifyContent: "center" 
   },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.md,
+  addressDetails: { flex: 1, marginLeft: Spacing.md },
+  deliveryBadge: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: Spacing.md 
   },
-  sectionTitle: {
-    marginBottom: Spacing.md,
+  badgeIcon: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    alignItems: "center", 
+    justifyContent: "center" 
   },
-  addressContent: {
-    flexDirection: "row",
-    alignItems: "flex-start",
+  paymentMethods: { gap: Spacing.sm },
+  paymentOption: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    padding: Spacing.md, 
+    borderRadius: BorderRadius.sm, 
+    gap: Spacing.md 
   },
-  addressIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
+  summaryRow: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    marginBottom: Spacing.sm 
   },
-  addressDetails: {
-    flex: 1,
-    marginLeft: Spacing.md,
+  totalRow: { 
+    marginTop: Spacing.sm, 
+    paddingTop: Spacing.md, 
+    borderTopWidth: 1, 
+    borderTopColor: "#E0E0E0" 
   },
-  deliveryBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.md,
+  footer: { 
+    position: "absolute", 
+    bottom: 0, 
+    left: 0, 
+    right: 0, 
+    paddingTop: Spacing.lg, 
+    paddingHorizontal: Spacing.lg 
   },
-  badgeIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
+  footerContent: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between" 
   },
-  paymentMethods: {
-    gap: Spacing.sm,
-  },
-  paymentOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: Spacing.md,
-    borderRadius: BorderRadius.sm,
-    gap: Spacing.md,
-  },
-  paymentIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: Spacing.sm,
-  },
-  totalRow: {
-    marginTop: Spacing.sm,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: "#E0E0E0",
-    marginBottom: 0,
-  },
-  footer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingTop: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  footerContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  placeOrderButton: {
-    flex: 1,
-    marginLeft: Spacing.xl,
-  },
-  cartItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: Spacing.sm,
-  },
-  cartItemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
-  },
-  cartItemImage: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.xs,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  cartItemImageContent: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
-  cartItemDetails: {
-    flex: 1,
-    marginLeft: Spacing.md,
-    marginRight: Spacing.sm,
-  },
+  placeOrderButton: { flex: 1, marginLeft: Spacing.xl },
 });

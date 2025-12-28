@@ -1,399 +1,97 @@
-import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Pressable, Switch, Alert, TextInput, Modal } from "react-native";
+import React, { useState, useMemo } from "react";
+import { 
+  View, StyleSheet, ScrollView, RefreshControl, 
+  Pressable, Switch, Alert, TextInput, Modal, Image, TouchableOpacity, ActivityIndicator 
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
+import * as ImagePicker from 'expo-image-picker';
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
-import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { getImageUrl } from "@/lib/image-url"; 
+import { Spacing } from "@/constants/theme";
 
-interface Order {
-  id: string;
-  orderNumber: string;
-  status: string;
-  total: number;
-  items: any[];
-  createdAt: string;
-  customerLat: string;
-  customerLng: string;
-}
+// --- CONFIGURATION ---
+const BASE_URL = "http://10.30.230.213:5000";
 
-interface Product {
+// --- INTERFACES ---
+interface Category {
   id: string;
   name: string;
-  price: number;
-  image: string;
-  categoryId: string;
 }
 
 interface InventoryItem {
   id: string;
   productId: string;
-  storeId: string;
-  stock: number;
-  lowStockThreshold: number;
+  stockCount: number;
+  location?: string;
+  categoryId?: string;
   product: {
     id: string;
     name: string;
+    brand: string;
     price: number;
-    image: string;
+    originalPrice?: number;
+    description?: string;
+    image?: string; 
+    category?: { name: string };
   };
 }
 
-interface PickerDashboardData {
-  user: { id: string; username: string; phone: string | null; role: string };
-  staffRecord: { id: string; userId: string; storeId: string; role: string; status: string };
-  store: { id: string; name: string; address: string };
-  orders: {
-    pending: Order[];
-    active: Order[];
-    completed: Order[];
-  };
-}
-
-function OrderCard({ 
-  order, 
-  onUpdateStatus,
-  isUpdating 
-}: { 
-  order: Order; 
-  onUpdateStatus: (orderId: string, status: string) => void;
-  isUpdating: boolean;
-}) {
+/**
+ * Clean Order Card Component (Picker Only)
+ */
+function OrderCard({ order, onUpdateStatus }: { order: any; onUpdateStatus: (id: string, nextStatus: string) => void }) {
   const { theme } = useTheme();
-  const createdAt = new Date(order.createdAt);
   
-  const getStatusColor = () => {
-    switch (order.status) {
-      case "pending": return theme.warning;
-      case "confirmed": return theme.secondary;
-      case "picking": return theme.primary;
-      case "packed": return theme.success;
-      default: return theme.textSecondary;
-    }
-  };
+  const orderId = order?.id ? order.id.slice(0, 8) : "N/A";
+  const status = order?.status || "pending";
+  const total = order?.total ? Number(order.total).toLocaleString() : "0";
 
-  const getNextStatus = () => {
-    switch (order.status) {
-      case "pending": return "picking";
-      case "confirmed": return "picking";
-      case "picking": return "packed";
-      default: return null;
-    }
-  };
+  let buttonText = "Start Picking";
+  let nextStatus = "picking";
+  let icon: any = "package";
 
-  const getButtonLabel = () => {
-    switch (order.status) {
-      case "pending": return "Start Picking";
-      case "confirmed": return "Start Picking";
-      case "picking": return "Mark as Packed";
-      default: return null;
-    }
-  };
-
-  const nextStatus = getNextStatus();
-  const buttonLabel = getButtonLabel();
+  if (status === "picking") {
+    buttonText = "Mark as Packed";
+    nextStatus = "packed";
+    icon = "check-circle";
+  } else if (status === "packed") {
+    buttonText = "Waiting for Driver";
+    nextStatus = ""; 
+    icon = "truck";
+  }
 
   return (
     <Card style={styles.orderCard}>
       <View style={styles.orderHeader}>
         <View>
-          <ThemedText type="h3">{order.orderNumber}</ThemedText>
+          <ThemedText type="h3">Order #{orderId}</ThemedText>
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            {createdAt.toLocaleTimeString()}
+            Status: <ThemedText type="caption" style={{ color: theme.primary, fontWeight: 'bold' }}>{status.toUpperCase()}</ThemedText>
           </ThemedText>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor() + "20" }]}>
-          <ThemedText type="small" style={{ color: getStatusColor() }}>
-            {order.status.toUpperCase()}
-          </ThemedText>
-        </View>
+        <ThemedText style={styles.orderPrice}>Rp {total}</ThemedText>
       </View>
-
-      <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-      <View style={styles.itemsList}>
-        {order.items.slice(0, 3).map((item: any, index: number) => (
-          <ThemedText key={index} type="body" style={{ color: theme.text }}>
-            {item.quantity}x {item.name}
-          </ThemedText>
-        ))}
-        {order.items.length > 3 ? (
-          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            +{order.items.length - 3} more items
-          </ThemedText>
-        ) : null}
-      </View>
-
-      <View style={styles.orderFooter}>
-        <ThemedText type="body" style={{ color: theme.text }}>
-          Rp {order.total.toLocaleString()}
-        </ThemedText>
-        {nextStatus && buttonLabel ? (
-          <Pressable
-            style={[styles.actionButton, { backgroundColor: theme.primary }]}
-            onPress={() => onUpdateStatus(order.id, nextStatus)}
-            disabled={isUpdating}
-          >
-            {isUpdating ? (
-              <ActivityIndicator size="small" color={theme.buttonText} />
-            ) : (
-              <ThemedText type="button" style={{ color: theme.buttonText }}>{buttonLabel}</ThemedText>
-            )}
-          </Pressable>
-        ) : null}
-      </View>
-    </Card>
-  );
-}
-
-function InventoryItemRow({ 
-  item, 
-  onUpdateStock,
-  isUpdating,
-  onEditComplete
-}: { 
-  item: InventoryItem;
-  onUpdateStock: (id: string, newStock: number) => void;
-  isUpdating: boolean;
-  onEditComplete: () => void;
-}) {
-  const { theme } = useTheme();
-  const [isEditing, setIsEditing] = useState(false);
-  const [stockValue, setStockValue] = useState(String(item.stock));
-  const [submittedValue, setSubmittedValue] = useState<number | null>(null);
-  const isLowStock = item.stock <= item.lowStockThreshold;
-
-  React.useEffect(() => {
-    if (!isUpdating && isEditing && submittedValue !== null) {
-      if (item.stock === submittedValue) {
-        setStockValue(String(item.stock));
-        setIsEditing(false);
-        setSubmittedValue(null);
-        onEditComplete();
-      } else {
-        setSubmittedValue(null);
-      }
-    }
-  }, [isUpdating, item.stock, submittedValue]);
-
-  const handleSave = () => {
-    const newStock = parseInt(stockValue, 10);
-    if (isNaN(newStock) || newStock < 0) {
-      Alert.alert("Invalid Stock", "Please enter a valid stock number");
-      setStockValue(String(item.stock));
-      return;
-    }
-    setSubmittedValue(newStock);
-    onUpdateStock(item.id, newStock);
-  };
-
-  const handleCancel = () => {
-    if (isUpdating) return;
-    setStockValue(String(item.stock));
-    setIsEditing(false);
-  };
-
-  return (
-    <View style={[styles.inventoryRow, { borderBottomColor: theme.border }]}>
-      <View style={styles.inventoryInfo}>
-        <ThemedText type="body" numberOfLines={1}>{item.product.name}</ThemedText>
-        <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-          Rp {item.product.price.toLocaleString()}
-        </ThemedText>
-      </View>
-      {isEditing ? (
-        <View style={styles.editStockContainer}>
-          <TextInput
-            style={[styles.stockInput, { borderColor: theme.border, color: theme.text }]}
-            value={stockValue}
-            onChangeText={setStockValue}
-            keyboardType="numeric"
-            autoFocus
-            editable={!isUpdating}
-          />
-          <Pressable 
-            style={[styles.stockSaveButton, { backgroundColor: theme.success, opacity: isUpdating ? 0.7 : 1 }]}
-            onPress={handleSave}
-            disabled={isUpdating}
-          >
-            {isUpdating ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Feather name="check" size={16} color="#fff" />
-            )}
-          </Pressable>
-          <Pressable 
-            style={[styles.stockCancelButton, { backgroundColor: theme.textSecondary, opacity: isUpdating ? 0.5 : 1 }]}
-            onPress={handleCancel}
-            disabled={isUpdating}
-          >
-            <Feather name="x" size={16} color="#fff" />
-          </Pressable>
-        </View>
-      ) : (
-        <Pressable 
-          style={[styles.stockBadge, { backgroundColor: isLowStock ? theme.error + "20" : theme.success + "20" }]}
-          onPress={() => setIsEditing(true)}
+      
+      {nextStatus !== "" && (
+        <TouchableOpacity 
+          style={[
+            styles.actionBtn, 
+            { backgroundColor: status === "picking" ? "#2ecc71" : theme.primary }
+          ]}
+          onPress={() => onUpdateStatus(order.id, nextStatus)}
         >
-          <ThemedText type="body" style={{ color: isLowStock ? theme.error : theme.success }}>
-            {item.stock}
-          </ThemedText>
-          <Feather name="edit-2" size={12} color={isLowStock ? theme.error : theme.success} style={{ marginLeft: 4 }} />
-        </Pressable>
+          <Feather name={icon} size={16} color="white" />
+          <ThemedText style={styles.actionBtnText}>{buttonText}</ThemedText>
+        </TouchableOpacity>
       )}
-    </View>
-  );
-}
-
-function AddProductModal({
-  visible,
-  onClose,
-  onAddProduct,
-  existingProductIds,
-  isAdding
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onAddProduct: (productId: string, stock: number) => void;
-  existingProductIds: string[];
-  isAdding: boolean;
-}) {
-  const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [stockCount, setStockCount] = useState("10");
-
-  const { data: products, isLoading } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
-    queryFn: async () => {
-      const response = await fetch(new URL("/api/products", getApiUrl()).toString());
-      if (!response.ok) throw new Error("Failed to fetch products");
-      return response.json();
-    },
-    enabled: visible,
-  });
-
-  const availableProducts = products?.filter(p => !existingProductIds.includes(p.id)) || [];
-
-  const handleAdd = () => {
-    if (!selectedProduct) {
-      Alert.alert("Select Product", "Please select a product to add");
-      return;
-    }
-    const stock = parseInt(stockCount, 10);
-    if (isNaN(stock) || stock < 0) {
-      Alert.alert("Invalid Stock", "Please enter a valid stock number");
-      return;
-    }
-    onAddProduct(selectedProduct.id, stock);
-  };
-
-  const handleClose = () => {
-    if (isAdding) return;
-    setSelectedProduct(null);
-    setStockCount("10");
-    onClose();
-  };
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { backgroundColor: theme.cardBackground, paddingBottom: insets.bottom + Spacing.lg }]}>
-          <View style={styles.modalHeader}>
-            <ThemedText type="h3">Add Product to Inventory</ThemedText>
-            <Pressable onPress={handleClose} disabled={isAdding}>
-              <Feather name="x" size={24} color={isAdding ? theme.textSecondary : theme.text} />
-            </Pressable>
-          </View>
-
-          {isLoading ? (
-            <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: Spacing.xl }} />
-          ) : availableProducts.length === 0 ? (
-            <View style={styles.emptyProducts}>
-              <Feather name="package" size={48} color={theme.textSecondary} />
-              <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md, textAlign: "center" }}>
-                All products are already in inventory
-              </ThemedText>
-            </View>
-          ) : (
-            <ScrollView style={styles.productList} showsVerticalScrollIndicator={false}>
-              {availableProducts.map(product => (
-                <Pressable
-                  key={product.id}
-                  style={[
-                    styles.productOption,
-                    { borderColor: theme.border },
-                    selectedProduct?.id === product.id && { borderColor: theme.primary, backgroundColor: theme.primary + "10" }
-                  ]}
-                  onPress={() => !isAdding && setSelectedProduct(product)}
-                  disabled={isAdding}
-                >
-                  <View style={styles.productOptionInfo}>
-                    <ThemedText type="body">{product.name}</ThemedText>
-                    <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                      Rp {product.price.toLocaleString()}
-                    </ThemedText>
-                  </View>
-                  {selectedProduct?.id === product.id ? (
-                    <Feather name="check-circle" size={20} color={theme.primary} />
-                  ) : (
-                    <Feather name="circle" size={20} color={theme.border} />
-                  )}
-                </Pressable>
-              ))}
-            </ScrollView>
-          )}
-
-          <KeyboardAwareScrollViewCompat 
-            style={{ flexShrink: 0 }}
-            contentContainerStyle={{ flexGrow: 0 }}
-          >
-            {selectedProduct ? (
-              <View style={styles.stockInputSection}>
-                <ThemedText type="body" style={{ marginBottom: Spacing.sm }}>Initial Stock:</ThemedText>
-                <TextInput
-                  style={[styles.stockInputLarge, { borderColor: theme.border, color: theme.text }]}
-                  value={stockCount}
-                  onChangeText={setStockCount}
-                  keyboardType="numeric"
-                  placeholder="Enter stock count"
-                  placeholderTextColor={theme.textSecondary}
-                  editable={!isAdding}
-                />
-              </View>
-            ) : null}
-          </KeyboardAwareScrollViewCompat>
-
-          <View style={styles.modalActions}>
-            <Pressable 
-              style={[styles.modalButton, { backgroundColor: theme.border, opacity: isAdding ? 0.5 : 1 }]}
-              onPress={handleClose}
-              disabled={isAdding}
-            >
-              <ThemedText type="button" style={{ color: theme.text }}>Cancel</ThemedText>
-            </Pressable>
-            <Pressable 
-              style={[styles.modalButton, { backgroundColor: theme.primary, opacity: (selectedProduct && !isAdding) ? 1 : 0.5 }]}
-              onPress={handleAdd}
-              disabled={!selectedProduct || isAdding}
-            >
-              {isAdding ? (
-                <ActivityIndicator size="small" color={theme.buttonText} />
-              ) : (
-                <ThemedText type="button" style={{ color: theme.buttonText }}>Add Product</ThemedText>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
+    </Card>
   );
 }
 
@@ -402,298 +100,398 @@ export default function PickerDashboardScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<"orders" | "inventory">("orders");
-  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
-  const [updatingInventoryId, setUpdatingInventoryId] = useState<string | null>(null);
-  const [showAddProduct, setShowAddProduct] = useState(false);
 
-  const { data: dashboard, isLoading, refetch, isRefetching } = useQuery<PickerDashboardData>({
-    queryKey: ["/api/picker/dashboard", user?.id],
+  // --- STATE ---
+  const [activeTab, setActiveTab] = useState<"orders" | "inventory">("orders");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [modalVisible, setModalVisible] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  
+  const [selectedInventoryId, setSelectedInventoryId] = useState<string | null>(null);
+  const [formName, setFormName] = useState("");
+  const [formBrand, setFormBrand] = useState("");
+  const [formDescription, setFormDescription] = useState("");
+  const [formPrice, setFormPrice] = useState("");
+  const [formOriginalPrice, setFormOriginalPrice] = useState("");
+  const [formStock, setFormStock] = useState("");
+  const [formLocation, setFormLocation] = useState("");
+  const [formCategoryId, setFormCategoryId] = useState<string | null>(null);
+  const [formImage, setFormImage] = useState<string | null>(null);
+
+  // --- QUERIES ---
+  const { data: categories } = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
     queryFn: async () => {
-      const response = await fetch(new URL(`/api/picker/dashboard?userId=${user?.id}`, getApiUrl()).toString());
-      if (!response.ok) throw new Error("Failed to fetch dashboard");
-      return response.json();
-    },
-    enabled: !!user?.id && user?.role === "picker",
-    refetchInterval: 15000,
+      const res = await fetch(`${BASE_URL}/api/categories`);
+      return res.json();
+    }
   });
 
-  const { data: inventory, refetch: refetchInventory } = useQuery<InventoryItem[]>({
+  const { data: inventory, isLoading: invLoading, refetch: refetchInv } = useQuery<InventoryItem[]>({
     queryKey: ["/api/picker/inventory", user?.id],
     queryFn: async () => {
-      const response = await fetch(new URL(`/api/picker/inventory?userId=${user?.id}`, getApiUrl()).toString());
-      if (!response.ok) throw new Error("Failed to fetch inventory");
-      return response.json();
-    },
-    enabled: !!user?.id && user?.role === "picker" && activeTab === "inventory",
+      const res = await fetch(`${BASE_URL}/api/picker/inventory?userId=${user?.id || 'demo-picker'}`);
+      return res.json();
+    }
   });
 
-  const toggleStatusMutation = useMutation({
-    mutationFn: async (status: "online" | "offline") => {
-      const response = await apiRequest("POST", "/api/staff/toggle-status", { userId: user?.id, status });
-      if (!response.ok) throw new Error("Failed to toggle status");
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/picker/dashboard"] });
-    },
-    onError: (error: Error) => {
-      Alert.alert("Error", error.message);
-    },
+  const { data: dashboard, isLoading: dashLoading, refetch: refetchDash } = useQuery({
+    queryKey: ["/api/picker/dashboard", user?.id],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/picker/dashboard?userId=${user?.id || 'demo-picker'}`);
+      return res.json();
+    }
   });
 
-  const updateOrderMutation = useMutation({
-    mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
-      setUpdatingOrderId(orderId);
-      const response = await apiRequest("PUT", `/api/picker/orders/${orderId}/status`, { userId: user?.id, status });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to update order");
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/picker/dashboard"] });
-      setUpdatingOrderId(null);
-    },
-    onError: (error: Error) => {
-      Alert.alert("Error", error.message);
-      setUpdatingOrderId(null);
-    },
-  });
+  // --- MEMOS ---
+  const ordersToDisplay = useMemo(() => {
+    if (!dashboard?.orders) return [];
+    return [...(dashboard.orders.pending || []), ...(dashboard.orders.active || [])];
+  }, [dashboard]);
 
-  const updateInventoryMutation = useMutation({
-    mutationFn: async ({ inventoryId, stockCount }: { inventoryId: string; stockCount: number }) => {
-      setUpdatingInventoryId(inventoryId);
-      const response = await apiRequest("PUT", `/api/picker/inventory/${inventoryId}`, { 
-        userId: user?.id, 
-        stockCount 
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to update inventory");
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory", user?.id] });
-      setUpdatingInventoryId(null);
-    },
-    onError: (error: Error) => {
-      Alert.alert("Error", error.message);
-      setUpdatingInventoryId(null);
-    },
-  });
-
-  const addProductMutation = useMutation({
-    mutationFn: async ({ productId, stockCount }: { productId: string; stockCount: number }) => {
-      const response = await apiRequest("POST", "/api/picker/inventory", { 
-        userId: user?.id, 
-        productId,
-        stockCount 
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to add product");
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory", user?.id] });
-      setShowAddProduct(false);
-      Alert.alert("Success", "Product added to inventory");
-    },
-    onError: (error: Error) => {
-      Alert.alert("Error", error.message);
-    },
-  });
-
-  if (!user || user.role !== "picker") {
-    return (
-      <ThemedView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Feather name="lock" size={48} color={theme.error} />
-          <ThemedText type="h3" style={{ marginTop: Spacing.md }}>Access Denied</ThemedText>
-          <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}>
-            This dashboard is only for pickers.
-          </ThemedText>
-        </View>
-      </ThemedView>
+  const filteredInventory = useMemo(() => {
+    if (!inventory) return [];
+    return inventory.filter(item => 
+      item.product.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
+  }, [inventory, searchQuery]);
+
+  // --- HANDLERS ---
+  const onRefresh = async () => {
+    await Promise.all([refetchInv(), refetchDash()]);
+  };
+
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+    if (!result.canceled) setFormImage(result.assets[0].uri);
+  };
+
+  const openEditModal = (item?: InventoryItem) => {
+    if (item) {
+      setIsEditing(true);
+      setSelectedInventoryId(item.id);
+      setFormName(item.product.name);
+      setFormBrand(item.product.brand || "");
+      setFormDescription(item.product.description || "");
+      setFormOriginalPrice(item.product.originalPrice?.toString() || "");
+      setFormPrice(item.product.price.toString());
+      setFormStock(item.stockCount.toString());
+      setFormLocation(item.location ?? "");
+      setFormCategoryId(item.categoryId || (item as any).product?.categoryId || null);
+      setFormImage(item.product.image ?? null);
+    } else {
+      setIsEditing(false);
+      setSelectedInventoryId(null);
+      setFormName("");
+      setFormBrand("");
+      setFormDescription("");
+      setFormOriginalPrice("");
+      setFormPrice("");
+      setFormStock("");
+      setFormLocation("");
+      setFormCategoryId(null);
+      setFormImage(null);
+    }
+    setModalVisible(true);
+  };
+
+  const handleSaveProduct = async () => {
+  // 1. Check if user is null immediately
+  if (!user || !user.id) {
+    Alert.alert("Error", "You must be logged in to save products.");
+    return;
   }
 
-  if (isLoading) {
-    return (
-      <ThemedView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <ThemedText type="body" style={{ marginTop: Spacing.md, color: theme.textSecondary }}>
-          Loading dashboard...
-        </ThemedText>
-      </ThemedView>
-    );
+  // 2. Local validation for required fields
+  if (!formName.trim() || !formPrice.trim() || !formStock.trim() || !formCategoryId) {
+    Alert.alert("Missing Fields", "Please fill in all required fields (*) and select a category.");
+    return;
   }
 
-  const isOnline = dashboard?.staffRecord?.status === "online";
-  const pendingOrders = dashboard?.orders?.pending || [];
-  const activeOrders = dashboard?.orders?.active || [];
-  const allOrders = [...pendingOrders, ...activeOrders];
-  const existingProductIds = inventory?.map(i => i.productId) || [];
+  const formData = new FormData();
+
+  // We use ?? "" (nullish coalescing) to guarantee a string is passed
+  formData.append("userId", user.id); 
+  formData.append("name", formName);
+  formData.append("brand", formBrand || "Generic");
+  formData.append("description", formDescription || "");
+  formData.append("price", formPrice);
+  formData.append("originalPrice", formOriginalPrice || "");
+  formData.append("stock", formStock);
+  formData.append("location", formLocation || "");
+  
+  // Fixes the 'null is not assignable to string | Blob' error
+  formData.append("categoryId", formCategoryId ?? "");
+
+  if (isEditing && selectedInventoryId) {
+    formData.append("inventoryId", selectedInventoryId);
+  }
+
+  if (formImage && formImage.startsWith('file://')) {
+    // @ts-ignore - React Native FormData requires an object for files
+    formData.append("image", { 
+      uri: formImage, 
+      name: "photo.jpg", 
+      type: "image/jpeg" 
+    });
+  }
+
+  try {
+    const url = isEditing 
+      ? `${BASE_URL}/api/picker/inventory/update` 
+      : `${BASE_URL}/api/picker/inventory`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (response.ok) {
+      setModalVisible(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
+      Alert.alert("Success", isEditing ? "Product Updated" : "Product Added");
+    } else {
+      const result = await response.json();
+      Alert.alert("Error", result.error || "Save failed");
+    }
+  } catch (err) {
+    Alert.alert("Error", "Server connection failed");
+  }
+};
+
+  const handleDeleteProduct = async (id: string) => {
+    Alert.alert("Delete Item", "Remove this from your store inventory?", [
+      { text: "Cancel", style: "cancel" },
+      { 
+        text: "Delete", 
+        style: "destructive", 
+        onPress: async () => {
+          try {
+            const res = await fetch(`${BASE_URL}/api/picker/inventory/${id}?userId=${user?.id}`, { method: 'DELETE' });
+            if (res.ok) {
+              queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
+              Alert.alert("Deleted", "Item removed.");
+            }
+          } catch (err) { Alert.alert("Error", "Action failed."); }
+        }
+      }
+    ]);
+  };
+
+  const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (response.ok) queryClient.invalidateQueries({ queryKey: ["/api/picker/dashboard"] });
+    } catch (err) { Alert.alert("Error", "Update failed."); }
+  };
 
   return (
     <ThemedView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => { refetch(); if (activeTab === "inventory") refetchInventory(); }} tintColor={theme.primary} />}
-      >
-        <Card style={styles.statusCard}>
-          <View style={styles.statusRow}>
-            <View>
-              <ThemedText type="h3">{dashboard?.user?.username || "Picker"}</ThemedText>
-              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                {dashboard?.store?.name || "No store assigned"}
-              </ThemedText>
-            </View>
-            <View style={styles.toggleContainer}>
-              <ThemedText type="body" style={{ color: isOnline ? theme.success : theme.textSecondary }}>
-                {isOnline ? "Online" : "Offline"}
-              </ThemedText>
-              <Switch
-                value={isOnline}
-                onValueChange={(value) => toggleStatusMutation.mutate(value ? "online" : "offline")}
-                trackColor={{ false: theme.border, true: theme.success + "80" }}
-                thumbColor={isOnline ? theme.success : theme.textSecondary}
-              />
-            </View>
+      <View style={[styles.headerContainer, { paddingTop: insets.top + Spacing.md }]}>
+        <View style={styles.headerRow}>
+          <View>
+            <ThemedText type="h2">Store Ops</ThemedText>
+            <ThemedText style={{ color: theme.textSecondary }}>
+              📍 {dashboard?.store?.name || "Loading..."}
+            </ThemedText>
           </View>
-        </Card>
-
-        <View style={styles.tabContainer}>
-          <Pressable
-            style={[styles.tab, activeTab === "orders" && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
-            onPress={() => setActiveTab("orders")}
-          >
-            <Feather name="package" size={18} color={activeTab === "orders" ? theme.primary : theme.textSecondary} />
-            <ThemedText type="body" style={{ color: activeTab === "orders" ? theme.primary : theme.textSecondary }}>
-              Orders ({allOrders.length})
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            style={[styles.tab, activeTab === "inventory" && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
-            onPress={() => setActiveTab("inventory")}
-          >
-            <Feather name="box" size={18} color={activeTab === "inventory" ? theme.primary : theme.textSecondary} />
-            <ThemedText type="body" style={{ color: activeTab === "inventory" ? theme.primary : theme.textSecondary }}>
-              Inventory
-            </ThemedText>
-          </Pressable>
+          <Switch value={true} />
         </View>
 
-        {activeTab === "orders" ? (
+        <View style={styles.tabContainer}>
+          <Pressable onPress={() => setActiveTab("orders")} style={[styles.tab, activeTab === "orders" && { borderBottomColor: theme.primary }]}>
+            <ThemedText style={[styles.tabText, activeTab === "orders" ? { color: theme.primary, fontWeight: '700' } : { color: theme.textSecondary }]}>Orders</ThemedText>
+          </Pressable>
+          <Pressable onPress={() => setActiveTab("inventory")} style={[styles.tab, activeTab === "inventory" && { borderBottomColor: theme.primary }]}>
+            <ThemedText style={[styles.tabText, activeTab === "inventory" ? { color: theme.primary, fontWeight: '700' } : { color: theme.textSecondary }]}>Inventory</ThemedText>
+          </Pressable>
+        </View>
+      </View>
+
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={invLoading || dashLoading} onRefresh={onRefresh} />}
+      >
+        {activeTab === "inventory" ? (
           <>
-            {allOrders.length > 0 ? (
-              allOrders.map(order => (
-                <OrderCard 
-                  key={order.id} 
-                  order={order} 
-                  onUpdateStatus={(orderId, status) => updateOrderMutation.mutate({ orderId, status })}
-                  isUpdating={updatingOrderId === order.id}
-                />
-              ))
-            ) : (
-              <Card style={styles.emptyCard}>
-                <Feather name="inbox" size={48} color={theme.textSecondary} />
-                <ThemedText type="h3" style={{ marginTop: Spacing.md }}>No Orders</ThemedText>
-                <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}>
-                  {isOnline ? "No orders to pick right now. Stay ready!" : "Go online to start receiving orders."}
-                </ThemedText>
+            <View style={styles.searchContainer}>
+              <Feather name="search" size={18} color={theme.textSecondary} />
+              <TextInput 
+                placeholder="Find product..." 
+                style={[styles.searchInput, { color: theme.text }]}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </View>
+
+            <TouchableOpacity style={[styles.addBtn, { backgroundColor: theme.primary }]} onPress={() => openEditModal()}>
+              <Feather name="plus" size={18} color="white" />
+              <ThemedText style={styles.addBtnText}>Add Store Item</ThemedText>
+            </TouchableOpacity>
+
+            {invLoading ? (
+              <ActivityIndicator size="large" color={theme.primary} />
+            ) : filteredInventory.length > 0 ? (
+              <Card style={styles.inventoryListCard}>
+                {filteredInventory.map(item => (
+                  <InventoryItemRow key={item.id} item={item} onEdit={openEditModal} onDelete={handleDeleteProduct}/>
+                ))}
               </Card>
+            ) : (
+              <View style={styles.centeredContent}><ThemedText>No items found</ThemedText></View>
             )}
           </>
         ) : (
-          <>
-            <Pressable 
-              style={[styles.addProductButton, { backgroundColor: theme.primary }]}
-              onPress={() => setShowAddProduct(true)}
-            >
-              <Feather name="plus" size={18} color={theme.buttonText} />
-              <ThemedText type="button" style={{ color: theme.buttonText, marginLeft: Spacing.xs }}>
-                Add Product
-              </ThemedText>
-            </Pressable>
-
-            <Card style={styles.inventoryCard}>
-              {inventory && inventory.length > 0 ? (
-                inventory.map(item => (
-                  <InventoryItemRow 
-                    key={item.id} 
-                    item={item}
-                    onUpdateStock={(id, newStock) => updateInventoryMutation.mutate({ inventoryId: id, stockCount: newStock })}
-                    isUpdating={updatingInventoryId === item.id}
-                    onEditComplete={() => setUpdatingInventoryId(null)}
-                  />
-                ))
-              ) : (
-                <View style={styles.emptyInventory}>
-                  <Feather name="box" size={32} color={theme.textSecondary} />
-                  <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.sm }}>
-                    No inventory items. Add products to get started.
-                  </ThemedText>
-                </View>
-              )}
-            </Card>
-          </>
+          <View>
+            {dashLoading ? (
+              <ActivityIndicator size="large" color={theme.primary} />
+            ) : ordersToDisplay.length > 0 ? (
+              ordersToDisplay.map((order: any) => (
+                <OrderCard key={order.id} order={order} onUpdateStatus={handleUpdateOrderStatus} />
+              ))
+            ) : (
+              <View style={styles.centeredContent}>
+                <Feather name="package" size={50} color="#ccc" />
+                <ThemedText style={{ marginTop: 10, color: theme.textSecondary }}>No active orders</ThemedText>
+              </View>
+            )}
+          </View>
         )}
       </ScrollView>
 
-      <AddProductModal
-        visible={showAddProduct}
-        onClose={() => setShowAddProduct(false)}
-        onAddProduct={(productId, stock) => addProductMutation.mutate({ productId, stockCount: stock })}
-        existingProductIds={existingProductIds}
-        isAdding={addProductMutation.isPending}
-      />
+      <Modal visible={modalVisible} animationType="slide">
+        <ThemedView style={[styles.modalContent, { paddingTop: insets.top + 20 }]}>
+          <View style={styles.modalHeader}>
+            <ThemedText type="h2">{isEditing ? "Edit Item" : "New Product"}</ThemedText>
+            <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <Feather name="x" size={24} color={theme.text} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <ThemedText style={styles.label}>Category</ThemedText>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryArea}>
+              {categories?.map(cat => (
+                <TouchableOpacity 
+                  key={cat.id} 
+                  onPress={() => setFormCategoryId(cat.id)}
+                  style={[styles.categoryChip, formCategoryId === cat.id && { backgroundColor: theme.primary }]}
+                >
+                  <ThemedText style={[styles.chipText, formCategoryId === cat.id && { color: 'white' }]}>{cat.name}</ThemedText>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
+              {formImage ? <Image source={{ uri: formImage }} style={styles.fullImage} /> : <View style={styles.imagePlaceholder}><Feather name="camera" size={40} color="#ccc" /></View>}
+            </TouchableOpacity>
+
+            <ThemedText style={styles.label}>Product Name *</ThemedText>
+            <TextInput style={[styles.input, { color: theme.text }]} value={formName} onChangeText={setFormName} placeholder="Fresh Milk" />
+
+            <ThemedText style={styles.label}>Brand</ThemedText>
+            <TextInput style={[styles.input, { color: theme.text }]} value={formBrand} onChangeText={setFormBrand} placeholder="Brand name" />
+
+            <ThemedText style={styles.label}>Description</ThemedText>
+            <TextInput style={[styles.input, { color: theme.text, height: 60 }]} value={formDescription} onChangeText={setFormDescription} multiline placeholder="Details..." />
+
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.label}>Price (Rp) *</ThemedText>
+                <TextInput style={[styles.input, { color: theme.text }]} value={formPrice} onChangeText={setFormPrice} keyboardType="numeric" placeholder="0" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <ThemedText style={styles.label}>Old Price</ThemedText>
+                <TextInput style={[styles.input, { color: theme.text }]} value={formOriginalPrice} onChangeText={setFormOriginalPrice} keyboardType="numeric" placeholder="Optional" />
+              </View>
+            </View>
+
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.label}>Stock *</ThemedText>
+                <TextInput style={[styles.input, { color: theme.text }]} value={formStock} onChangeText={setFormStock} keyboardType="numeric" placeholder="0" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <ThemedText style={styles.label}>Location</ThemedText>
+                <TextInput style={[styles.input, { color: theme.text }]} value={formLocation} onChangeText={setFormLocation} placeholder="Aisle 1" />
+              </View>
+            </View>
+
+            <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.primary }]} onPress={handleSaveProduct}>
+              <ThemedText style={styles.saveBtnText}>{isEditing ? "Update Item" : "Save Item"}</ThemedText>
+            </TouchableOpacity>
+          </ScrollView>
+        </ThemedView>
+      </Modal>
     </ThemedView>
+  );
+}
+
+function InventoryItemRow({ item, onEdit, onDelete }: { item: InventoryItem; onEdit: (item: InventoryItem) => void; onDelete: (id: string) => void; }) {
+  const { theme } = useTheme();
+  return (
+    <View style={[styles.inventoryRow, { borderBottomColor: theme.border }]}>
+       <Image source={{ uri: getImageUrl(item.product.image) }} style={styles.inventoryImg} />
+       <View style={styles.inventoryInfo}>
+         {/* CHANGE: Changed type to "body" and added fontWeight: '600' */}
+         <ThemedText type="body" style={{ fontWeight: '600' }}>
+           {item.product.name}
+         </ThemedText>
+         <ThemedText type="caption">Stock: {item.stockCount} | Rp {item.product.price}</ThemedText>
+       </View>
+       <TouchableOpacity style={styles.iconBtn} onPress={() => onDelete(item.id)}>
+         <Feather name="trash-2" size={18} color="#e74c3c" />
+       </TouchableOpacity>
+       <TouchableOpacity style={[styles.editBtnSmall, { backgroundColor: theme.primary + "15" }]} onPress={() => onEdit(item)}>
+         <Feather name="edit-2" size={16} color={theme.primary} />
+       </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: Spacing.xl },
-  scrollContent: { paddingHorizontal: Spacing.lg },
-  statusCard: { marginBottom: Spacing.md, padding: Spacing.md },
-  statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  toggleContainer: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
-  tabContainer: { flexDirection: "row", marginBottom: Spacing.md },
-  tab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: Spacing.xs, paddingVertical: Spacing.md },
-  orderCard: { marginBottom: Spacing.md, padding: Spacing.md },
-  orderHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  statusBadge: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.xs },
-  divider: { height: 1, marginVertical: Spacing.md },
-  itemsList: { marginBottom: Spacing.md },
-  orderFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  actionButton: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.sm },
-  addProductButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: Spacing.md, borderRadius: BorderRadius.md, marginBottom: Spacing.md },
-  inventoryCard: { padding: Spacing.md },
-  inventoryRow: { flexDirection: "row", alignItems: "center", paddingVertical: Spacing.sm, borderBottomWidth: 1 },
-  inventoryInfo: { flex: 1 },
-  stockBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.sm, minWidth: 60 },
-  editStockContainer: { flexDirection: "row", alignItems: "center", gap: Spacing.xs },
-  stockInput: { width: 60, height: 36, borderWidth: 1, borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.sm, textAlign: "center" },
-  stockSaveButton: { width: 36, height: 36, borderRadius: BorderRadius.sm, alignItems: "center", justifyContent: "center" },
-  stockCancelButton: { width: 36, height: 36, borderRadius: BorderRadius.sm, alignItems: "center", justifyContent: "center" },
-  emptyCard: { alignItems: "center", padding: Spacing.xxl },
-  emptyInventory: { alignItems: "center", padding: Spacing.xl },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  modalContent: { borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl, padding: Spacing.lg, maxHeight: "80%" },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.lg },
-  productList: { maxHeight: 300 },
-  productOption: { flexDirection: "row", alignItems: "center", padding: Spacing.md, borderWidth: 1, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
-  productOptionInfo: { flex: 1 },
-  emptyProducts: { alignItems: "center", padding: Spacing.xl },
-  stockInputSection: { marginTop: Spacing.lg },
-  stockInputLarge: { borderWidth: 1, borderRadius: BorderRadius.md, padding: Spacing.md, fontSize: 16 },
-  modalActions: { flexDirection: "row", gap: Spacing.md, marginTop: Spacing.lg },
-  modalButton: { flex: 1, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, alignItems: "center" },
+  headerContainer: { backgroundColor: 'white', paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  tabContainer: { flexDirection: 'row' },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 12, borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  tabText: { fontSize: 16 },
+  scrollContent: { padding: 20, paddingBottom: 100 },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 12, paddingHorizontal: 15, marginBottom: 20 },
+  searchInput: { flex: 1, height: 45, marginLeft: 10 },
+  addBtn: { flexDirection: 'row', padding: 16, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  addBtnText: { color: 'white', fontWeight: 'bold', marginLeft: 8 },
+  inventoryListCard: { paddingHorizontal: 10 },
+  inventoryRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1 },
+  inventoryImg: { width: 45, height: 45, borderRadius: 8, backgroundColor: '#f0f0f0' },
+  inventoryInfo: { flex: 1, marginLeft: 12 },
+  iconBtn: { padding: 8, marginRight: 4 },
+  editBtnSmall: { padding: 8, borderRadius: 8 },
+  centeredContent: { alignItems: 'center', marginTop: 50 },
+  modalContent: { flex: 1, paddingHorizontal: 20 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  categoryArea: { marginBottom: 15 },
+  categoryChip: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f0f0f0', marginRight: 8 },
+  chipText: { fontSize: 13 },
+  imagePicker: { height: 140, backgroundColor: '#f5f5f5', borderRadius: 12, marginBottom: 15, overflow: 'hidden' },
+  imagePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  fullImage: { width: '100%', height: '100%' },
+  label: { fontSize: 13, fontWeight: '700', marginBottom: 4, marginTop: 8 },
+  input: { backgroundColor: '#f5f5f5', padding: 12, borderRadius: 8, marginBottom: 8 },
+  row: { flexDirection: 'row' },
+  saveBtn: { padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 25, marginBottom: 40 },
+  saveBtnText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  orderCard: { padding: 15, marginBottom: 15 },
+  orderHeader: { flexDirection: 'row', justifyContent: 'space-between' },
+  orderPrice: { fontWeight: 'bold', fontSize: 16 },
+  actionBtn: { flexDirection: 'row', padding: 12, borderRadius: 8, marginTop: 15, justifyContent: 'center', alignItems: 'center' },
+  actionBtnText: { color: 'white', fontWeight: 'bold', marginLeft: 8 }
 });

@@ -1,17 +1,34 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Switch } from "react-native";
+import { View, StyleSheet, Switch, Alert, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useLanguage } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
+import { apiRequest } from "@/lib/query-client";
 import { Spacing } from "@/constants/theme";
 
 const NOTIFICATIONS_KEY = "@kilatgo_notifications";
+
+// Configure how notifications behave when the app is in the foreground
+// Configure how notifications behave when the app is in the foreground
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    // Add these two lines to satisfy the new TypeScript requirement:
+    shouldShowBanner: true, 
+    shouldShowList: true,
+  }),
+});;
 
 interface NotificationSettings {
   orderUpdates: boolean;
@@ -67,11 +84,57 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [settings, setSettings] = useState<NotificationSettings>(defaultSettings);
 
   useEffect(() => {
     loadSettings();
+    registerForPushNotifications();
   }, []);
+
+  const registerForPushNotifications = async () => {
+    if (!Device.isDevice) {
+      console.log("Push notifications require a physical device");
+      return;
+    }
+
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        console.log("Failed to get push token for push notification!");
+        return;
+      }
+
+      const token = (await Notifications.getExpoPushTokenAsync()).data;
+      console.log("Expo Push Token:", token);
+
+      // Save token to backend for this user
+      if (user?.id) {
+        await apiRequest("POST", "/api/users/push-token", { 
+          userId: user.id, 
+          token: token 
+        });
+      }
+
+      if (Platform.OS === 'android') {
+        Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: theme.primary,
+        });
+      }
+    } catch (error) {
+      console.error("Error registering for push notifications:", error);
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -139,35 +202,11 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
-  },
-  card: {
-    padding: 0,
-  },
-  settingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: Spacing.lg,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: Spacing.md,
-  },
-  settingInfo: {
-    flex: 1,
-    marginRight: Spacing.md,
-  },
-  divider: {
-    height: 1,
-    marginHorizontal: Spacing.lg,
-  },
+  container: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: Spacing.lg },
+  card: { padding: 0 },
+  settingRow: { flexDirection: "row", alignItems: "center", padding: Spacing.lg },
+  iconContainer: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", marginRight: Spacing.md },
+  settingInfo: { flex: 1, marginRight: Spacing.md },
+  divider: { height: 1, marginHorizontal: Spacing.lg },
 });

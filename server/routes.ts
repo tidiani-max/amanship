@@ -1,1401 +1,915 @@
-import type { Express, Request, Response } from "express";
+import type { Request, Response } from "express";
 import { createServer, type Server } from "node:http";
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and, gt, sql, or, isNull } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { categories, products, vouchers, users, stores, storeStaff, storeInventory, otpCodes } from "@shared/schema";
+import { 
+  categories, products, vouchers, users, stores, storeStaff, 
+  storeInventory, otpCodes, addresses, orders, orderItems, 
+  cartItems, messages
+} from "@shared/schema";
 import { findNearestAvailableStore, getStoresWithAvailability, estimateDeliveryTime } from "./storeAvailability";
+import express, { Express } from 'express';
+import path from 'path';
+import { Expo } from 'expo-server-sdk';
+import multer from "multer";
+
+// ==================== CONFIGURATION ====================
+const DEMO_USER_ID = "demo-user";
+
+// Multer storage configuration
+const chatStorage = multer.diskStorage({
+  destination: "./uploads/chat",
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `chat-${uniqueSuffix}${path.extname(file.originalname)}`);
+  },
+});
+const uploadChat = multer({ storage: chatStorage });
+
+const fileStorage = multer.diskStorage({
+  destination: "./uploads",
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+});
+const uploadMiddleware = multer({ storage: fileStorage });
+
+// Push notification helper
+const expo = new Expo();
+async function sendPushNotification(userId: string, title: string, body: string, data?: any) {
+  const [user] = await db.select().from(users).where(eq(users.id, userId));
+  if (user?.pushToken && Expo.isExpoPushToken(user.pushToken)) {
+    try {
+      await expo.sendPushNotificationsAsync([{
+        to: user.pushToken,
+        sound: 'default',
+        title,
+        body,
+        data: data || {},
+      }]);
+    } catch (error) {
+      console.error("❌ Push Error:", error);
+    }
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Categories
-  app.get("/api/categories", async (_req: Request, res: Response) => {
-    try {
-      const allCategories = await storage.getCategories();
-      res.json(allCategories);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch categories" });
+  
+  // ==================== 1. CORS MIDDLEWARE (MUST BE FIRST!) ====================
+  console.log("🌐 Setting up CORS middleware...");
+  
+  app.use((req, res, next) => {
+    const allowedOrigins = ["http://localhost:8081", "http://10.30.230.213:8081"];
+    const origin = req.headers.origin;
+    
+    if (origin && allowedOrigins.includes(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
     }
+    
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    if (req.method === 'OPTIONS') {
+      console.log('✅ Preflight handled:', req.path);
+      return res.status(200).end();
+    }
+    
+    console.log(`📡 ${req.method} ${req.path}`);
+    next();
   });
 
-  app.get("/api/categories/:id", async (req: Request, res: Response) => {
-    try {
-      const category = await storage.getCategoryById(req.params.id);
-      if (!category) {
-        return res.status(404).json({ error: "Category not found" });
-      }
-      res.json(category);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch category" });
-    }
-  });
+  app.post("/api/auth/google", async (req, res) => {
+  const { googleId, email, name } = req.body;
 
-  // Products
-  app.get("/api/products", async (req: Request, res: Response) => {
-    try {
-      const categoryId = req.query.categoryId as string | undefined;
-      let allProducts;
-      
-      if (categoryId) {
-        allProducts = await storage.getProductsByCategory(categoryId);
-      } else {
-        allProducts = await storage.getProducts();
-      }
-      res.json(allProducts);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch products" });
-    }
-  });
+  try {
+    // 1. Try to find user by email first
+    let user = await storage.getUserByEmail(email);
 
-  app.get("/api/products/:id", async (req: Request, res: Response) => {
-    try {
-      const product = await storage.getProductById(req.params.id);
-      if (!product) {
-        return res.status(404).json({ error: "Product not found" });
-      }
-      res.json(product);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch product" });
-    }
-  });
-
-  // Cart - using a demo user for now
-  const DEMO_USER_ID = "demo-user";
-
-  app.get("/api/cart", async (_req: Request, res: Response) => {
-    try {
-      const items = await storage.getCartItems(DEMO_USER_ID);
-      const itemsWithProducts = await Promise.all(
-        items.map(async (item) => {
-          const product = await storage.getProductById(item.productId);
-          return { ...item, product };
-        })
-      );
-      res.json(itemsWithProducts);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch cart" });
-    }
-  });
-
-  app.post("/api/cart", async (req: Request, res: Response) => {
-    try {
-      const { productId, quantity = 1 } = req.body;
-      const item = await storage.addToCart({
-        userId: DEMO_USER_ID,
-        productId,
-        quantity,
+    // 2. If no user found, create one
+    if (!user) {
+      user = await storage.createUser({
+        username: name || email.split('@')[0],
+        email: email,
+        password: "google-auth-user", // Placeholder since they use Google
+        role: "customer",
+        phone: null,
       });
-      res.json(item);
-    } catch (error) {
-      console.error("Add to cart error:", error);
-      res.status(500).json({ error: "Failed to add to cart" });
     }
-  });
 
-  app.put("/api/cart/:id", async (req: Request, res: Response) => {
-    try {
-      const { quantity } = req.body;
-      const item = await storage.updateCartItemQuantity(req.params.id, quantity);
-      if (!item) {
-        return res.status(404).json({ error: "Cart item not found" });
-      }
-      res.json(item);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to update cart item" });
-    }
-  });
+    // 3. Set session/return user
+    // (If you use express-session) req.session.userId = user.id;
+    res.json({ user });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to authenticate with Google" });
+  }
+});
 
-  app.delete("/api/cart/:id", async (req: Request, res: Response) => {
-    try {
-      await storage.removeFromCart(req.params.id);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to remove from cart" });
-    }
-  });
+  // ==================== 2. STATIC FILES ====================
+  app.use('/images', express.static(path.join(__dirname, '../../../../../../attached_assets')));
+  app.use('/attached_assets', express.static(path.join(process.cwd(), 'attached_assets')));
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-  app.delete("/api/cart", async (_req: Request, res: Response) => {
-    try {
-      await storage.clearCart(DEMO_USER_ID);
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to clear cart" });
-    }
-  });
+   app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async (req: Request, res: Response) => {
+  try {
+    const { inventoryId, userId, stock, price, name, brand, description, categoryId } = req.body;
 
-  // Orders
-  app.get("/api/orders", async (_req: Request, res: Response) => {
-    try {
-      const allOrders = await storage.getOrders(DEMO_USER_ID);
-      res.json(allOrders);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch orders" });
-    }
-  });
+    if (!inventoryId || !userId) return res.status(400).json({ error: "Missing required fields" });
 
-  app.get("/api/orders/:id", async (req: Request, res: Response) => {
-    try {
-      const order = await storage.getOrderById(req.params.id);
-      if (!order) {
-        return res.status(404).json({ error: "Order not found" });
-      }
-      res.json(order);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch order" });
-    }
-  });
+    // 1. Update Inventory stock
+    await storage.updateStoreInventory(inventoryId, parseInt(stock) || 0, true);
 
-  app.post("/api/orders", async (req: Request, res: Response) => {
-    try {
-      const { customerLat, customerLng, paymentMethod, items, total, deliveryFee, addressId } = req.body;
-      
-      // Validate customer location is provided
-      const lat = parseFloat(customerLat);
-      const lng = parseFloat(customerLng);
-      
-      if (isNaN(lat) || isNaN(lng)) {
-        return res.status(400).json({ 
-          error: "Customer location required",
-          message: "Please enable location to place an order" 
-        });
-      }
-      
-      // Find nearest available store
-      const nearestStore = await findNearestAvailableStore(lat, lng);
-      
-      if (!nearestStore) {
-        return res.status(400).json({ 
-          error: "No stores available",
-          message: "Sorry, no stores are available in your area right now. Please try again later."
-        });
-      }
-      
-      // Get online picker and driver from the store
-      const onlineStaff = await storage.getOnlineStaffByStore(nearestStore.id);
-      
-      if (onlineStaff.pickers.length === 0 || onlineStaff.drivers.length === 0) {
-        return res.status(400).json({ 
-          error: "No staff available",
-          message: "Sorry, no pickers or drivers are available at the moment. Please try again later."
-        });
-      }
-      
-      // Assign first available picker and driver
-      const assignedPicker = onlineStaff.pickers[0];
-      const assignedDriver = onlineStaff.drivers[0];
-      
-      // Validate COD eligibility
-      const requestedPaymentMethod = paymentMethod || "midtrans";
-      let finalPaymentMethod = requestedPaymentMethod;
-      
-      if (requestedPaymentMethod === "cod" && !nearestStore.codAllowed) {
-        return res.status(400).json({
-          error: "COD not available",
-          message: "Cash on delivery is not available at this store. Please use another payment method."
-        });
-      }
-      
-      const orderNumber = `KG-${Date.now().toString(36).toUpperCase()}`;
-      const estimatedTime = estimateDeliveryTime(nearestStore.distanceKm);
-      const estimatedDelivery = new Date(Date.now() + estimatedTime * 60 * 1000);
-      
-      // Get driver user info for riderInfo
-      const driverUser = await storage.getUser(assignedDriver.userId);
-      
-      const order = await storage.createOrder({
-        userId: DEMO_USER_ID,
-        orderNumber,
-        storeId: nearestStore.id,
-        pickerId: assignedPicker.userId,
-        driverId: assignedDriver.userId,
-        items,
-        total,
-        deliveryFee: deliveryFee || 10000,
-        addressId,
-        paymentMethod: finalPaymentMethod,
-        paymentStatus: finalPaymentMethod === "cod" ? "pending" : "pending",
-        customerLat: String(lat),
-        customerLng: String(lng),
-        estimatedDelivery,
-        status: "pending",
-      });
-      
-      await storage.clearCart(DEMO_USER_ID);
-      
-      // Return order with additional info for the client
-      res.json({
-        ...order,
-        store: {
-          id: nearestStore.id,
-          name: nearestStore.name,
-        },
-        riderInfo: driverUser ? {
-          id: driverUser.id,
-          name: driverUser.username,
-          phone: driverUser.phone || "+62 812-0000-0000",
-          rating: 4.8,
-          vehicleNumber: "B 1234 ABC",
-        } : null,
-        estimatedDeliveryMinutes: estimatedTime,
-      });
-    } catch (error) {
-      console.error("Order error:", error);
-      res.status(500).json({ error: "Failed to create order" });
-    }
-  });
-
-  // Store Availability
-  app.get("/api/stores/available", async (req: Request, res: Response) => {
-    try {
-      const lat = parseFloat(req.query.lat as string);
-      const lng = parseFloat(req.query.lng as string);
-      
-      if (isNaN(lat) || isNaN(lng)) {
-        return res.status(400).json({ error: "Valid lat and lng query parameters required" });
-      }
-      
-      const nearestStore = await findNearestAvailableStore(lat, lng);
-      
-      if (!nearestStore) {
-        return res.json({ 
-          available: false, 
-          message: "No stores available in your area",
-          stores: await getStoresWithAvailability(lat, lng)
-        });
-      }
-      
-      const estimatedTime = estimateDeliveryTime(nearestStore.distanceKm);
-      
-      res.json({
-        available: true,
-        store: nearestStore,
-        estimatedDeliveryMinutes: estimatedTime,
-        codAllowed: nearestStore.codAllowed,
-      });
-    } catch (error) {
-      console.error("Store availability error:", error);
-      res.status(500).json({ error: "Failed to check store availability" });
-    }
-  });
-
-  app.get("/api/stores", async (_req: Request, res: Response) => {
-    try {
-      const allStores = await storage.getStores();
-      res.json(allStores);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch stores" });
-    }
-  });
-
-  app.get("/api/stores/:id/inventory", async (req: Request, res: Response) => {
-    try {
-      const inventory = await storage.getStoreInventoryWithProducts(req.params.id);
-      res.json(inventory);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch store inventory" });
-    }
-  });
-
-  // Staff Status Toggle
-  app.post("/api/staff/toggle-status", async (req: Request, res: Response) => {
-    try {
-      const { userId, status } = req.body;
-      
-      if (!userId || !["online", "offline"].includes(status)) {
-        return res.status(400).json({ error: "Valid userId and status (online/offline) required" });
-      }
-      
-      const staffRecord = await storage.getStoreStaffByUserId(userId);
-      if (!staffRecord) {
-        return res.status(404).json({ error: "Staff record not found" });
-      }
-      
-      const updated = await storage.updateStaffStatus(staffRecord.id, status);
-      res.json(updated);
-    } catch (error) {
-      console.error("Staff status toggle error:", error);
-      res.status(500).json({ error: "Failed to update staff status" });
-    }
-  });
-
-  app.get("/api/stores/:id/staff", async (req: Request, res: Response) => {
-    try {
-      const staff = await storage.getStoreStaff(req.params.id);
-      res.json(staff);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch store staff" });
-    }
-  });
-
-  // Admin Dashboard Metrics
-  app.get("/api/admin/metrics", async (_req: Request, res: Response) => {
-    try {
-      const allStores = await storage.getStores();
-      const allOrders = await storage.getAllOrders();
-      
-      // Get staff for each store and compile metrics - properly scoped by storeId
-      const storeMetrics = await Promise.all(
-        allStores.map(async (store) => {
-          // Get only staff belonging to this specific store
-          const storeStaffRecords = await storage.getStoreStaff(store.id);
-          const onlineStaff = storeStaffRecords.filter((s) => s.status === "online");
-          
-          // Filter orders that belong to this specific store
-          const storeOrders = allOrders.filter((o) => o.storeId === store.id);
-          
-          // Enrich staff with user details (phone/email)
-          const enrichedStaff = await Promise.all(
-            storeStaffRecords.map(async (s) => {
-              const user = await storage.getUser(s.userId);
-              return {
-                ...s,
-                user: user ? { 
-                  id: user.id, 
-                  username: user.username, 
-                  phone: user.phone, 
-                  email: user.email 
-                } : null,
-              };
-            })
-          );
-          
-          // Filter pickers and drivers for this store only
-          const storePickers = enrichedStaff.filter((s) => s.role === "picker");
-          const storeDrivers = enrichedStaff.filter((s) => s.role === "driver");
-          
-          return {
-            id: store.id,
-            name: store.name,
-            address: store.address,
-            latitude: store.latitude,
-            longitude: store.longitude,
-            isActive: store.isActive,
-            codAllowed: store.codAllowed,
-            totalStaff: storeStaffRecords.length,
-            onlineStaff: onlineStaff.length,
-            staff: enrichedStaff,
-            pickers: storePickers,
-            drivers: storeDrivers,
-            orderCount: storeOrders.length,
-            pendingOrders: storeOrders.filter((o) => o.status === "pending").length,
-            activeOrders: storeOrders.filter((o) => 
-              ["confirmed", "preparing", "ready", "on_the_way"].includes(o.status || "")
-            ).length,
-          };
-        })
-      );
-      
-      // Global order summary across all stores
-      const orderSummary = {
-        total: allOrders.length,
-        pending: allOrders.filter((o) => o.status === "pending").length,
-        confirmed: allOrders.filter((o) => o.status === "confirmed").length,
-        preparing: allOrders.filter((o) => o.status === "preparing").length,
-        ready: allOrders.filter((o) => o.status === "ready").length,
-        onTheWay: allOrders.filter((o) => o.status === "on_the_way").length,
-        delivered: allOrders.filter((o) => o.status === "delivered").length,
-        cancelled: allOrders.filter((o) => o.status === "cancelled").length,
+    // 2. Find the product linked to this inventory record
+    const invRecords = await db.select().from(storeInventory).where(eq(storeInventory.id, inventoryId));
+    
+    if (invRecords.length > 0) {
+      const updateData: any = {
+        name,
+        brand,
+        description,
+        price: parseFloat(price),
+        categoryId
       };
-      
-      res.json({
-        stores: storeMetrics,
-        orderSummary,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error) {
-      console.error("Admin metrics error:", error);
-      res.status(500).json({ error: "Failed to fetch admin metrics" });
-    }
-  });
 
-  // ==================== ADMIN ENDPOINTS ====================
-  
-  // Create store (admin only - no owner required)
-  app.post("/api/admin/stores", async (req: Request, res: Response) => {
-    try {
-      const { name, address, latitude, longitude, codAllowed } = req.body;
-      
-      if (!name || !address || latitude === undefined || longitude === undefined) {
-        return res.status(400).json({ error: "name, address, latitude, and longitude are required" });
+      if (req.file) {
+        updateData.image = `/uploads/${req.file.filename}`;
       }
-      
-      const store = await storage.createStore({
-        name,
-        address,
-        latitude: String(latitude),
-        longitude: String(longitude),
-        ownerId: null,
-        codAllowed: codAllowed ?? true,
-        isActive: true,
-      });
-      
-      res.json(store);
-    } catch (error) {
-      console.error("Admin create store error:", error);
-      res.status(500).json({ error: "Failed to create store" });
-    }
-  });
-  
-  // Add staff to store by phone/email (admin only)
-  // This creates a placeholder user record that will be matched during login
-  app.post("/api/admin/stores/:storeId/staff", async (req: Request, res: Response) => {
-    try {
-      const { storeId } = req.params;
-      const { phone, email, role } = req.body;
-      
-      if (!role || !["picker", "driver"].includes(role)) {
-        return res.status(400).json({ error: "role (picker/driver) required" });
-      }
-      
-      if (!phone && !email) {
-        return res.status(400).json({ error: "Either phone or email is required" });
-      }
-      
-      const store = await storage.getStoreById(storeId);
-      if (!store) {
-        return res.status(404).json({ error: "Store not found" });
-      }
-      
-      // Normalize phone number (remove spaces, ensure +62 prefix)
-      let normalizedPhone = phone ? phone.replace(/\s/g, "") : null;
-      if (normalizedPhone && !normalizedPhone.startsWith("+")) {
-        if (normalizedPhone.startsWith("0")) {
-          normalizedPhone = "+62" + normalizedPhone.slice(1);
-        } else if (normalizedPhone.startsWith("62")) {
-          normalizedPhone = "+" + normalizedPhone;
-        } else {
-          normalizedPhone = "+62" + normalizedPhone;
-        }
-      }
-      
-      // Check if a user with this phone or email already exists
-      let existingUser = null;
-      if (normalizedPhone) {
-        existingUser = await storage.getUserByPhone(normalizedPhone);
-      }
-      if (!existingUser && email) {
-        existingUser = await storage.getUserByEmail(email);
-      }
-      
-      let staffUserId: string;
-      
-      if (existingUser) {
-        // Check if already assigned to a store
-        const existingAssignment = await storage.getStoreStaffByUserId(existingUser.id);
-        if (existingAssignment) {
-          return res.status(400).json({ error: "This user is already assigned to a store" });
-        }
-        staffUserId = existingUser.id;
-        
-        // Update user role if needed
-        if (existingUser.role !== role) {
-          await db.update(users).set({ role }).where(eq(users.id, existingUser.id));
-        }
-      } else {
-        // Create a placeholder user for this staff member
-        // They will complete their profile when they first login via OTP
-        const placeholderUsername = `staff_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        const newStaffUser = await storage.createUser({
-          username: placeholderUsername,
-          password: "placeholder_will_login_via_otp",
-          phone: normalizedPhone,
-          email: email || null,
-          role,
-        });
-        staffUserId = newStaffUser.id;
-      }
-      
-      // Create the store staff assignment
-      const staffAssignment = await storage.createStoreStaff({
-        userId: staffUserId,
-        storeId,
-        role,
-        status: "offline",
-      });
-      
-      const staffUser = await storage.getUser(staffUserId);
-      
-      res.json({ 
-        ...staffAssignment, 
-        user: staffUser ? { 
-          id: staffUser.id, 
-          username: staffUser.username, 
-          phone: staffUser.phone,
-          email: staffUser.email 
-        } : null 
-      });
-    } catch (error) {
-      console.error("Admin add staff error:", error);
-      res.status(500).json({ error: "Failed to add staff" });
-    }
-  });
 
-  // ==================== OWNER ENDPOINTS ====================
-  
-  // Get owner's stores
-  app.get("/api/owner/stores", async (req: Request, res: Response) => {
-    try {
-      const { userId } = req.query;
-      if (!userId) {
-        return res.status(400).json({ error: "userId query parameter required" });
-      }
-      
-      const user = await storage.getUser(userId as string);
-      if (!user || user.role !== "owner") {
-        return res.status(403).json({ error: "Only owners can access this endpoint" });
-      }
-      
-      const ownerStores = await storage.getStoresByOwner(userId as string);
-      
-      // Get staff for each store
-      const storesWithStaff = await Promise.all(
-        ownerStores.map(async (store) => {
-          const staff = await storage.getStoreStaff(store.id);
-          const staffWithUsers = await Promise.all(
-            staff.map(async (s) => {
-              const staffUser = await storage.getUser(s.userId);
-              return { ...s, user: staffUser ? { id: staffUser.id, username: staffUser.username, phone: staffUser.phone } : null };
-            })
-          );
-          return { ...store, staff: staffWithUsers };
-        })
-      );
-      
-      res.json(storesWithStaff);
-    } catch (error) {
-      console.error("Owner stores error:", error);
-      res.status(500).json({ error: "Failed to fetch owner stores" });
+      // This call will now work because we added it to storage.ts
+      await storage.updateProduct(invRecords[0].productId, updateData);
     }
-  });
-  
-  // Create store (owner only)
-  app.post("/api/owner/stores", async (req: Request, res: Response) => {
-    try {
-      const { userId, name, address, latitude, longitude, codAllowed } = req.body;
-      
-      if (!userId || !name || !address || latitude === undefined || longitude === undefined) {
-        return res.status(400).json({ error: "userId, name, address, latitude, and longitude are required" });
-      }
-      
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-      
-      // If user is not owner, upgrade them to owner role
-      if (user.role !== "owner" && user.role !== "admin") {
-        await db.update(users).set({ role: "owner" }).where(eq(users.id, userId));
-      }
-      
-      const store = await storage.createStore({
-        name,
-        address,
-        latitude: String(latitude),
-        longitude: String(longitude),
-        ownerId: userId,
-        codAllowed: codAllowed ?? true,
-        isActive: true,
-      });
-      
-      res.json(store);
-    } catch (error) {
-      console.error("Create store error:", error);
-      res.status(500).json({ error: "Failed to create store" });
-    }
-  });
-  
-  // Add staff to store (owner only)
-  app.post("/api/owner/stores/:storeId/staff", async (req: Request, res: Response) => {
-    try {
-      const { storeId } = req.params;
-      const { userId, staffUsername, staffPassword, staffPhone, staffRole } = req.body;
-      
-      if (!userId || !staffRole || !["picker", "driver"].includes(staffRole)) {
-        return res.status(400).json({ error: "userId and staffRole (picker/driver) required" });
-      }
-      
-      const owner = await storage.getUser(userId);
-      if (!owner || (owner.role !== "owner" && owner.role !== "admin")) {
-        return res.status(403).json({ error: "Only owners can add staff" });
-      }
-      
-      const store = await storage.getStoreById(storeId);
-      if (!store) {
-        return res.status(404).json({ error: "Store not found" });
-      }
-      
-      if (store.ownerId !== userId && owner.role !== "admin") {
-        return res.status(403).json({ error: "You can only add staff to your own stores" });
-      }
-      
-      // Create staff user if username provided
-      let staffUserId = req.body.staffUserId;
-      
-      if (!staffUserId && staffUsername && staffPassword) {
-        const existingUser = await storage.getUserByUsername(staffUsername);
-        if (existingUser) {
-          return res.status(400).json({ error: "Username already taken" });
-        }
-        
-        const newStaffUser = await storage.createUser({
-          username: staffUsername,
-          password: staffPassword,
-          phone: staffPhone || null,
-          role: staffRole,
-        });
-        staffUserId = newStaffUser.id;
-      }
-      
-      if (!staffUserId) {
-        return res.status(400).json({ error: "Either staffUserId or staffUsername/staffPassword required" });
-      }
-      
-      // Check if staff already assigned to a store
-      const existingAssignment = await storage.getStoreStaffByUserId(staffUserId);
-      if (existingAssignment) {
-        return res.status(400).json({ error: "This user is already assigned to a store" });
-      }
-      
-      const staffAssignment = await storage.createStoreStaff({
-        userId: staffUserId,
-        storeId,
-        role: staffRole,
-        status: "offline",
-      });
-      
-      const staffUser = await storage.getUser(staffUserId);
-      
-      res.json({ 
-        ...staffAssignment, 
-        user: staffUser ? { id: staffUser.id, username: staffUser.username, phone: staffUser.phone } : null 
-      });
-    } catch (error) {
-      console.error("Add staff error:", error);
-      res.status(500).json({ error: "Failed to add staff" });
-    }
-  });
-  
-  // Get store staff (owner only)
-  app.get("/api/owner/stores/:storeId/staff", async (req: Request, res: Response) => {
-    try {
-      const { storeId } = req.params;
-      const { userId } = req.query;
-      
-      if (!userId) {
-        return res.status(400).json({ error: "userId query parameter required" });
-      }
-      
-      const owner = await storage.getUser(userId as string);
-      if (!owner || (owner.role !== "owner" && owner.role !== "admin")) {
-        return res.status(403).json({ error: "Only owners can access this endpoint" });
-      }
-      
-      const store = await storage.getStoreById(storeId);
-      if (!store) {
-        return res.status(404).json({ error: "Store not found" });
-      }
-      
-      if (store.ownerId !== userId && owner.role !== "admin") {
-        return res.status(403).json({ error: "You can only view staff for your own stores" });
-      }
-      
-      const staff = await storage.getStoreStaff(storeId);
-      const staffWithUsers = await Promise.all(
-        staff.map(async (s) => {
-          const staffUser = await storage.getUser(s.userId);
-          return { ...s, user: staffUser ? { id: staffUser.id, username: staffUser.username, phone: staffUser.phone } : null };
-        })
-      );
-      
-      res.json(staffWithUsers);
-    } catch (error) {
-      console.error("Get staff error:", error);
-      res.status(500).json({ error: "Failed to fetch store staff" });
-    }
-  });
 
-  // ==================== PICKER ENDPOINTS ====================
-  
-  // Get picker dashboard data
-  app.get("/api/picker/dashboard", async (req: Request, res: Response) => {
-    try {
-      const { userId } = req.query;
-      if (!userId) {
-        return res.status(400).json({ error: "userId query parameter required" });
-      }
-      
-      const user = await storage.getUser(userId as string);
-      if (!user || user.role !== "picker") {
-        return res.status(403).json({ error: "Only pickers can access this endpoint" });
-      }
-      
-      const staffRecord = await storage.getStoreStaffByUserId(userId as string);
-      if (!staffRecord) {
-        return res.status(404).json({ error: "Picker not assigned to any store" });
-      }
-      
-      const store = await storage.getStoreById(staffRecord.storeId);
-      const orders = await storage.getOrdersByPicker(userId as string);
-      
-      // Get pending and active orders (orders that need picking)
-      const pendingOrders = orders.filter(o => o.status === "pending" || o.status === "confirmed");
-      const activeOrders = orders.filter(o => o.status === "picking");
-      const completedOrders = orders.filter(o => ["packed", "delivering", "delivered"].includes(o.status || ""));
-      
-      res.json({
-        user: { id: user.id, username: user.username, phone: user.phone, role: user.role },
-        staffRecord,
-        store,
-        orders: {
-          pending: pendingOrders,
-          active: activeOrders,
-          completed: completedOrders,
-        },
-      });
-    } catch (error) {
-      console.error("Picker dashboard error:", error);
-      res.status(500).json({ error: "Failed to fetch picker dashboard" });
-    }
-  });
-  
-  // Get picker's store inventory
-  app.get("/api/picker/inventory", async (req: Request, res: Response) => {
-    try {
-      const { userId } = req.query;
-      if (!userId) {
-        return res.status(400).json({ error: "userId query parameter required" });
-      }
-      
-      const user = await storage.getUser(userId as string);
-      if (!user || user.role !== "picker") {
-        return res.status(403).json({ error: "Only pickers can access this endpoint" });
-      }
-      
-      const staffRecord = await storage.getStoreStaffByUserId(userId as string);
-      if (!staffRecord) {
-        return res.status(404).json({ error: "Picker not assigned to any store" });
-      }
-      
-      const inventory = await storage.getStoreInventoryWithProducts(staffRecord.storeId);
-      res.json(inventory);
-    } catch (error) {
-      console.error("Picker inventory error:", error);
-      res.status(500).json({ error: "Failed to fetch inventory" });
-    }
-  });
-  
-  // Update inventory item (picker)
-  app.put("/api/picker/inventory/:id", async (req: Request, res: Response) => {
-    try {
-      const { id } = req.params;
-      const { userId, stockCount, isAvailable } = req.body;
-      
-      if (!userId) {
-        return res.status(400).json({ error: "userId required" });
-      }
-      
-      const user = await storage.getUser(userId);
-      if (!user || user.role !== "picker") {
-        return res.status(403).json({ error: "Only pickers can update inventory" });
-      }
-      
-      const updated = await storage.updateStoreInventory(id, stockCount ?? 0, isAvailable ?? true);
-      if (!updated) {
-        return res.status(404).json({ error: "Inventory item not found" });
-      }
-      
-      res.json(updated);
-    } catch (error) {
-      console.error("Update inventory error:", error);
-      res.status(500).json({ error: "Failed to update inventory" });
-    }
-  });
-  
-  // Add product to store inventory (picker)
-  app.post("/api/picker/inventory", async (req: Request, res: Response) => {
-    try {
-      const { userId, productId, stockCount } = req.body;
-      
-      if (!userId || !productId) {
-        return res.status(400).json({ error: "userId and productId required" });
-      }
-      
-      const user = await storage.getUser(userId);
-      if (!user || user.role !== "picker") {
-        return res.status(403).json({ error: "Only pickers can manage inventory" });
-      }
-      
-      const staffRecord = await storage.getStoreStaffByUserId(userId);
-      if (!staffRecord) {
-        return res.status(404).json({ error: "Picker not assigned to any store" });
-      }
-      
-      const inventory = await storage.createStoreInventory({
-        storeId: staffRecord.storeId,
-        productId,
-        stockCount: stockCount ?? 10,
-        isAvailable: true,
-      });
-      
-      res.json(inventory);
-    } catch (error) {
-      console.error("Add inventory error:", error);
-      res.status(500).json({ error: "Failed to add to inventory" });
-    }
-  });
-  
-  // Get picker's assigned orders
-  app.get("/api/picker/orders", async (req: Request, res: Response) => {
-    try {
-      const { userId } = req.query;
-      if (!userId) {
-        return res.status(400).json({ error: "userId query parameter required" });
-      }
-      
-      const user = await storage.getUser(userId as string);
-      if (!user || user.role !== "picker") {
-        return res.status(403).json({ error: "Only pickers can access this endpoint" });
-      }
-      
-      const orders = await storage.getOrdersByPicker(userId as string);
-      res.json(orders);
-    } catch (error) {
-      console.error("Picker orders error:", error);
-      res.status(500).json({ error: "Failed to fetch orders" });
-    }
-  });
-  
-  // Update order status (picker - picking, packed)
-  app.put("/api/picker/orders/:orderId/status", async (req: Request, res: Response) => {
-    try {
-      const { orderId } = req.params;
-      const { userId, status } = req.body;
-      
-      if (!userId || !status) {
-        return res.status(400).json({ error: "userId and status required" });
-      }
-      
-      if (!["picking", "packed"].includes(status)) {
-        return res.status(400).json({ error: "Pickers can only set status to picking or packed" });
-      }
-      
-      const user = await storage.getUser(userId);
-      if (!user || user.role !== "picker") {
-        return res.status(403).json({ error: "Only pickers can update order status" });
-      }
-      
-      const order = await storage.getOrderById(orderId);
-      if (!order) {
-        return res.status(404).json({ error: "Order not found" });
-      }
-      
-      if (order.pickerId !== userId) {
-        return res.status(403).json({ error: "You can only update orders assigned to you" });
-      }
-      
-      const timestamp = status === "picking" ? "pickedAt" : "packedAt";
-      const updated = await storage.updateOrderWithTimestamp(orderId, status, timestamp);
-      
-      res.json(updated);
-    } catch (error) {
-      console.error("Picker order status error:", error);
-      res.status(500).json({ error: "Failed to update order status" });
-    }
-  });
+    res.json({ success: true, message: "Inventory and Product updated" });
+  } catch (error) {
+    console.error("Update error:", error);
+    res.status(500).json({ error: "Update failed" });
+  }
+});
 
-  // ==================== DRIVER ENDPOINTS ====================
+  // ==================== 3. AUTHENTICATION ROUTES ====================
+  console.log("🔐 Registering auth routes...");
   
-  // Get driver dashboard data
-  app.get("/api/driver/dashboard", async (req: Request, res: Response) => {
-    try {
-      const { userId } = req.query;
-      if (!userId) {
-        return res.status(400).json({ error: "userId query parameter required" });
-      }
-      
-      const user = await storage.getUser(userId as string);
-      if (!user || user.role !== "driver") {
-        return res.status(403).json({ error: "Only drivers can access this endpoint" });
-      }
-      
-      const staffRecord = await storage.getStoreStaffByUserId(userId as string);
-      if (!staffRecord) {
-        return res.status(404).json({ error: "Driver not assigned to any store" });
-      }
-      
-      const store = await storage.getStoreById(staffRecord.storeId);
-      const orders = await storage.getOrdersByDriver(userId as string);
-      
-      // Filter orders by status
-      const readyOrders = orders.filter(o => o.status === "packed");
-      const activeOrders = orders.filter(o => o.status === "delivering");
-      const completedOrders = orders.filter(o => o.status === "delivered");
-      
-      res.json({
-        user: { id: user.id, username: user.username, phone: user.phone, role: user.role },
-        staffRecord,
-        store,
-        orders: {
-          ready: readyOrders,
-          active: activeOrders,
-          completed: completedOrders,
-        },
-      });
-    } catch (error) {
-      console.error("Driver dashboard error:", error);
-      res.status(500).json({ error: "Failed to fetch driver dashboard" });
-    }
-  });
-  
-  // Get driver's assigned orders
-  app.get("/api/driver/orders", async (req: Request, res: Response) => {
-    try {
-      const { userId } = req.query;
-      if (!userId) {
-        return res.status(400).json({ error: "userId query parameter required" });
-      }
-      
-      const user = await storage.getUser(userId as string);
-      if (!user || user.role !== "driver") {
-        return res.status(403).json({ error: "Only drivers can access this endpoint" });
-      }
-      
-      const orders = await storage.getOrdersByDriver(userId as string);
-      res.json(orders);
-    } catch (error) {
-      console.error("Driver orders error:", error);
-      res.status(500).json({ error: "Failed to fetch orders" });
-    }
-  });
-  
-  // Update order status (driver - delivering, delivered)
-  app.put("/api/driver/orders/:orderId/status", async (req: Request, res: Response) => {
-    try {
-      const { orderId } = req.params;
-      const { userId, status } = req.body;
-      
-      if (!userId || !status) {
-        return res.status(400).json({ error: "userId and status required" });
-      }
-      
-      if (!["delivering", "delivered"].includes(status)) {
-        return res.status(400).json({ error: "Drivers can only set status to delivering or delivered" });
-      }
-      
-      const user = await storage.getUser(userId);
-      if (!user || user.role !== "driver") {
-        return res.status(403).json({ error: "Only drivers can update delivery status" });
-      }
-      
-      const order = await storage.getOrderById(orderId);
-      if (!order) {
-        return res.status(404).json({ error: "Order not found" });
-      }
-      
-      if (order.driverId !== userId) {
-        return res.status(403).json({ error: "You can only update orders assigned to you" });
-      }
-      
-      if (status === "delivered") {
-        const updated = await storage.updateOrderWithTimestamp(orderId, status, "deliveredAt");
-        res.json(updated);
-      } else {
-        const updated = await storage.updateOrderStatus(orderId, status);
-        res.json(updated);
-      }
-    } catch (error) {
-      console.error("Driver order status error:", error);
-      res.status(500).json({ error: "Failed to update order status" });
-    }
-  });
-
-  // Vouchers
-  app.get("/api/vouchers", async (_req: Request, res: Response) => {
-    try {
-      const allVouchers = await storage.getVouchers();
-      res.json(allVouchers);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch vouchers" });
-    }
-  });
-
-  app.get("/api/vouchers/:code", async (req: Request, res: Response) => {
-    try {
-      const voucher = await storage.getVoucherByCode(req.params.code);
-      if (!voucher) {
-        return res.status(404).json({ error: "Voucher not found" });
-      }
-      res.json(voucher);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch voucher" });
-    }
-  });
-
-  // Authentication endpoints
-  app.post("/api/auth/register", async (req: Request, res: Response) => {
+  app.post("/api/auth/register", async (req, res) => {
     try {
       const { username, password, phone } = req.body;
-      
-      if (!username || !password) {
-        return res.status(400).json({ error: "Username and password are required" });
-      }
-      
-      if (username.length < 3) {
-        return res.status(400).json({ error: "Username must be at least 3 characters" });
-      }
-      
-      if (password.length < 4) {
-        return res.status(400).json({ error: "Password must be at least 4 characters" });
-      }
+      if (!username || !password) return res.status(400).json({ error: "Username and password required" });
+      if (username.length < 3) return res.status(400).json({ error: "Username must be 3+ characters" });
+      if (password.length < 4) return res.status(400).json({ error: "Password must be 4+ characters" });
       
       const existingUser = await storage.getUserByUsername(username);
-      if (existingUser) {
-        return res.status(400).json({ error: "Username already taken" });
-      }
+      if (existingUser) return res.status(400).json({ error: "Username taken" });
       
-      const newUser = await storage.createUser({
-        username,
-        password,
-        phone: phone || null,
-        role: "customer",
-      });
-      
-      res.json({
-        user: {
-          id: newUser.id,
-          username: newUser.username,
-          phone: newUser.phone,
-          role: newUser.role,
-        },
-      });
+      const newUser = await storage.createUser({ username, password, phone: phone || null, role: "customer" });
+      res.json({ user: { id: newUser.id, username: newUser.username, phone: newUser.phone, role: newUser.role } });
     } catch (error) {
-      console.error("Registration error:", error);
+      console.error("❌ Register error:", error);
       res.status(500).json({ error: "Registration failed" });
     }
   });
 
-  app.post("/api/auth/login", async (req: Request, res: Response) => {
-    try {
-      const { username, password } = req.body;
-      
-      if (!username || !password) {
-        return res.status(400).json({ error: "Username and password are required" });
-      }
-      
-      const user = await storage.getUserByUsername(username);
-      
-      if (!user) {
-        return res.status(401).json({ error: "Invalid username or password" });
-      }
-      
-      if (user.password !== password) {
-        return res.status(401).json({ error: "Invalid username or password" });
-      }
-      
-      res.json({
-        user: {
-          id: user.id,
-          username: user.username,
-          phone: user.phone,
-          role: user.role,
-        },
-      });
-    } catch (error) {
-      console.error("Login error:", error);
-      res.status(500).json({ error: "Login failed" });
-    }
-  });
+app.post("/api/auth/login", async (req, res) => {
+  const { phone, password } = req.body;
+  const result = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+  const user = result[0];
 
-  app.put("/api/auth/profile", async (req: Request, res: Response) => {
-    try {
-      const { userId, username, phone } = req.body;
-      
-      if (!userId) {
-        return res.status(400).json({ error: "User ID is required" });
-      }
-      
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-      
-      if (username && username !== user.username) {
-        const existingUser = await storage.getUserByUsername(username);
-        if (existingUser) {
-          return res.status(400).json({ error: "Username already taken" });
-        }
-      }
-      
-      const updates: { username?: string; phone?: string | null } = {};
-      if (username) updates.username = username;
-      if (phone !== undefined) updates.phone = phone;
-      
-      const updatedUser = await db.update(users)
-        .set(updates)
-        .where(eq(users.id, userId))
+  if (!user || user.password !== password) {
+    return res.status(401).json({ error: "Invalid phone or password" });
+  }
+  
+  res.json({ user: { id: user.id, username: user.username, phone: user.phone, role: user.role } });
+});
+
+  // 1. Updated OTP Send: Check if user exists based on mode
+app.post("/api/auth/otp/send", async (req, res) => {
+  try {
+    const { phone, mode } = req.body; // mode: 'signup' | 'forgot' | 'login'
+    if (!phone) return res.status(400).json({ error: "Phone required" });
+
+    const existingUser = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+
+    // Alert logic: If signup and user exists, or if forgot and user doesn't exist
+    if (mode === "signup" && existingUser.length > 0) {
+      return res.status(400).json({ error: "This phone number is already registered. Please login instead." });
+    }
+    if (mode === "forgot" && existingUser.length === 0) {
+      return res.status(400).json({ error: "No account found with this phone number." });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    
+    await db.insert(otpCodes).values({ phone, code, expiresAt });
+
+    res.json({ success: true, code, message: "OTP sent" });
+  } catch (error) {
+    console.error("❌ OTP send error:", error);
+    res.status(500).json({ error: "Failed to send OTP" });
+  }
+});
+
+// 2. Updated OTP Verify: Handle Password Reset and Registration
+app.post("/api/auth/otp/verify", async (req, res) => {
+  try {
+    const { phone, code, name, email, password, mode } = req.body;
+    if (!phone || !code) return res.status(400).json({ error: "Phone and code required" });
+
+    // 1. Validate OTP
+    const validOtp = await db.select().from(otpCodes)
+      .where(and(
+        eq(otpCodes.phone, phone), 
+        eq(otpCodes.code, code), 
+        eq(otpCodes.verified, false), 
+        gt(otpCodes.expiresAt, new Date())
+      ))
+      .limit(1);
+
+    if (!validOtp.length) return res.status(400).json({ error: "Invalid or expired OTP" });
+
+    // 2. Mark OTP as verified
+    await db.update(otpCodes).set({ verified: true }).where(eq(otpCodes.id, validOtp[0].id));
+
+    // 3. Check for existing user by PHONE (Primary Key for our logic)
+    const existingUsers = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+    let user;
+
+    if (existingUsers.length > 0) {
+      // --- UPDATE EXISTING USER ---
+      const updatedUsers = await db.update(users)
+        .set({ 
+          password: password || existingUsers[0].password,
+          email: email || existingUsers[0].email,
+          // Only update username if the new name is provided
+          username: name || existingUsers[0].username 
+        })
+        .where(eq(users.phone, phone))
         .returning();
+      user = updatedUsers[0];
+    } else {
+      // --- CREATE NEW USER ---
+      const isSuperAdmin = phone === '+6288289943397';
       
-      if (updatedUser.length === 0) {
-        return res.status(404).json({ error: "Failed to update user" });
-      }
-      
-      res.json({
-        user: {
-          id: updatedUser[0].id,
-          username: updatedUser[0].username,
-          phone: updatedUser[0].phone,
-          role: updatedUser[0].role,
-        },
-      });
-    } catch (error) {
-      console.error("Profile update error:", error);
-      res.status(500).json({ error: "Profile update failed" });
-    }
-  });
+      // Fix for the Duplicate Username Error:
+      // We try to use the name, but if that's taken or empty, we use phone + timestamp
+      // This ensures "users_username_unique" is NEVER violated.
+      const timestamp = Date.now().toString().slice(-4);
+      const safeUsername = name ? `${name}_${timestamp}` : `user_${phone.slice(-4)}_${timestamp}`;
 
-  // OTP Authentication
-  // NOTE: This is a demo implementation. In production:
-  // - Integrate Twilio/other SMS provider to send OTP via SMS
-  // - Remove the code from the response
-  // - Add rate limiting to prevent abuse
-  // - Use secure random number generation
-  app.post("/api/auth/otp/send", async (req: Request, res: Response) => {
-    try {
-      const { phone } = req.body;
-      if (!phone) {
-        return res.status(400).json({ error: "Phone number is required" });
-      }
-      
-      // Generate 6-digit OTP
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-      
-      // Store OTP in database
-      await db.insert(otpCodes).values({
+      const newUser = await db.insert(users).values({
+        username: safeUsername,
+        password: password,
         phone,
-        code,
-        expiresAt,
+        email: email || null,
+        role: isSuperAdmin ? "admin" : "customer",
+      }).returning();
+      user = newUser[0];
+    }
+
+    // 4. Staff/Store Logic
+    const staffRecord = await storage.getStoreStaffByUserId(user.id);
+    let staffInfo = null;
+    if (staffRecord) {
+      const store = await storage.getStoreById(staffRecord.storeId);
+      staffInfo = { 
+        storeId: staffRecord.storeId, 
+        storeName: store?.name || "Unknown", 
+        role: staffRecord.role, 
+        status: staffRecord.status 
+      };
+    }
+
+    res.json({ 
+      user: { 
+        id: user.id, 
+        username: user.username, 
+        phone: user.phone, 
+        email: user.email, 
+        role: user.role 
+      }, 
+      staffInfo 
+    });
+
+  } catch (error: any) {
+    console.error("❌ OTP verify error details:", error);
+    
+    // Catch the specific Postgres Unique Violation
+    if (error.code === '23505') {
+      return res.status(400).json({ error: "Username or Phone already exists in system." });
+    }
+    
+    res.status(500).json({ error: "Verification failed internally" });
+  }
+});
+
+  // ==================== 4. PICKER ROUTES (BEFORE /api/orders) ====================
+  console.log("📦 Registering picker routes...");
+
+ 
+  
+  app.get("/api/picker/dashboard", async (req, res) => {
+    try {
+      console.log("🔍 Picker dashboard - userId:", req.query.userId);
+      const { userId } = req.query;
+      if (!userId) return res.status(400).json({ error: "userId required" });
+
+      const allOrders = await db.select().from(orders).where(eq(orders.pickerId, userId as string));
+      console.log(`📊 ${allOrders.length} orders for picker`);
+
+      res.json({
+        user: { id: userId, role: "picker" },
+        orders: {
+          pending: allOrders.filter(o => ["pending", "confirmed"].includes(o.status || "")),
+          active: allOrders.filter(o => o.status === "picking"),
+          completed: allOrders.filter(o => ["packed", "delivering", "delivered"].includes(o.status || "")),
+        }
       });
-      
-      // DEMO ONLY: Return code in response for testing
-      // In production, send SMS via Twilio and only return { success: true }
-      res.json({ success: true, code, message: "OTP sent (demo mode - code shown for testing)" });
     } catch (error) {
-      console.error("OTP send error:", error);
-      res.status(500).json({ error: "Failed to send OTP" });
+      console.error("❌ Picker dashboard error:", error);
+      res.status(500).json({ error: "Failed to fetch dashboard" });
     }
   });
 
-  app.post("/api/auth/otp/verify", async (req: Request, res: Response) => {
+  app.get("/api/picker/inventory", async (req, res) => {
     try {
-      const { phone, code } = req.body;
-      if (!phone || !code) {
-        return res.status(400).json({ error: "Phone and code are required" });
+      console.log("🔍 Picker inventory - userId:", req.query.userId);
+      const { userId } = req.query;
+      if (!userId) return res.status(400).json({ error: "userId required" });
+      
+      const user = await storage.getUser(userId as string);
+      if (!user || user.role !== "picker") return res.status(403).json({ error: "Pickers only" });
+      
+      const staffRecord = await storage.getStoreStaffByUserId(userId as string);
+      if (!staffRecord) return res.status(404).json({ error: "Not assigned to store" });
+      
+      const inventory = await storage.getStoreInventoryWithProducts(staffRecord.storeId);
+      console.log(`📦 ${inventory.length} items`);
+      res.json(inventory);
+    } catch (error) {
+      console.error("❌ Picker inventory error:", error);
+      res.status(500).json({ error: "Failed to fetch inventory" });
+    }
+  });
+
+  app.put("/api/picker/inventory/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { userId, stockCount, isAvailable } = req.body;
+      console.log(`🔄 Update inventory ${id} - user: ${userId}, stock: ${stockCount}`);
+      
+      if (!userId) return res.status(400).json({ error: "userId required" });
+      const user = await storage.getUser(userId);
+      if (!user || user.role !== "picker") return res.status(403).json({ error: "Pickers only" });
+      
+      const updated = await storage.updateStoreInventory(id, stockCount ?? 0, isAvailable ?? true);
+      if (!updated) return res.status(404).json({ error: "Item not found" });
+      
+      console.log("✅ Updated");
+      res.json(updated);
+    } catch (error) {
+      console.error("❌ Update error:", error);
+      res.status(500).json({ error: "Update failed" });
+    }
+  });
+
+ app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, res) => {
+  try {
+    const { userId, name, brand, description, price, stock, categoryId } = req.body;
+
+    // 1. Find the store associated with this picker
+    const [staff] = await db.select().from(storeStaff).where(eq(storeStaff.userId, userId));
+    if (!staff) return res.status(404).json({ error: "Store not found for this user" });
+
+    // 2. Create the Product entry first
+    const [newProduct] = await db.insert(products).values({
+      name,
+      brand: brand || "Generic",
+      description: description || "",
+      price: parseFloat(price),
+      categoryId,
+      image: req.file ? `/uploads/${req.file.filename}` : null,
+    }).returning();
+
+    // 3. Create the Inventory entry to link product to store
+    await db.insert(storeInventory).values({
+      storeId: staff.storeId,
+      productId: newProduct.id,
+      stockCount: parseInt(stock) || 0,
+      isAvailable: true
+    });
+
+    res.json({ success: true, message: "New product created and added to inventory" });
+  } catch (error) {
+    console.error("Creation error:", error);
+    res.status(500).json({ error: "Failed to create product" });
+  }
+});
+  // Add this to registerRoutes in server/routes.ts
+
+
+  app.delete("/api/picker/inventory/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { userId } = req.query;
+      console.log(`🗑️ Delete inventory ${id} - user: ${userId}`);
+      
+      if (!userId) return res.status(400).json({ error: "userId required" });
+      const user = await storage.getUser(userId as string);
+      if (!user || user.role !== "picker") return res.status(403).json({ error: "Pickers only" });
+      
+      await storage.deleteStoreInventory(id);
+      console.log("✅ Deleted");
+      res.json({ success: true });
+    } catch (error) {
+      console.error("❌ Delete error:", error);
+      res.status(500).json({ error: "Delete failed" });
+    }
+  });
+
+  // ==================== 5. DRIVER ROUTES ====================
+  console.log("🚗 Registering driver routes...");
+  
+  app.get("/api/driver/dashboard", async (req, res) => {
+    try {
+      console.log("🔍 Driver dashboard - userId:", req.query.userId);
+      const { userId } = req.query;
+      
+      const allOrders = await db.select().from(orders)
+        .where(or(eq(orders.driverId, userId as string), and(eq(orders.status, "packed"), isNull(orders.driverId))));
+
+      console.log(`📊 ${allOrders.length} orders for driver`);
+      res.json({
+        user: { id: userId, role: "driver" },
+        staffRecord: { status: "online" },
+        orders: {
+          ready: allOrders.filter(o => o.status === "packed" && !o.driverId),
+          active: allOrders.filter(o => o.status === "delivering"),
+          completed: allOrders.filter(o => o.status === "delivered")
+        }
+      });
+    } catch (error) {
+      console.error("❌ Driver dashboard error:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.put("/api/driver/orders/:id/status", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, userId } = req.body;
+      console.log(`🔄 Driver update order ${id} - status: ${status}`);
+
+      const updateData: any = { status };
+      if (status === "delivering") updateData.driverId = userId;
+
+      const [updatedOrder] = await db.update(orders).set(updateData).where(eq(orders.id, id)).returning();
+      if (!updatedOrder) return res.status(404).json({ error: "Not found" });
+
+      console.log("✅ Updated");
+      res.json(updatedOrder);
+    } catch (error) {
+      console.error("❌ Update error:", error);
+      res.status(500).json({ error: "Update failed" });
+    }
+  });
+
+  // ==================== 6. CATEGORIES ====================
+  console.log("📂 Registering category routes...");
+  
+  app.get("/api/categories", async (req, res) => {
+    try {
+      const allCategories = await storage.getCategories();
+      res.json(allCategories);
+    } catch (error) {
+      console.error("❌ Categories error:", error);
+      res.status(500).json({ error: "Failed to fetch categories" });
+    }
+  });
+
+  app.get("/api/categories/:id", async (req, res) => {
+    try {
+      const category = await storage.getCategoryById(req.params.id);
+      if (!category) return res.status(404).json({ error: "Category not found" });
+      res.json(category);
+    } catch (error) {
+      console.error("❌ Category error:", error);
+      res.status(500).json({ error: "Failed to fetch category" });
+    }
+  });
+
+  // ==================== 7. PRODUCTS ====================
+  console.log("🛍️ Registering product routes...");
+  
+  app.get("/api/products", async (req, res) => {
+    try {
+      const categoryId = req.query.categoryId as string | undefined;
+      const allProducts = categoryId ? await storage.getProductsByCategory(categoryId) : await storage.getProducts();
+      res.json(allProducts);
+    } catch (error) {
+      console.error("❌ Products error:", error);
+      res.status(500).json({ error: "Failed to fetch products" });
+    }
+  });
+
+  app.get("/api/products/:id", async (req, res) => {
+    try {
+      const product = await storage.getProductById(req.params.id);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      res.json(product);
+    } catch (error) {
+      console.error("❌ Product error:", error);
+      res.status(500).json({ error: "Failed to fetch product" });
+    }
+  });
+
+  // ==================== 8. CART ====================
+  console.log("🛒 Registering cart routes...");
+  
+  app.get("/api/cart", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      if (!userId) return res.status(400).json({ error: "userId required" });
+      const items = await storage.getCartItems(userId);
+      const itemsWithProducts = await Promise.all(items.map(async (item) => {
+        const product = await storage.getProductById(item.productId);
+        return { ...item, product };
+      }));
+      res.json(itemsWithProducts);
+    } catch (error) {
+      console.error("❌ Cart error:", error);
+      res.status(500).json({ error: "Failed to fetch cart" });
+    }
+  });
+
+  app.post("/api/cart", async (req, res) => {
+    try {
+      const { productId, quantity = 1, userId } = req.body;
+      if (!userId) return res.status(400).json({ error: "User must be logged in" });
+      const item = await storage.addToCart({ userId, productId, quantity });
+      res.json(item);
+    } catch (error) {
+      console.error("❌ Add to cart error:", error);
+      res.status(500).json({ error: "Failed to add to cart" });
+    }
+  });
+
+  app.put("/api/cart/:id", async (req, res) => {
+    try {
+      const { quantity } = req.body;
+      const item = await storage.updateCartItemQuantity(req.params.id, quantity);
+      if (!item) return res.status(404).json({ error: "Cart item not found" });
+      res.json(item);
+    } catch (error) {
+      console.error("❌ Update cart error:", error);
+      res.status(500).json({ error: "Failed to update cart item" });
+    }
+  });
+
+  app.delete("/api/cart/:id", async (req, res) => {
+    try {
+      await db.delete(cartItems).where(eq(cartItems.id, req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("❌ Delete cart error:", error);
+      res.status(500).json({ error: "Failed to remove item" });
+    }
+  });
+
+  // ==================== 9. ADDRESSES ====================
+  console.log("📍 Registering address routes...");
+  
+  app.get("/api/addresses", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      if (!userId) return res.status(400).json({ error: "userId required" });
+      const userAddresses = await storage.getUserAddresses(userId);
+      res.json(userAddresses);
+    } catch (error) {
+      console.error("❌ Addresses error:", error);
+      res.status(500).json({ error: "Failed to fetch addresses" });
+    }
+  });
+
+  app.post("/api/addresses", async (req, res) => {
+    try {
+      const { userId, label, fullAddress, details, latitude, longitude, isDefault } = req.body;
+      if (!userId || !fullAddress || latitude === undefined || longitude === undefined) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      
+      if (isDefault) {
+        const existing = await storage.getUserAddresses(userId);
+        for (const addr of existing) {
+          if (addr.isDefault) await db.update(addresses).set({ isDefault: false }).where(eq(addresses.id, addr.id));
+        }
       }
       
-      // Find valid OTP
-      const validOtp = await db.select().from(otpCodes)
-        .where(and(
-          eq(otpCodes.phone, phone),
-          eq(otpCodes.code, code),
-          eq(otpCodes.verified, false),
-          gt(otpCodes.expiresAt, new Date())
-        ))
-        .limit(1);
+      const newAddress = await storage.createAddress({
+        userId, label: label || "Current Location", fullAddress, details: details || null,
+        latitude: String(latitude), longitude: String(longitude), isDefault: isDefault ?? true
+      });
+      res.status(201).json(newAddress);
+    } catch (error) {
+      console.error("❌ Create address error:", error);
+      res.status(500).json({ error: "Failed to create address" });
+    }
+  });
+
+  app.put("/api/addresses/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const { label, fullAddress, details, latitude, longitude, isDefault } = req.body;
+      const existing = await db.select().from(addresses).where(eq(addresses.id, id)).limit(1);
+      if (!existing.length) return res.status(404).json({ error: "Address not found" });
       
-      if (validOtp.length === 0) {
-        return res.status(400).json({ error: "Invalid or expired OTP" });
+      if (isDefault) {
+        await db.update(addresses).set({ isDefault: false })
+          .where(and(eq(addresses.userId, existing[0].userId), sql`${addresses.id} != ${id}`));
       }
       
-      // Mark OTP as verified
-      await db.update(otpCodes)
-        .set({ verified: true })
-        .where(eq(otpCodes.id, validOtp[0].id));
+      const updateData: any = {};
+      if (label !== undefined) updateData.label = label;
+      if (fullAddress !== undefined) updateData.fullAddress = fullAddress;
+      if (details !== undefined) updateData.details = details;
+      if (latitude !== undefined) updateData.latitude = String(latitude);
+      if (longitude !== undefined) updateData.longitude = String(longitude);
+      if (isDefault !== undefined) updateData.isDefault = isDefault;
       
-      // Find or create user
-      let user = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+      const [updated] = await db.update(addresses).set(updateData).where(eq(addresses.id, id)).returning();
+      res.json(updated);
+    } catch (error) {
+      console.error("❌ Update address error:", error);
+      res.status(500).json({ error: "Failed to update address" });
+    }
+  });
+
+  app.delete("/api/addresses/:id", async (req, res) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) return res.status(400).json({ error: "userId required" });
+      const existing = await db.select().from(addresses)
+        .where(and(eq(addresses.id, req.params.id), eq(addresses.userId, userId as string))).limit(1);
+      if (!existing.length) return res.status(404).json({ error: "Address not found" });
+      await db.delete(addresses).where(eq(addresses.id, req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("❌ Delete address error:", error);
+      res.status(500).json({ error: "Failed to delete address" });
+    }
+  });
+
+  // ==================== 10. ORDERS ====================
+  console.log("📦 Registering order routes...");
+  
+  app.post("/api/orders", async (req, res) => {
+    try {
+      const { userId, addressId, total, items, customerLat, customerLng } = req.body;
+      const nearestStore = await findNearestAvailableStore(parseFloat(customerLat), parseFloat(customerLng));
+      const storeId = nearestStore ? nearestStore.id : "demo-store";
       
-      if (user.length === 0) {
-        const newUser = await db.insert(users).values({
-          username: `user_${phone.slice(-4)}`,
-          password: Math.random().toString(36).slice(-8),
-          phone,
-          role: "customer",
-        }).returning();
-        user = newUser;
+      const [newOrder] = await db.insert(orders).values({
+        userId, storeId, addressId, total: Number(total), status: "pending", pickerId: "demo-picker",
+        orderNumber: `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`,
+        items: items || [], customerLat: String(customerLat), customerLng: String(customerLng),
+      }).returning();
+      
+      const staff = await db.select().from(storeStaff).where(eq(storeStaff.storeId, storeId));
+      for (const s of staff) {
+        await sendPushNotification(s.userId, "New Order! 📦", `Order ${newOrder.orderNumber} ready`, { orderId: newOrder.id });
       }
       
-      // Check if user has a staff assignment (picker/driver)
-      const staffRecord = await storage.getStoreStaffByUserId(user[0].id);
-      let staffInfo = null;
+      if (items?.length) {
+        await db.insert(orderItems).values(items.map((i: any) => ({
+          orderId: newOrder.id, productId: i.productId, quantity: i.quantity, priceAtEntry: String(i.price || 0)
+        })));
+      }
       
-      if (staffRecord) {
-        const store = await storage.getStoreById(staffRecord.storeId);
-        staffInfo = {
-          storeId: staffRecord.storeId,
-          storeName: store?.name || "Unknown Store",
-          role: staffRecord.role,
-          status: staffRecord.status,
+      await storage.clearCart(userId);
+      res.status(201).json(newOrder);
+    } catch (error) {
+      console.error("❌ Create order error:", error);
+      res.status(500).json({ error: "Failed to create order" });
+    }
+  });
+
+  app.patch("/api/orders/:id/take", async (req, res) => {
+    try {
+      const { staffId, role } = req.body;
+      const updateData: any = {};
+      if (role === 'picker') { updateData.pickerId = staffId; updateData.status = 'picking'; }
+      else if (role === 'driver') { updateData.driverId = staffId; updateData.status = 'delivering'; }
+      const [updated] = await db.update(orders).set(updateData).where(eq(orders.id, req.params.id)).returning();
+      res.json(updated);
+    } catch (error) {
+      console.error("❌ Take order error:", error);
+      res.status(500).json({ error: "Failed to assign" });
+    }
+  });
+
+  app.patch("/api/orders/:id/status", async (req, res) => {
+    try {
+      const { status } = req.body;
+      const [updated] = await db.update(orders).set({ status }).where(eq(orders.id, req.params.id)).returning();
+      if (updated) {
+        await sendPushNotification(updated.userId, "Order Update", `Status: ${status}`);
+        if (status === "pending" && updated.storeId) {
+          const staff = await db.select().from(storeStaff).where(eq(storeStaff.storeId, updated.storeId));
+          for (const s of staff) await sendPushNotification(s.userId, "New Order!", `#${updated.orderNumber}`);
+        }
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("❌ Update status error:", error);
+      res.status(500).json({ error: "Failed to update" });
+    }
+  });
+
+  app.get("/api/orders", async (req, res) => {
+    try {
+      const { userId, storeId, role } = req.query;
+      const filters = [];
+      if (role === 'customer') {
+        if (!userId) return res.status(400).json({ error: "userId required" });
+        filters.push(eq(orders.userId, userId as string));
+      } else if (role === 'picker' || role === 'driver') {
+        if (!storeId) return res.status(400).json({ error: "storeId required" });
+        filters.push(eq(orders.storeId, storeId as string));
+      } else {
+        if (!userId) return res.status(400).json({ error: "userId required" });
+        filters.push(eq(orders.userId, userId as string));
+      }
+      
+      const userOrders = await db.select().from(orders).where(and(...filters)).orderBy(sql`${orders.createdAt} DESC`);
+      const ordersWithItems = await Promise.all(userOrders.map(async (o) => {
+        const items = await db.select({
+          id: orderItems.id, quantity: orderItems.quantity, priceAtEntry: orderItems.priceAtEntry,
+          productId: orderItems.productId, productName: products.name, productImage: products.image,
+        }).from(orderItems).leftJoin(products, eq(orderItems.productId, products.id)).where(eq(orderItems.orderId, o.id));
+        return { ...o, items };
+      }));
+      res.json(ordersWithItems);
+    } catch (error) {
+      console.error("❌ Fetch orders error:", error);
+      res.status(500).json({ error: "Failed to fetch orders" });
+    }
+  });
+
+  app.get("/api/orders/:id", async (req, res) => {
+    try {
+      const [orderData] = await db.select().from(orders).where(eq(orders.id, req.params.id)).limit(1);
+      if (!orderData) return res.status(404).json({ error: "Order not found" });
+      const items = await db.select({
+        id: orderItems.id, quantity: orderItems.quantity, priceAtEntry: orderItems.priceAtEntry,
+        productId: orderItems.productId, productName: products.name,
+      }).from(orderItems).leftJoin(products, eq(orderItems.productId, products.id)).where(eq(orderItems.orderId, req.params.id));
+      let driverName = null;
+      if (orderData.driverId) {
+        const driver = await storage.getUser(orderData.driverId);
+        driverName = driver?.username;
+      }
+      res.json({ ...orderData, items, driverName });
+    } catch (error) {
+      console.error("❌ Fetch order error:", error);
+      res.status(500).json({ error: "Failed to fetch order" });
+    }
+  });
+
+  // ==================== 11. MESSAGES ====================
+  console.log("💬 Registering message routes...");
+  
+  app.get("/api/orders/:id/messages", async (req, res) => {
+    try {
+      const msgs = await db.select().from(messages).where(eq(messages.orderId, req.params.id)).orderBy(sql`${messages.createdAt} ASC`);
+      res.json(msgs);
+    } catch (error) {
+      console.error("❌ Messages error:", error);
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  });
+
+  app.post("/api/messages", uploadChat.single("file"), async (req, res) => {
+    try {
+      const { orderId, senderId, type } = req.body;
+      let content = req.body.content;
+      if (req.file) content = `http://10.30.230.213:5000/uploads/chat/${req.file.filename}`;
+      if (!orderId || !senderId || !content) return res.status(400).json({ error: "Missing fields" });
+      
+      const [msg] = await db.insert(messages).values({
+        orderId, senderId, type: type || (req.file ? "image" : "text"), content,
+      }).returning();
+      
+      const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+      const receiverId = (senderId === order.userId) ? order.driverId : order.userId;
+      if (receiverId) await sendPushNotification(receiverId, "New Message 💬", type === "image" ? "📷 Image" : content, { orderId });
+      res.json(msg);
+    } catch (error) {
+      console.error("❌ Send message error:", error);
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+
+  // ==================== 12. STORES ====================
+  console.log("🏪 Registering store routes...");
+  
+  app.get("/api/stores/available", async (req, res) => {
+    try {
+      const lat = parseFloat(req.query.lat as string);
+      const lng = parseFloat(req.query.lng as string);
+      if (isNaN(lat) || isNaN(lng)) return res.status(400).json({ error: "Valid lat/lng required" });
+      const nearest = await findNearestAvailableStore(lat, lng);
+      if (!nearest) return res.json({ available: false, message: "No stores available", stores: await getStoresWithAvailability(lat, lng) });
+      res.json({ available: true, store: nearest, estimatedDeliveryMinutes: estimateDeliveryTime(nearest.distanceKm), codAllowed: nearest.codAllowed });
+    } catch (error) {
+      console.error("❌ Store availability error:", error);
+      res.status(500).json({ error: "Failed to check availability" });
+    }
+  });
+
+  app.get("/api/stores", async (req, res) => {
+    try {
+      const stores = await storage.getStores();
+      res.json(stores);
+    } catch (error) {
+      console.error("❌ Stores error:", error);
+      res.status(500).json({ error: "Failed to fetch stores" });
+    }
+  });
+
+  app.get("/api/stores/:id/inventory", async (req, res) => {
+    try {
+      const inv = await storage.getStoreInventoryWithProducts(req.params.id);
+      res.json(inv);
+    } catch (error) {
+      console.error("❌ Inventory error:", error);
+      res.status(500).json({ error: "Failed to fetch inventory" });
+    }
+  });
+
+  app.get("/api/stores/:id/staff", async (req, res) => {
+    try {
+      const staff = await storage.getStoreStaff(req.params.id);
+      res.json(staff);
+    } catch (error) {
+      console.error("❌ Staff error:", error);
+      res.status(500).json({ error: "Failed to fetch staff" });
+    }
+  });
+
+  app.post("/api/staff/toggle-status", async (req, res) => {
+    try {
+      const { userId, status } = req.body;
+      if (!userId || !["online", "offline"].includes(status)) return res.status(400).json({ error: "Invalid input" });
+      const staff = await storage.getStoreStaffByUserId(userId);
+      if (!staff) return res.status(404).json({ error: "Staff not found" });
+      const updated = await storage.updateStaffStatus(staff.id, status);
+      res.json(updated);
+    } catch (error) {
+      console.error("❌ Toggle status error:", error);
+      res.status(500).json({ error: "Failed to update" });
+    }
+  });
+
+  // ==================== 13. ADMIN ====================
+  console.log("👑 Registering admin routes...");
+  
+  app.get("/api/admin/metrics", async (req, res) => {
+    try {
+      const stores = await storage.getStores();
+      const allOrders = await storage.getAllOrders();
+      const metrics = await Promise.all(stores.map(async (store) => {
+        const staff = await storage.getStoreStaff(store.id);
+        const storeOrders = allOrders.filter((o) => o.storeId === store.id);
+        const enriched = await Promise.all(staff.map(async (s) => {
+          const u = await storage.getUser(s.userId);
+          return { ...s, user: u ? { id: u.id, username: u.username, phone: u.phone, email: u.email } : null };
+        }));
+        return {
+          ...store, totalStaff: staff.length, onlineStaff: staff.filter(s => s.status === "online").length,
+          staff: enriched, pickers: enriched.filter(s => s.role === "picker"), drivers: enriched.filter(s => s.role === "driver"),
+          orderCount: storeOrders.length, pendingOrders: storeOrders.filter(o => o.status === "pending").length,
+          activeOrders: storeOrders.filter(o => ["confirmed", "preparing", "ready", "on_the_way"].includes(o.status || "")).length,
         };
-        
-        // If user's role doesn't match their staff assignment, update it
-        if (user[0].role !== staffRecord.role && user[0].role !== "admin") {
-          await db.update(users).set({ role: staffRecord.role }).where(eq(users.id, user[0].id));
-          user[0] = { ...user[0], role: staffRecord.role };
-        }
-      }
-      
-      res.json({
-        user: {
-          id: user[0].id,
-          username: user[0].username,
-          phone: user[0].phone,
-          email: user[0].email,
-          role: user[0].role,
-        },
-        staffInfo,
-      });
+      }));
+      res.json({ stores: metrics, orderSummary: {
+        total: allOrders.length, pending: allOrders.filter(o => o.status === "pending").length,
+        confirmed: allOrders.filter(o => o.status === "confirmed").length, preparing: allOrders.filter(o => o.status === "preparing").length,
+        ready: allOrders.filter(o => o.status === "ready").length, onTheWay: allOrders.filter(o => o.status === "on_the_way").length,
+        delivered: allOrders.filter(o => o.status === "delivered").length, cancelled: allOrders.filter(o => o.status === "cancelled").length,
+      }, timestamp: new Date().toISOString() });
     } catch (error) {
-      console.error("OTP verify error:", error);
-      res.status(500).json({ error: "Failed to verify OTP" });
+      console.error("❌ Admin metrics error:", error);
+      res.status(500).json({ error: "Failed" });
     }
   });
 
-  // Apple Sign-In
-  // NOTE: This is a demo implementation. In production:
-  // - Validate the identity token using Apple's public keys
-  // - Verify the token signature and claims
-  // - Check token expiration and audience
-  app.post("/api/auth/apple", async (req: Request, res: Response) => {
+  // Vouchers, Seed, Owner routes...
+  app.get("/api/vouchers", async (req, res) => {
     try {
-      const { appleId, email, fullName } = req.body;
-      if (!appleId) {
-        return res.status(400).json({ error: "Apple ID is required" });
-      }
-      
-      // In production, validate the identity token here
-      // using Apple's public keys (https://appleid.apple.com/auth/keys)
-      
-      // Find or create user - also check by email if Apple user not found
-      let user = await db.select().from(users).where(eq(users.appleId, appleId)).limit(1);
-      
-      if (user.length === 0 && email) {
-        // Check if user exists with same email (may have been created as staff placeholder)
-        const existingUser = await db.select().from(users).where(eq(users.email, email)).limit(1);
-        if (existingUser.length > 0) {
-          // Link Apple account to existing user
-          await db.update(users).set({ appleId }).where(eq(users.id, existingUser[0].id));
-          user = await db.select().from(users).where(eq(users.id, existingUser[0].id)).limit(1);
-        }
-      }
-      
-      if (user.length === 0) {
-        const username = fullName || email?.split("@")[0] || `apple_${appleId.slice(-6)}`;
-        const newUser = await db.insert(users).values({
-          username,
-          password: Math.random().toString(36).slice(-8),
-          appleId,
-          email: email || null,
-          role: "customer",
-        }).returning();
-        user = newUser;
-      }
-      
-      // Check if user has a staff assignment (picker/driver)
-      const staffRecord = await storage.getStoreStaffByUserId(user[0].id);
-      let staffInfo = null;
-      
-      if (staffRecord) {
-        const store = await storage.getStoreById(staffRecord.storeId);
-        staffInfo = {
-          storeId: staffRecord.storeId,
-          storeName: store?.name || "Unknown Store",
-          role: staffRecord.role,
-          status: staffRecord.status,
-        };
-        
-        // If user's role doesn't match their staff assignment, update it
-        if (user[0].role !== staffRecord.role && user[0].role !== "admin") {
-          await db.update(users).set({ role: staffRecord.role }).where(eq(users.id, user[0].id));
-          user[0] = { ...user[0], role: staffRecord.role };
-        }
-      }
-      
-      res.json({
-        user: {
-          id: user[0].id,
-          username: user[0].username,
-          phone: user[0].phone,
-          email: user[0].email,
-          role: user[0].role,
-        },
-        staffInfo,
-      });
+      res.json(await storage.getVouchers());
     } catch (error) {
-      console.error("Apple auth error:", error);
-      res.status(500).json({ error: "Apple authentication failed" });
+      res.status(500).json({ error: "Failed" });
     }
   });
 
-  // Google Sign-In
-  // NOTE: This is a demo implementation. In production:
-  // - Validate the Google ID token using Google's tokeninfo endpoint
-  // - Verify the token audience matches your client ID
-  app.post("/api/auth/google", async (req: Request, res: Response) => {
-    try {
-      const { googleId, email, name } = req.body;
-      if (!googleId) {
-        return res.status(400).json({ error: "Google ID is required" });
-      }
-      
-      // In production, validate the ID token here
-      // using Google's tokeninfo endpoint or google-auth-library
-      
-      // Find or create user
-      let user = await db.select().from(users).where(eq(users.googleId, googleId)).limit(1);
-      
-      if (user.length === 0) {
-        // Check if user exists with same email
-        if (email) {
-          const existingUser = await db.select().from(users).where(eq(users.email, email)).limit(1);
-          if (existingUser.length > 0) {
-            // Link Google account to existing user
-            await db.update(users)
-              .set({ googleId })
-              .where(eq(users.id, existingUser[0].id));
-            user = await db.select().from(users).where(eq(users.id, existingUser[0].id)).limit(1);
-          }
-        }
-        
-        // Create new user if not found
-        if (user.length === 0) {
-          const username = name || email?.split("@")[0] || `google_${googleId.slice(-6)}`;
-          const newUser = await db.insert(users).values({
-            username,
-            password: Math.random().toString(36).slice(-8),
-            googleId,
-            email: email || null,
-            role: "customer",
-          }).returning();
-          user = newUser;
-        }
-      }
-      
-      res.json({
-        user: {
-          id: user[0].id,
-          username: user[0].username,
-          phone: user[0].phone,
-          email: user[0].email,
-          role: user[0].role,
-        },
-      });
-    } catch (error) {
-      console.error("Google auth error:", error);
-      res.status(500).json({ error: "Google authentication failed" });
-    }
-  });
-
-  // Seed data endpoint (for initial data population)
   app.post("/api/seed", async (_req: Request, res: Response) => {
     try {
       const existingCategories = await storage.getCategories();
@@ -1720,8 +1234,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to seed data" });
     }
   });
-
+  
   const httpServer = createServer(app);
-
   return httpServer;
 }

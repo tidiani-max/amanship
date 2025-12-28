@@ -50,3 +50,18 @@ args = "npm run all:dev"
 waitForPort = 8081
 ensurePreviewReachable = "/status"
 
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run all:dev"
+waitForPort = 8081
+ensurePreviewReachable = "/status"
+
+[[workflows.workflow]]
+name = "me"
+mode = "sequential"
+author = 51024757
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "ls"
+

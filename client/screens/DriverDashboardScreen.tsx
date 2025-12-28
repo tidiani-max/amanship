@@ -11,6 +11,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
+import { useNavigation } from "@react-navigation/native";
 
 interface Order {
   id: string;
@@ -46,60 +47,71 @@ function OrderCard({
   isUpdating: boolean;
 }) {
   const { theme } = useTheme();
-  const createdAt = new Date(order.createdAt);
+  const navigation = useNavigation<any>(); // Add this hook
   
+  // Logic to determine the current phase of delivery
+  const isAtStore = order.status === "packed" || order.status === "ready";
+  const isOnWay = order.status === "delivering";
+
   const getStatusColor = () => {
-    switch (order.status) {
-      case "packed": return theme.warning;
-      case "ready": return theme.secondary;
-      case "delivering": return theme.primary;
-      case "delivered": return theme.success;
-      default: return theme.textSecondary;
-    }
+    if (isAtStore) return theme.warning;
+    if (isOnWay) return theme.primary;
+    return theme.success;
   };
 
-  const getNextStatus = () => {
-    switch (order.status) {
-      case "packed": return "delivering";
-      case "ready": return "delivering";
-      case "delivering": return "delivered";
-      default: return null;
-    }
+  const getButtonConfig = () => {
+    if (isAtStore) return { label: "Pick Up", status: "delivering", icon: "package" as const };
+    if (isOnWay) return { label: "Complete", status: "delivered", icon: "check-circle" as const };
+    return null;
   };
 
-  const getButtonLabel = () => {
-    switch (order.status) {
-      case "packed": return "Start Delivery";
-      case "ready": return "Start Delivery";
-      case "delivering": return "Mark Delivered";
-      default: return null;
-    }
-  };
+const openMaps = () => {
+  // Use the snake_case keys from your DB results
+  console.log("DRIVER APP SEEING LAT:", (order as any).customer_lat);
+  console.log("DRIVER APP SEEING LNG:", (order as any).customer_lng);
+    // ------------------------------
+  const lat = (order as any).customer_lat || order.customerLat;
+  const lng = (order as any).customer_lng || order.customerLng;
+  
+  if (!lat || !lng) {
+    Alert.alert("Error", "Coordinate data missing for this order.");
+    return;
+  }
 
-  const openMaps = () => {
-    const lat = order.customerLat;
-    const lng = order.customerLng;
-    const url = Platform.select({
-      ios: `maps:0,0?q=${lat},${lng}`,
-      android: `geo:${lat},${lng}?q=${lat},${lng}`,
-      default: `https://maps.google.com/?q=${lat},${lng}`,
+  const label = encodeURIComponent("Customer Drop-off (Nowhere Cafe)");
+
+  // PLATFORM SPECIFIC STRATEGY
+  if (Platform.OS === 'android') {
+    /** * google.navigation:q=LAT,LNG 
+     * This is the "Gold Standard" for drivers. 
+     * It forces Google Maps into Turn-by-Turn mode to the EXACT GPS point,
+     * ignoring nearby landmarks like SMA 8.
+     */
+    Linking.openURL(`google.navigation:q=${lat},${lng}`).catch(() => {
+      // Fallback if navigation intent fails
+      Linking.openURL(`geo:${lat},${lng}?q=${lat},${lng}(${label})`);
     });
-    
+  } else {
+    /**
+     * Apple Maps: ll (Lat/Long) + q (Label)
+     * ll sets the center of the map on the coordinates.
+     * q puts the pin exactly there.
+     */
+    const url = `maps://?ll=${lat},${lng}&q=${label}&t=m`;
     Linking.openURL(url).catch(() => {
-      Alert.alert("Error", "Could not open maps");
+      Linking.openURL(`http://maps.google.com/?q=${lat},${lng}`);
     });
-  };
-
-  const nextStatus = getNextStatus();
-  const buttonLabel = getButtonLabel();
+  }
+};
+  const config = getButtonConfig();
 
   return (
     <Card style={styles.orderCard}>
       <View style={styles.orderHeader}>
         <View>
-          <ThemedText type="h3">{order.orderNumber}</ThemedText>
+          <ThemedText type="h3">#{order.id}</ThemedText>
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            {createdAt.toLocaleTimeString()}
+            {isAtStore ? "📍 Waiting at Store" : "🚚 In Transit"}
           </ThemedText>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor() + "20" }]}>
@@ -112,49 +124,70 @@ function OrderCard({
       <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
       <View style={styles.orderDetails}>
+        {/* Visual Delivery Progress Bar */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 8 }}>
+          <Feather name="home" size={14} color={theme.textSecondary} />
+          <View style={{ flex: 1, height: 2, backgroundColor: isAtStore ? theme.border : theme.primary }} />
+          <Feather name="truck" size={16} color={isOnWay ? theme.primary : theme.textSecondary} />
+          <View style={{ flex: 1, height: 2, backgroundColor: theme.border }} />
+          <Feather name="map-pin" size={14} color={theme.textSecondary} />
+        </View>
+
         <View style={styles.detailRow}>
           <Feather name="package" size={16} color={theme.textSecondary} />
-          <ThemedText type="body" style={{ color: theme.text }}>
-            {order.items.length} item{order.items.length !== 1 ? "s" : ""}
-          </ThemedText>
+          <ThemedText type="body">{order.items.length} items to deliver</ThemedText>
         </View>
+
         <View style={styles.detailRow}>
           <Feather name="credit-card" size={16} color={theme.textSecondary} />
-          <ThemedText type="body" style={{ color: theme.text }}>
-            {order.paymentMethod === "cod" ? "Cash on Delivery" : "Paid Online"}
+          <ThemedText type="body">
+            {order.paymentMethod === "cod" ? "CASH ON DELIVERY" : "PREPAID"}
           </ThemedText>
         </View>
-        {order.paymentMethod === "cod" ? (
-          <View style={[styles.codBadge, { backgroundColor: theme.warning + "20" }]}>
-            <ThemedText type="body" style={{ color: theme.warning }}>
-              Collect: Rp {order.total.toLocaleString()}
-            </ThemedText>
+
+        {order.paymentMethod === "cod" && (
+          <View style={[styles.codBadge, { backgroundColor: theme.warning + "15", borderLeftWidth: 4, borderLeftColor: theme.warning }]}>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>COLLECT FROM CUSTOMER:</ThemedText>
+            <ThemedText type="h3" style={{ color: theme.warning }}>Rp {order.total.toLocaleString()}</ThemedText>
           </View>
-        ) : null}
+        )}
       </View>
 
+      {/* ACTION BUTTONS */}
       <View style={styles.orderActions}>
-        <Pressable
-          style={[styles.mapButton, { borderColor: theme.secondary }]}
+        {/* Map Button */}
+        <Pressable 
+          style={[styles.mapButton, { borderColor: theme.border }]} 
           onPress={openMaps}
         >
-          <Feather name="map-pin" size={18} color={theme.secondary} />
-          <ThemedText type="button" style={{ color: theme.secondary }}>Navigate</ThemedText>
+          <Feather name="navigation" size={18} color={theme.secondary} />
+        </Pressable>
+
+        {/* Chat Button - Primary way to contact customer */}
+        <Pressable 
+          style={[styles.mapButton, { borderColor: theme.border }]} 
+          onPress={() => navigation.navigate("Chat", { orderId: order.id })}
+        >
+          <Feather name="message-square" size={18} color={theme.primary} />
         </Pressable>
         
-        {nextStatus && buttonLabel ? (
+        {/* Main Status Toggle (Pick Up / Complete) */}
+        {config && (
           <Pressable
             style={[styles.actionButton, { backgroundColor: theme.primary, flex: 1 }]}
-            onPress={() => onUpdateStatus(order.id, nextStatus)}
+            onPress={() => onUpdateStatus(order.id, config.status)}
             disabled={isUpdating}
           >
             {isUpdating ? (
-              <ActivityIndicator size="small" color={theme.buttonText} />
+              <ActivityIndicator size="small" color="#FFF" />
             ) : (
-              <ThemedText type="button" style={{ color: theme.buttonText }}>{buttonLabel}</ThemedText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Feather name={config.icon} size={16} color="#FFF" />
+                <ThemedText type="button" style={{ color: "#FFF" }}>{config.label}</ThemedText>
+              </View>
             )}
           </Pressable>
-        ) : null}
+        )}
       </View>
     </Card>
   );
@@ -187,15 +220,19 @@ export default function DriverDashboardScreen() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
-  const { data: dashboard, isLoading, refetch, isRefetching } = useQuery<DriverDashboardData>({
+ const { data: dashboard, isLoading, refetch, isRefetching } = useQuery<DriverDashboardData>({
     queryKey: ["/api/driver/dashboard", user?.id],
     queryFn: async () => {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : ""}/api/driver/dashboard?userId=${user?.id}`);
+      const baseUrl = "http://10.30.230.213:5000"; 
+      const response = await fetch(`${baseUrl}/api/driver/dashboard?userId=${user?.id}`);
       if (!response.ok) throw new Error("Failed to fetch dashboard");
       return response.json();
     },
     enabled: !!user?.id && user?.role === "driver",
-    refetchInterval: 15000,
+    // CHANGE THIS: 3 seconds for instant-feel updates
+    refetchInterval: 3000, 
+    // Keeps syncing even if the driver switches apps briefly
+    refetchOnWindowFocus: true, 
   });
 
   const toggleStatusMutation = useMutation({
@@ -212,22 +249,21 @@ export default function DriverDashboardScreen() {
     },
   });
 
-  const updateOrderMutation = useMutation({
+ const updateOrderMutation = useMutation({
     mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
       setUpdatingOrderId(orderId);
       const response = await apiRequest("PUT", `/api/driver/orders/${orderId}/status`, { userId: user?.id, status });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to update order");
-      }
       return response.json();
+    },
+    // This runs the moment the button is clicked
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/driver/dashboard"] });
+      const previousData = queryClient.getQueryData(["/api/driver/dashboard"]);
+      // (Optional) Manually update cache here for zero-latency UI
+      return { previousData };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/driver/dashboard"] });
-      setUpdatingOrderId(null);
-    },
-    onError: (error: Error) => {
-      Alert.alert("Error", error.message);
       setUpdatingOrderId(null);
     },
   });

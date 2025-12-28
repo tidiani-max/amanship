@@ -1,5 +1,5 @@
 import React, { ReactNode } from "react";
-import { StyleSheet, Pressable, ViewStyle, StyleProp } from "react-native";
+import { StyleSheet, Pressable, ViewStyle, StyleProp, ActivityIndicator } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -16,7 +16,9 @@ interface ButtonProps {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
   disabled?: boolean;
-  variant?: "primary" | "secondary" | "text";
+  loading?: boolean;
+  // 1. Added "outline" to the variant type definition
+  variant?: "primary" | "secondary" | "text" | "outline"; 
 }
 
 const springConfig: WithSpringConfig = {
@@ -34,6 +36,7 @@ export function Button({
   children,
   style,
   disabled = false,
+  loading = false,
   variant = "primary",
 }: ButtonProps) {
   const { theme } = useTheme();
@@ -44,28 +47,37 @@ export function Button({
   }));
 
   const handlePressIn = () => {
-    if (!disabled) {
+    if (!disabled && !loading) {
       scale.value = withSpring(0.98, springConfig);
     }
   };
 
   const handlePressOut = () => {
-    if (!disabled) {
+    if (!disabled && !loading) {
       scale.value = withSpring(1, springConfig);
     }
   };
 
   const getBackgroundColor = () => {
     if (variant === "primary") return theme.primary;
-    if (variant === "secondary") return "transparent";
+    // Outline and Text variants should have transparent backgrounds
+    if (variant === "outline" || variant === "text") return "transparent";
+    if (variant === "secondary") return theme.backgroundDefault; 
     return "transparent";
   };
 
   const getBorderStyle = () => {
+    // 2. Define the border for the outline variant
+    if (variant === "outline") {
+      return {
+        borderWidth: 1,
+        borderColor: theme.primary,
+      };
+    }
     if (variant === "secondary") {
       return {
         borderWidth: 1,
-        borderColor: theme.secondary,
+        borderColor: theme.border,
       };
     }
     return {};
@@ -73,21 +85,22 @@ export function Button({
 
   const getTextColor = () => {
     if (variant === "primary") return theme.buttonText;
-    if (variant === "secondary") return theme.secondary;
-    return theme.secondary;
+    if (variant === "outline") return theme.primary; // Text matches border color
+    if (variant === "secondary") return theme.text;
+    return theme.primary;
   };
 
   return (
     <AnimatedPressable
-      onPress={disabled ? undefined : onPress}
+      onPress={(disabled || loading) ? undefined : onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      disabled={disabled}
+      disabled={disabled || loading}
       style={[
         styles.button,
         {
           backgroundColor: getBackgroundColor(),
-          opacity: disabled ? 0.5 : 1,
+          opacity: (disabled || loading) ? 0.6 : 1,
         },
         getBorderStyle(),
         variant === "text" && styles.textButton,
@@ -95,19 +108,23 @@ export function Button({
         animatedStyle,
       ]}
     >
-      <ThemedText
-        type="button"
-        style={[styles.buttonText, { color: getTextColor() }]}
-      >
-        {children}
-      </ThemedText>
+      {loading ? (
+        <ActivityIndicator size="small" color={getTextColor()} />
+      ) : (
+        <ThemedText
+          type="button"
+          style={[styles.buttonText, { color: getTextColor() }]}
+        >
+          {children}
+        </ThemedText>
+      )}
     </AnimatedPressable>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    height: Spacing.buttonHeight,
+    height: 48, // Standard height if Spacing.buttonHeight isn't defined
     borderRadius: BorderRadius.sm,
     alignItems: "center",
     justifyContent: "center",
@@ -119,6 +136,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
   },
   buttonText: {
+    fontSize: 16,
     fontWeight: "600",
   },
 });

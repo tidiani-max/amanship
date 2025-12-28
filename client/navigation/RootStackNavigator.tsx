@@ -24,11 +24,17 @@ import LanguageScreen from "@/screens/LanguageScreen";
 import AboutScreen from "@/screens/AboutScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { Product, Category, Order, CartItem, Address, Voucher } from "@/types";
+import PhoneSignupScreen from "@/screens/onboarding/PhoneSignupScreen"; 
+import { useAuth } from "@/context/AuthContext";
+import ChatScreen from "@/screens/ChatScreen";
+
 
 export type RootStackParamList = {
   Onboarding: undefined;
   Main: undefined;
+  Auth: undefined;
   Category: { category: Category };
+  Chat: { orderId: string };
   ProductDetail: { product: Product };
   Cart: undefined;
   Checkout: undefined;
@@ -49,168 +55,75 @@ export type RootStackParamList = {
   About: undefined;
 };
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
+
+// ... (keep your existing imports)
 
 export default function RootStackNavigator() {
   const screenOptions = useScreenOptions();
   const { hasCompletedOnboarding, isLoading, completeOnboarding } = useOnboarding();
+  const { isAuthenticated, user } = useAuth(); 
+  const Stack = createNativeStackNavigator<RootStackParamList>();
 
-  if (isLoading) {
-    return null;
-  }
+
+  if (isLoading) return null;
 
   return (
     <Stack.Navigator screenOptions={screenOptions}>
       {!hasCompletedOnboarding ? (
-        <Stack.Screen
-          name="Onboarding"
-          options={{ headerShown: false }}
-        >
+        <Stack.Screen name="Onboarding" options={{ headerShown: false }}>
           {() => <OnboardingNavigator onComplete={completeOnboarding} />}
         </Stack.Screen>
-      ) : (
+      ) : !isAuthenticated ? (
+  <Stack.Screen name="Auth" options={{ headerShown: false }}>
+    {() => <PhoneSignupScreen onComplete={() => {}} />}
+  </Stack.Screen>
+) : (
+        /* PHASE 3: ROLE-BASED PROTECTED APP */
         <>
-          <Stack.Screen
-            name="Main"
-            component={MainTabNavigator}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Category"
-            component={CategoryScreen}
-            options={({ route }) => ({
-              headerTitle: route.params.category.name,
-            })}
-          />
-          <Stack.Screen
-            name="ProductDetail"
-            component={ProductDetailScreen}
-            options={{
-              headerTitle: "",
-              headerTransparent: true,
-            }}
-          />
-          <Stack.Screen
-            name="Cart"
-            component={CartScreen}
-            options={{
-              headerTitle: "Your Cart",
-            }}
-          />
-          <Stack.Screen
-            name="Checkout"
-            component={CheckoutScreen}
-            options={{
-              headerTitle: "Checkout",
-            }}
-          />
-          <Stack.Screen
-            name="OrderSuccess"
-            component={OrderSuccessScreen}
-            options={{
-              headerShown: false,
-              gestureEnabled: false,
-            }}
-          />
-          <Stack.Screen
-            name="OrderTracking"
-            component={OrderTrackingScreen}
-            options={{
-              headerTitle: "Track Order",
-            }}
-          />
-          <Stack.Screen
-            name="OrderDetail"
-            component={OrderDetailScreen}
-            options={{
-              headerTitle: "Order Details",
-            }}
-          />
-          <Stack.Screen
-            name="VoiceOrderModal"
-            component={VoiceOrderModal}
-            options={{
-              presentation: "modal",
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
-            name="VoiceConfirm"
-            component={VoiceConfirmScreen}
-            options={{
-              headerTitle: "Confirm Your Order",
-            }}
-          />
-          <Stack.Screen
-            name="EditAddress"
-            component={EditAddressScreen}
-            options={{
-              headerTitle: "Edit Address",
-            }}
-          />
-          <Stack.Screen
-            name="HelpCenter"
-            component={HelpCenterScreen}
-            options={{
-              headerTitle: "Help Center",
-            }}
-          />
-          <Stack.Screen
-            name="Vouchers"
-            component={VouchersScreen}
-            options={{
-              headerTitle: "My Vouchers",
-            }}
-          />
-          <Stack.Screen
-            name="AdminDashboard"
-            component={AdminDashboardScreen}
-            options={{
-              headerTitle: "Admin Dashboard",
-            }}
-          />
-          <Stack.Screen
-            name="OwnerDashboard"
-            component={OwnerDashboardScreen}
-            options={{
-              headerTitle: "Store Management",
-            }}
-          />
-          <Stack.Screen
-            name="PickerDashboard"
-            component={PickerDashboardScreen}
-            options={{
-              headerTitle: "Picker Dashboard",
-            }}
-          />
-          <Stack.Screen
-            name="DriverDashboard"
-            component={DriverDashboardScreen}
-            options={{
-              headerTitle: "Driver Dashboard",
-            }}
-          />
-          <Stack.Screen
-            name="Notifications"
-            component={NotificationsScreen}
-            options={{
-              headerTitle: "Notifications",
-            }}
-          />
-          <Stack.Screen
-            name="Language"
-            component={LanguageScreen}
-            options={{
-              headerTitle: "Language",
-            }}
-          />
-          <Stack.Screen
-            name="About"
-            component={AboutScreen}
-            options={{
-              headerTitle: "About",
-            }}
-          />
+          {/* --- ADMIN STACK --- */}
+          {user?.role === 'admin' && (
+            <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+          )}
+
+          {/* --- PICKER STACK --- */}
+          {user?.role === 'picker' && (
+            <Stack.Screen name="PickerDashboard" component={PickerDashboardScreen} />
+          )}
+
+          {/* --- DRIVER STACK --- */}
+          {user?.role === 'driver' && (
+            <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
+          )}
+
+          {/* --- REGULAR USER STACK --- */}
+          {(!user?.role || user?.role === 'user' || user?.role === 'customer') && (
+            <>
+              <Stack.Screen name="Main" component={MainTabNavigator} options={{ headerShown: false }} />
+              <Stack.Screen name="Category" component={CategoryScreen} />
+              <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+              <Stack.Screen name="Cart" component={CartScreen} />
+              <Stack.Screen name="Checkout" component={CheckoutScreen} />
+              <Stack.Screen name="OrderSuccess" component={OrderSuccessScreen} options={{ headerShown: false }} />
+              {/* Note: I'm moving Tracking/Detail to Shared below so Pickers/Drivers can see them too! */}
+              <Stack.Screen name="VoiceOrderModal" component={VoiceOrderModal} options={{ presentation: "modal" }} />
+              <Stack.Screen name="VoiceConfirm" component={VoiceConfirmScreen} />
+              <Stack.Screen name="EditAddress" component={EditAddressScreen} />
+              <Stack.Screen name="Vouchers" component={VouchersScreen} />
+            </>
+          )}
+
+          {/* --- SHARED SCREENS (Available to ALL roles) --- */}
+          {/* ADD THE CHAT SCREEN HERE */}
+          <Stack.Screen name="Chat" component={ChatScreen} options={{ headerTitle: "Chat with Rider" }} />
+          
+          {/* IMPORTANT: Move these here so Drivers/Pickers can also open order details */}
+          <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
+          <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
+          
+          <Stack.Screen name="Notifications" component={NotificationsScreen} />
+          <Stack.Screen name="Language" component={LanguageScreen} />
+          <Stack.Screen name="About" component={AboutScreen} />
+          <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
         </>
       )}
     </Stack.Navigator>

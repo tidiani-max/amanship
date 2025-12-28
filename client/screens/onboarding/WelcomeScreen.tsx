@@ -59,7 +59,7 @@ export default function WelcomeScreen() {
         />
         
         <ThemedText type="h1" style={styles.title}>
-          KilatGo
+          AmanShip
         </ThemedText>
         
         <ThemedText type="body" style={[styles.subtitle, { color: theme.textSecondary }]}>
