@@ -452,28 +452,71 @@ app.get("/api/picker/dashboard", async (req, res) => {
   console.log("🚗 Registering driver routes...");
   
   app.get("/api/driver/dashboard", async (req, res) => {
-    try {
-      console.log("🔍 Driver dashboard - userId:", req.query.userId);
-      const { userId } = req.query;
-      
-      const allOrders = await db.select().from(orders)
-        .where(or(eq(orders.driverId, userId as string), and(eq(orders.status, "packed"), isNull(orders.driverId))));
+  try {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: "Missing userId" });
 
-      console.log(`📊 ${allOrders.length} orders for driver`);
-      res.json({
+    // 1. Check if driver already has an active delivery
+    const activeOrders = await db
+      .select()
+      .from(orders)
+      .where(
+        and(
+          eq(orders.driverId, userId as string),
+          eq(orders.status, "delivering")
+        )
+      );
+
+    // 2. If active delivery exists → lock driver to that order only
+    if (activeOrders.length > 0) {
+      return res.json({
         user: { id: userId, role: "driver" },
         staffRecord: { status: "online" },
         orders: {
-          ready: allOrders.filter(o => o.status === "packed" && !o.driverId),
-          active: allOrders.filter(o => o.status === "delivering"),
-          completed: allOrders.filter(o => o.status === "delivered")
+          ready: [],
+          active: activeOrders,
+          completed: []
         }
       });
-    } catch (error) {
-      console.error("❌ Driver dashboard error:", error);
-      res.status(500).json({ error: "Failed" });
     }
-  });
+
+    // 3. Otherwise show only unassigned packed orders
+    const readyOrders = await db
+      .select()
+      .from(orders)
+      .where(
+        and(
+          eq(orders.status, "packed"),
+          isNull(orders.driverId)
+        )
+      );
+
+    const completedOrders = await db
+      .select()
+      .from(orders)
+      .where(
+        and(
+          eq(orders.driverId, userId as string),
+          eq(orders.status, "delivered")
+        )
+      );
+
+    res.json({
+      user: { id: userId, role: "driver" },
+      staffRecord: { status: "online" },
+      orders: {
+        ready: readyOrders,
+        active: [],
+        completed: completedOrders
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Driver dashboard error:", error);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
 
   app.put("/api/driver/orders/:id/status", async (req, res) => {
     try {
@@ -926,23 +969,55 @@ app.post("/api/orders", async (req, res) => {
     }
   });
 
-  app.patch("/api/orders/:id/status", async (req, res) => {
-    try {
-      const { status } = req.body;
-      const [updated] = await db.update(orders).set({ status }).where(eq(orders.id, req.params.id)).returning();
-      if (updated) {
-        await sendPushNotification(updated.userId, "Order Update", `Status: ${status}`);
-        if (status === "pending" && updated.storeId) {
-          const staff = await db.select().from(storeStaff).where(eq(storeStaff.storeId, updated.storeId));
-          for (const s of staff) await sendPushNotification(s.userId, "New Order!", `#${updated.orderNumber}`);
-        }
+app.put("/api/driver/orders/:id/status", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, userId } = req.body;
+
+    // Driver tries to pick order
+    if (status === "delivering") {
+      const [updated] = await db
+        .update(orders)
+        .set({
+          status: "delivering",
+          driverId: userId
+        })
+        .where(
+          and(
+            eq(orders.id, id),
+            isNull(orders.driverId) // 🔒 HARD LOCK
+          )
+        )
+        .returning();
+
+      if (!updated) {
+        return res.status(409).json({
+          error: "Order already taken by another driver"
+        });
       }
-      res.json(updated);
-    } catch (error) {
-      console.error("❌ Update status error:", error);
-      res.status(500).json({ error: "Failed to update" });
+
+      return res.json(updated);
     }
-  });
+
+    // Completing delivery
+    const [completed] = await db
+      .update(orders)
+      .set({ status })
+      .where(
+        and(
+          eq(orders.id, id),
+          eq(orders.driverId, userId)
+        )
+      )
+      .returning();
+
+    res.json(completed);
+  } catch (error) {
+    console.error("❌ Driver order update error:", error);
+    res.status(500).json({ error: "Update failed" });
+  }
+});
+
 
   app.get("/api/orders", async (req, res) => {
     try {

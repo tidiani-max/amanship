@@ -40,12 +40,15 @@ interface DriverDashboardData {
 function OrderCard({ 
   order, 
   onUpdateStatus,
-  isUpdating 
+  isUpdating,
+  disabled
 }: { 
   order: Order; 
   onUpdateStatus: (orderId: string, status: string) => void;
   isUpdating: boolean;
+  disabled?: boolean;
 }) {
+
   const { theme } = useTheme();
   const navigation = useNavigation<any>(); // Add this hook
   
@@ -174,10 +177,17 @@ const openMaps = () => {
         {/* Main Status Toggle (Pick Up / Complete) */}
         {config && (
           <Pressable
-            style={[styles.actionButton, { backgroundColor: theme.primary, flex: 1 }]}
-            onPress={() => onUpdateStatus(order.id, config.status)}
-            disabled={isUpdating}
-          >
+  style={[
+    styles.actionButton,
+    {
+      backgroundColor: disabled ? "#999" : theme.primary,
+      flex: 1
+    }
+  ]}
+  onPress={() => onUpdateStatus(order.id, config.status)}
+  disabled={isUpdating || disabled}
+>
+
             {isUpdating ? (
               <ActivityIndicator size="small" color="#FFF" />
             ) : (
@@ -295,9 +305,15 @@ export default function DriverDashboardScreen() {
 
   const isOnline = dashboard?.staffRecord?.status === "online";
   const readyOrders = dashboard?.orders?.ready || [];
-  const activeOrders = dashboard?.orders?.active || [];
-  const completedOrders = dashboard?.orders?.completed || [];
-  const allActiveOrders = [...readyOrders, ...activeOrders];
+const activeOrders = dashboard?.orders?.active || [];
+const completedOrders = dashboard?.orders?.completed || [];
+
+// 🔒 DRIVER LOCK LOGIC
+const hasActiveDelivery = activeOrders.length > 0;
+
+// ❌ DO NOT merge ready + active
+const allActiveOrders = hasActiveDelivery ? activeOrders : readyOrders;
+
 
   const todayEarnings = completedOrders.reduce((sum, order) => sum + order.total, 0);
 
@@ -333,8 +349,11 @@ export default function DriverDashboardScreen() {
         <View style={styles.statsRow}>
           <Card style={styles.statCard}>
             <Feather name="truck" size={24} color={theme.primary} />
-            <ThemedText type="h2" style={{ marginTop: Spacing.xs }}>{allActiveOrders.length}</ThemedText>
-            <ThemedText type="caption" style={{ color: theme.textSecondary }}>Active</ThemedText>
+            <ThemedText type="h2" style={{ marginTop: Spacing.xs }}>
+  {activeOrders.length}
+</ThemedText>
+<ThemedText type="caption">Active</ThemedText>
+
           </Card>
           <Card style={styles.statCard}>
             <Feather name="check-circle" size={24} color={theme.success} />
