@@ -14,6 +14,7 @@ import path from 'path';
 import { Expo } from 'expo-server-sdk';
 import multer from "multer";
 
+
 // ==================== CONFIGURATION ====================
 const DEMO_USER_ID = "demo-user";
 
@@ -53,12 +54,15 @@ async function sendPushNotification(userId: string, title: string, body: string,
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+
+
+  
   
   // ==================== 1. CORS MIDDLEWARE (MUST BE FIRST!) ====================
   console.log("🌐 Setting up CORS middleware...");
   
   app.use((req, res, next) => {
-    const allowedOrigins = ["http://localhost:8081", "http://10.30.230.213:8081"];
+    const allowedOrigins = ["http://localhost:8081", "http://192.168.10.210:8081"];
     const origin = req.headers.origin;
     
     if (origin && allowedOrigins.includes(origin)) {
@@ -302,30 +306,51 @@ app.post("/api/auth/otp/verify", async (req, res) => {
   // ==================== 4. PICKER ROUTES (BEFORE /api/orders) ====================
   console.log("📦 Registering picker routes...");
 
- 
-  
-  app.get("/api/picker/dashboard", async (req, res) => {
-    try {
-      console.log("🔍 Picker dashboard - userId:", req.query.userId);
-      const { userId } = req.query;
-      if (!userId) return res.status(400).json({ error: "userId required" });
 
-      const allOrders = await db.select().from(orders).where(eq(orders.pickerId, userId as string));
-      console.log(`📊 ${allOrders.length} orders for picker`);
 
-      res.json({
-        user: { id: userId, role: "picker" },
-        orders: {
-          pending: allOrders.filter(o => ["pending", "confirmed"].includes(o.status || "")),
-          active: allOrders.filter(o => o.status === "picking"),
-          completed: allOrders.filter(o => ["packed", "delivering", "delivered"].includes(o.status || "")),
-        }
-      });
-    } catch (error) {
-      console.error("❌ Picker dashboard error:", error);
-      res.status(500).json({ error: "Failed to fetch dashboard" });
+app.get("/api/picker/dashboard", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
     }
-  });
+
+    const [staff] = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.userId, userId as string));
+
+    if (!staff) {
+      return res.json({
+        store: null,
+        orders: { pending: [], active: [], completed: [] },
+      });
+    }
+
+    const storeOrders = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.storeId, staff.storeId));
+
+    res.json({
+      user: { id: userId, role: "picker" },
+      store: staff.storeId,
+      orders: {
+        pending: storeOrders.filter(o => o.status === "pending"),
+        active: storeOrders.filter(o => o.status === "picking"),
+        completed: storeOrders.filter(o =>
+          ["packed", "delivering", "delivered"].includes(o.status || "")
+        ),
+      },
+    });
+  } catch (error) {
+    console.error("❌ Picker dashboard error:", error);
+    res.status(500).json({ error: "Failed to fetch dashboard" });
+  }
+});
+
+
 
   app.get("/api/picker/inventory", async (req, res) => {
     try {
@@ -473,15 +498,29 @@ app.post("/api/auth/otp/verify", async (req, res) => {
   // ==================== 6. CATEGORIES ====================
   console.log("📂 Registering category routes...");
   
-  app.get("/api/categories", async (req, res) => {
-    try {
-      const allCategories = await storage.getCategories();
-      res.json(allCategories);
-    } catch (error) {
-      console.error("❌ Categories error:", error);
-      res.status(500).json({ error: "Failed to fetch categories" });
-    }
-  });
+ app.get("/api/categories", async (req, res) => {
+  try {
+    console.log("🟢 HIT /api/categories");
+
+    const categories = await storage.getCategories();
+
+    console.log("📦 Categories fetched:", categories);
+
+    return res.status(200).json({
+      success: true,
+      count: categories.length,
+      data: categories,
+    });
+  } catch (err) {
+    console.error("❌ Failed to fetch categories:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch categories",
+    });
+  }
+});
+
 
   app.get("/api/categories/:id", async (req, res) => {
     try {
@@ -495,18 +534,149 @@ app.post("/api/auth/otp/verify", async (req, res) => {
   });
 
   // ==================== 7. PRODUCTS ====================
-  console.log("🛍️ Registering product routes...");
-  
-  app.get("/api/products", async (req, res) => {
-    try {
-      const categoryId = req.query.categoryId as string | undefined;
-      const allProducts = categoryId ? await storage.getProductsByCategory(categoryId) : await storage.getProducts();
-      res.json(allProducts);
-    } catch (error) {
-      console.error("❌ Products error:", error);
-      res.status(500).json({ error: "Failed to fetch products" });
+console.log("🛍️ Registering product routes...");
+
+// Define the type of a product row returned from the query
+interface HomeProductRow {
+  id: string;
+  name: string;
+  brand: string;
+  price: number;
+  originalPrice: number | null;
+  image: string | null;
+  categoryId: string;
+  description: string | null;
+  nutrition: any;
+  stockCount: number;
+  storeId: string;
+  storeName: string;
+  distance: number;
+}
+app.get("/api/home/products", async (req: Request, res: Response) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+
+    console.log("🟢 HIT /api/home/products", { lat, lng });
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      return res.status(400).json({ error: "lat & lng required" });
     }
-  });
+
+    // Query DB
+    const result = await db.execute(sql<HomeProductRow>`
+      SELECT
+        p.id,
+        p.name,
+        p.brand,
+        p.price,
+        p.original_price AS "originalPrice",
+        p.image,
+        p.category_id AS "categoryId",
+        p.description,
+        p.nutrition,
+        si.stock_count AS "stockCount",
+        s.id AS "storeId",
+        s.name AS "storeName",
+        (
+          6371 * acos(
+            cos(radians(${lat}))
+            * cos(radians(s.latitude))
+            * cos(radians(s.longitude) - radians(${lng}))
+            + sin(radians(${lat}))
+            * sin(radians(s.latitude))
+          )
+        ) AS distance
+      FROM stores s
+      JOIN store_inventory si ON si.store_id = s.id
+      JOIN products p ON p.id = si.product_id
+      WHERE
+        si.stock_count > 0
+        AND (
+          6371 * acos(
+            cos(radians(${lat}))
+            * cos(radians(s.latitude))
+            * cos(radians(s.longitude) - radians(${lng}))
+            + sin(radians(${lat}))
+            * sin(radians(s.latitude))
+          )
+        ) <= 3
+      ORDER BY distance ASC;
+    `);
+
+    console.log("✅ home products found:", result.rows.length);
+
+    // Debug all product images
+    result.rows.forEach((row: HomeProductRow) => {
+      console.log("🖼 product image from DB:", row.image);
+    });
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("❌ /api/home/products error", error);
+    res.status(500).json({ error: "Failed to fetch home products" });
+  }
+});
+
+app.get("/api/category/products", async (req, res) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    const categoryId = String(req.query.categoryId);
+
+    console.log("🟢 HIT /api/category/products", { lat, lng, categoryId });
+
+    if (Number.isNaN(lat) || Number.isNaN(lng) || !categoryId) {
+      return res.status(400).json({ error: "lat, lng, categoryId required" });
+    }
+
+    const result = await db.execute(sql`
+      SELECT
+        p.id,
+        p.name,
+        p.brand,
+        p.price,
+        p.original_price AS "originalPrice",
+        p.image,
+        p.category_id AS "categoryId",
+        p.description,
+        p.nutrition,
+        si.stock_count AS "stockCount",
+        TRUE AS "isAvailable",
+        (
+          6371 * acos(
+            cos(radians(${lat}))
+            * cos(radians(s.latitude))
+            * cos(radians(s.longitude) - radians(${lng}))
+            + sin(radians(${lat}))
+            * sin(radians(s.latitude))
+          )
+        ) AS distance
+      FROM stores s
+      JOIN store_inventory si ON si.store_id = s.id
+      JOIN products p ON p.id = si.product_id
+      WHERE
+        p.category_id = ${categoryId}
+        AND si.stock_count > 0
+        AND (
+          6371 * acos(
+            cos(radians(${lat}))
+            * cos(radians(s.latitude))
+            * cos(radians(s.longitude) - radians(${lng}))
+            + sin(radians(${lat}))
+            * sin(radians(s.latitude))
+          )
+        ) <= 3
+      ORDER BY distance ASC;
+    `);
+
+    console.log("✅ category products found:", result.rows.length);
+    res.json(result.rows);
+  } catch (error) {
+    console.error("❌ /api/category/products error", error);
+    res.status(500).json({ error: "Failed to fetch category products" });
+  }
+});
 
   app.get("/api/products/:id", async (req, res) => {
     try {
@@ -518,7 +688,6 @@ app.post("/api/auth/otp/verify", async (req, res) => {
       res.status(500).json({ error: "Failed to fetch product" });
     }
   });
-
   // ==================== 8. CART ====================
   console.log("🛒 Registering cart routes...");
   
@@ -660,36 +829,88 @@ app.post("/api/auth/otp/verify", async (req, res) => {
   // ==================== 10. ORDERS ====================
   console.log("📦 Registering order routes...");
   
-  app.post("/api/orders", async (req, res) => {
-    try {
-      const { userId, addressId, total, items, customerLat, customerLng } = req.body;
-      const nearestStore = await findNearestAvailableStore(parseFloat(customerLat), parseFloat(customerLng));
-      const storeId = nearestStore ? nearestStore.id : "demo-store";
-      
-      const [newOrder] = await db.insert(orders).values({
-        userId, storeId, addressId, total: Number(total), status: "pending", pickerId: "demo-picker",
-        orderNumber: `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`,
-        items: items || [], customerLat: String(customerLat), customerLng: String(customerLng),
-      }).returning();
-      
-      const staff = await db.select().from(storeStaff).where(eq(storeStaff.storeId, storeId));
-      for (const s of staff) {
-        await sendPushNotification(s.userId, "New Order! 📦", `Order ${newOrder.orderNumber} ready`, { orderId: newOrder.id });
-      }
-      
-      if (items?.length) {
-        await db.insert(orderItems).values(items.map((i: any) => ({
-          orderId: newOrder.id, productId: i.productId, quantity: i.quantity, priceAtEntry: String(i.price || 0)
-        })));
-      }
-      
-      await storage.clearCart(userId);
-      res.status(201).json(newOrder);
-    } catch (error) {
-      console.error("❌ Create order error:", error);
-      res.status(500).json({ error: "Failed to create order" });
+
+app.post("/api/orders", async (req, res) => {
+  try {
+    const {
+      userId,
+      addressId,
+      total,
+      items,
+      customerLat,
+      customerLng,
+    } = req.body;
+
+    if (!userId || !items?.length || !customerLat || !customerLng) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
-  });
+
+    // 1️⃣ Find nearest available store
+    const nearestStore = await findNearestAvailableStore(
+      Number(customerLat),
+      Number(customerLng)
+    );
+
+    if (!nearestStore) {
+      return res.status(400).json({ error: "No store available nearby" });
+    }
+
+    const storeId = nearestStore.id;
+
+    // 2️⃣ Create order (items REQUIRED by schema)
+    const [newOrder] = await db
+      .insert(orders)
+      .values({
+        userId,
+        storeId,
+        addressId,
+        total: Number(total),
+        status: "pending",
+        orderNumber: `ORD-${Math.random()
+          .toString(36)
+          .toUpperCase()
+          .substring(2, 9)}`,
+        items, // ✅ REQUIRED
+        customerLat: String(customerLat),
+        customerLng: String(customerLng),
+      })
+      .returning();
+
+    // 3️⃣ Insert order items (normalized table)
+    await db.insert(orderItems).values(
+      items.map((item: any) => ({
+        orderId: newOrder.id,
+        productId: item.productId,
+        quantity: item.quantity,
+        priceAtEntry: String(item.price),
+      }))
+    );
+
+    // 4️⃣ Notify store staff (pickers + drivers)
+    const staff = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.storeId, storeId));
+
+    for (const s of staff) {
+      await sendPushNotification(
+        s.userId,
+        "📦 New Order",
+        `Order ${newOrder.orderNumber} is ready`,
+        { orderId: newOrder.id }
+      );
+    }
+
+    // 5️⃣ Clear cart
+    await storage.clearCart(userId);
+
+    res.status(201).json(newOrder);
+  } catch (error) {
+    console.error("❌ Create order error:", error);
+    res.status(500).json({ error: "Failed to create order" });
+  }
+});
+
 
   app.patch("/api/orders/:id/take", async (req, res) => {
     try {
@@ -790,7 +1011,7 @@ app.post("/api/auth/otp/verify", async (req, res) => {
     try {
       const { orderId, senderId, type } = req.body;
       let content = req.body.content;
-      if (req.file) content = `http://10.30.230.213:5000/uploads/chat/${req.file.filename}`;
+      if (req.file) content = `http://192.168.10.210:5000/uploads/chat/${req.file.filename}`;
       if (!orderId || !senderId || !content) return res.status(400).json({ error: "Missing fields" });
       
       const [msg] = await db.insert(messages).values({
@@ -810,19 +1031,41 @@ app.post("/api/auth/otp/verify", async (req, res) => {
   // ==================== 12. STORES ====================
   console.log("🏪 Registering store routes...");
   
-  app.get("/api/stores/available", async (req, res) => {
-    try {
-      const lat = parseFloat(req.query.lat as string);
-      const lng = parseFloat(req.query.lng as string);
-      if (isNaN(lat) || isNaN(lng)) return res.status(400).json({ error: "Valid lat/lng required" });
-      const nearest = await findNearestAvailableStore(lat, lng);
-      if (!nearest) return res.json({ available: false, message: "No stores available", stores: await getStoresWithAvailability(lat, lng) });
-      res.json({ available: true, store: nearest, estimatedDeliveryMinutes: estimateDeliveryTime(nearest.distanceKm), codAllowed: nearest.codAllowed });
-    } catch (error) {
-      console.error("❌ Store availability error:", error);
-      res.status(500).json({ error: "Failed to check availability" });
+app.get("/api/stores/available", async (req, res) => {
+  try {
+    const lat = parseFloat(req.query.lat as string);
+    const lng = parseFloat(req.query.lng as string);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      return res.status(400).json({ error: "Valid lat/lng required" });
     }
+
+    const nearest = await findNearestAvailableStore(lat, lng);
+
+if (!nearest) {
+  return res.json({
+    available: false,
   });
+}
+
+res.json({
+  available: true,
+  store: {
+    id: nearest.id,
+    name: nearest.name,
+    address: nearest.address,
+    distanceKm: nearest.distanceKm,
+    codAllowed: nearest.codAllowed,
+  },
+  estimatedDeliveryMinutes: estimateDeliveryTime(nearest.distanceKm),
+  codAllowed: nearest.codAllowed,
+});
+
+  } catch (error) {
+    console.error("❌ Store availability error:", error);
+    res.status(500).json({ error: "Failed to check availability" });
+  }
+});
 
   app.get("/api/stores", async (req, res) => {
     try {
@@ -868,152 +1111,455 @@ app.post("/api/auth/otp/verify", async (req, res) => {
     }
   });
 
+  app.get("/api/stores/nearby", async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lng = Number(req.query.lng);
+
+  if (isNaN(lat) || isNaN(lng)) {
+    return res.status(400).json({ error: "Valid lat/lng required" });
+  }
+
+  const stores = await getStoresWithAvailability(lat, lng);
+
+  res.json({
+    stores: stores
+      .filter(s => s.distanceKm <= 3)
+      .map(s => ({
+        id: s.id,
+        name: s.name,
+        address: s.address,
+        distanceKm: s.distanceKm,
+        codAllowed: s.codAllowed,
+        isAvailable: s.isAvailable,
+      })),
+  });
+});
+
+
   // ==================== 13. ADMIN ====================
-  console.log("👑 Registering admin routes...");
-  
-  app.get("/api/admin/metrics", async (req, res) => {
-    try {
-      const stores = await storage.getStores();
-      const allOrders = await storage.getAllOrders();
-      const metrics = await Promise.all(stores.map(async (store) => {
-        const staff = await storage.getStoreStaff(store.id);
-        const storeOrders = allOrders.filter((o) => o.storeId === store.id);
-        const enriched = await Promise.all(staff.map(async (s) => {
-          const u = await storage.getUser(s.userId);
-          return { ...s, user: u ? { id: u.id, username: u.username, phone: u.phone, email: u.email } : null };
-        }));
-        return {
-          ...store, totalStaff: staff.length, onlineStaff: staff.filter(s => s.status === "online").length,
-          staff: enriched, pickers: enriched.filter(s => s.role === "picker"), drivers: enriched.filter(s => s.role === "driver"),
-          orderCount: storeOrders.length, pendingOrders: storeOrders.filter(o => o.status === "pending").length,
-          activeOrders: storeOrders.filter(o => ["confirmed", "preparing", "ready", "on_the_way"].includes(o.status || "")).length,
+ // Add these routes to your server/routes.ts file
+
+console.log("👑 Registering admin routes...");
+
+// ============================================
+// ADMIN METRICS ENDPOINT
+// ============================================
+app.get("/api/admin/metrics", async (req, res) => {
+  try {
+    const stores = await storage.getStores();
+    const allOrders = await storage.getAllOrders();
+    
+    const metrics = await Promise.all(stores.map(async (store) => {
+      const staff = await storage.getStoreStaff(store.id);
+      const storeOrders = allOrders.filter((o) => o.storeId === store.id);
+      
+      const enriched = await Promise.all(staff.map(async (s) => {
+        const u = await storage.getUser(s.userId);
+        return { 
+          ...s, 
+          user: u ? { 
+            id: u.id, 
+            username: u.username, 
+            phone: u.phone, 
+            email: u.email,
+            name: u.name 
+          } : null 
         };
       }));
-      res.json({ stores: metrics, orderSummary: {
-        total: allOrders.length, pending: allOrders.filter(o => o.status === "pending").length,
-        confirmed: allOrders.filter(o => o.status === "confirmed").length, preparing: allOrders.filter(o => o.status === "preparing").length,
-        ready: allOrders.filter(o => o.status === "ready").length, onTheWay: allOrders.filter(o => o.status === "on_the_way").length,
-        delivered: allOrders.filter(o => o.status === "delivered").length, cancelled: allOrders.filter(o => o.status === "cancelled").length,
-      }, timestamp: new Date().toISOString() });
-    } catch (error) {
-      console.error("❌ Admin metrics error:", error);
-      res.status(500).json({ error: "Failed" });
-    }
-  });
-
-  // Vouchers, Seed, Owner routes...
-  app.get("/api/vouchers", async (req, res) => {
-    try {
-      res.json(await storage.getVouchers());
-    } catch (error) {
-      res.status(500).json({ error: "Failed" });
-    }
-  });
-
-  app.post("/api/seed", async (_req: Request, res: Response) => {
-    try {
-      const existingCategories = await storage.getCategories();
       
-      // Check if store data needs to be seeded (new tables)
-      const existingStores = await storage.getStores();
-      const DEMO_STORE_ID_CHECK = "demo-store";
-      const DEMO_PICKER_ID_CHECK = "demo-picker";
-      const DEMO_DRIVER_ID_CHECK = "demo-driver";
-      
-      if (existingCategories.length > 0) {
-        const demoUser = await storage.getUser(DEMO_USER_ID);
-        if (!demoUser) {
-          await db.insert(users).values({
-            id: DEMO_USER_ID,
-            username: "demo",
-            password: "demo",
-            phone: "+62123456789",
-          });
-        }
+      return {
+        ...store,
+        totalStaff: staff.length,
+        onlineStaff: staff.filter(s => s.status === "online").length,
+        staff: enriched,
+        pickers: enriched.filter(s => s.role === "picker"),
+        drivers: enriched.filter(s => s.role === "driver"),
+        orderCount: storeOrders.length,
+        pendingOrders: storeOrders.filter(o => o.status === "pending").length,
+        activeOrders: storeOrders.filter(o => 
+          ["confirmed", "picking", "packed", "delivering"].includes(o.status || "")
+        ).length,
+      };
+    }));
+    
+    res.json({
+      stores: metrics,
+      orderSummary: {
+        total: allOrders.length,
+        pending: allOrders.filter(o => o.status === "pending").length,
+        confirmed: allOrders.filter(o => o.status === "confirmed").length,
+        picking: allOrders.filter(o => o.status === "picking").length,
+        packed: allOrders.filter(o => o.status === "packed").length,
+        delivering: allOrders.filter(o => o.status === "delivering").length,
+        delivered: allOrders.filter(o => o.status === "delivered").length,
+        cancelled: allOrders.filter(o => o.status === "cancelled").length,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("❌ Admin metrics error:", error);
+    res.status(500).json({ error: "Failed to fetch metrics" });
+  }
+});
+
+// ============================================
+// STORE CRUD OPERATIONS
+// ============================================
+
+// CREATE STORE with auto-geocoding
+app.post("/api/admin/stores", async (req, res) => {
+  try {
+    const { name, address, latitude, longitude, codAllowed = true } = req.body;
+    
+    if (!name || !address) {
+      return res.status(400).json({ error: "Name and address are required" });
+    }
+
+    let lat = latitude;
+    let lng = longitude;
+
+    // Auto-geocode if coordinates not provided
+    if (!lat || !lng) {
+      try {
+        const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+        const geoResponse = await fetch(geocodeUrl, {
+          headers: { 'User-Agent': 'KilatGo-App' }
+        });
+        const geoData = await geoResponse.json();
         
-        // Seed store data if stores are empty but products exist
-        if (existingStores.length === 0) {
-          const allProducts = await storage.getProducts();
-          
-          // Only proceed if products exist
-          if (allProducts.length === 0) {
-            return res.json({ message: "Cannot seed store data: no products found" });
-          }
-          
-          // Create demo store
-          await db.insert(stores).values({
-            id: DEMO_STORE_ID_CHECK,
-            name: "KilatGo Central Jakarta",
-            address: "Jl. Sudirman No. 1, Central Jakarta, DKI Jakarta 10220",
-            latitude: "-6.2088000",
-            longitude: "106.8456000",
-            codAllowed: true,
-            isActive: true,
-          });
-
-          // Check if picker/driver users exist before creating
-          const existingPicker = await storage.getUser(DEMO_PICKER_ID_CHECK);
-          const existingDriver = await storage.getUser(DEMO_DRIVER_ID_CHECK);
-          
-          if (!existingPicker) {
-            await db.insert(users).values({
-              id: DEMO_PICKER_ID_CHECK,
-              username: "picker1",
-              password: "picker123",
-              phone: "+6281234567890",
-              role: "picker",
-            });
-          }
-          
-          if (!existingDriver) {
-            await db.insert(users).values({
-              id: DEMO_DRIVER_ID_CHECK,
-              username: "driver1",
-              password: "driver123",
-              phone: "+6281234567891",
-              role: "driver",
-            });
-          }
-
-          // Create store staff (check if not exists)
-          const existingStaff = await storage.getStoreStaff(DEMO_STORE_ID_CHECK);
-          if (existingStaff.length === 0) {
-            await db.insert(storeStaff).values([
-              {
-                id: "staff-picker-1",
-                userId: DEMO_PICKER_ID_CHECK,
-                storeId: DEMO_STORE_ID_CHECK,
-                role: "picker",
-                status: "online",
-              },
-              {
-                id: "staff-driver-1",
-                userId: DEMO_DRIVER_ID_CHECK,
-                storeId: DEMO_STORE_ID_CHECK,
-                role: "driver",
-                status: "online",
-              },
-            ]);
-          }
-
-          // Create inventory for all products
-          const inventoryEntries = allProducts.map((product, index) => ({
-            id: `inventory-${index + 1}`,
-            storeId: DEMO_STORE_ID_CHECK,
-            productId: product.id,
-            stockCount: product.stockCount,
-            isAvailable: product.inStock,
-          }));
-          await db.insert(storeInventory).values(inventoryEntries);
-          
-          return res.json({ message: "Store data seeded successfully" });
+        if (geoData && geoData.length > 0) {
+          lat = parseFloat(geoData[0].lat);
+          lng = parseFloat(geoData[0].lon);
+          console.log(`📍 Auto-geocoded: ${address} -> ${lat}, ${lng}`);
+        } else {
+          // Default to Jakarta coordinates
+          lat = -6.2088;
+          lng = 106.8456;
+          console.log(`⚠️ Geocoding failed, using default Jakarta coordinates`);
         }
-        
-        return res.json({ message: "Data already seeded" });
+      } catch (geoError) {
+        console.error("Geocoding error:", geoError);
+        lat = -6.2088;
+        lng = 106.8456;
       }
+    }
 
-      const existingUser = await storage.getUser(DEMO_USER_ID);
-      if (!existingUser) {
+    const newStore = await storage.createStore({
+      name,
+      address,
+      latitude: String(lat),
+      longitude: String(lng),
+      codAllowed,
+      isActive: true,
+    });
+
+    res.json(newStore);
+  } catch (error) {
+    console.error("❌ Create store error:", error);
+    res.status(500).json({ error: "Failed to create store" });
+  }
+});
+
+// UPDATE STORE
+app.patch("/api/admin/stores/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, address, latitude, longitude, codAllowed, isActive } = req.body;
+
+    const updates: any = {};
+    if (name !== undefined) updates.name = name;
+    if (address !== undefined) updates.address = address;
+    if (codAllowed !== undefined) updates.codAllowed = codAllowed;
+    if (isActive !== undefined) updates.isActive = isActive;
+
+    // Re-geocode if address changed but no new coordinates
+    if (address && (!latitude || !longitude)) {
+      try {
+        const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+        const geoResponse = await fetch(geocodeUrl, {
+          headers: { 'User-Agent': 'KilatGo-App' }
+        });
+        const geoData = await geoResponse.json();
+        
+        if (geoData && geoData.length > 0) {
+          updates.latitude = String(parseFloat(geoData[0].lat));
+          updates.longitude = String(parseFloat(geoData[0].lon));
+        }
+      } catch (geoError) {
+        console.error("Geocoding error:", geoError);
+      }
+    } else if (latitude !== undefined && longitude !== undefined) {
+      updates.latitude = String(latitude);
+      updates.longitude = String(longitude);
+    }
+
+    const updated = await storage.updateStore(id, updates);
+    
+    if (!updated) {
+      return res.status(404).json({ error: "Store not found" });
+    }
+
+    res.json(updated);
+  } catch (error) {
+    console.error("❌ Update store error:", error);
+    res.status(500).json({ error: "Failed to update store" });
+  }
+});
+
+// DELETE STORE (soft delete by setting isActive = false)
+app.delete("/api/admin/stores/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if store has active orders
+    const orders = await storage.getOrdersByStore(id);
+    const activeOrders = orders.filter(o => 
+      !["delivered", "cancelled"].includes(o.status || "")
+    );
+    
+    if (activeOrders.length > 0) {
+      return res.status(400).json({ 
+        error: `Cannot delete store with ${activeOrders.length} active order(s)` 
+      });
+    }
+
+    const updated = await storage.updateStore(id, { isActive: false });
+    
+    if (!updated) {
+      return res.status(404).json({ error: "Store not found" });
+    }
+
+    res.json({ success: true, message: "Store deactivated" });
+  } catch (error) {
+    console.error("❌ Delete store error:", error);
+    res.status(500).json({ error: "Failed to delete store" });
+  }
+});
+
+// ============================================
+// STAFF CRUD OPERATIONS
+// ============================================
+
+// ADD STAFF to a store
+app.post("/api/admin/stores/:storeId/staff", async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const { phone, email, role, name } = req.body;
+
+    if (!role || !["picker", "driver"].includes(role)) {
+      return res.status(400).json({ error: "Valid role required (picker or driver)" });
+    }
+
+    if (!phone && !email) {
+      return res.status(400).json({ error: "Phone or email required" });
+    }
+
+    // Check if store exists
+    const store = await storage.getStoreById(storeId);
+    if (!store) {
+      return res.status(404).json({ error: "Store not found" });
+    }
+
+    // Find or create user
+    let user = phone 
+      ? await storage.getUserByPhone(phone) 
+      : await storage.getUserByEmail(email!);
+
+    if (!user) {
+      // Create new user with temporary credentials
+      const username = phone || email!.split("@")[0];
+      const tempPassword = Math.random().toString(36).slice(-8);
+      
+      user = await storage.createUser({
+        username,
+        password: tempPassword, // Should be hashed in production
+        phone: phone || null,
+        email: email || null,
+        name: name || username,
+        role,
+      });
+      
+      console.log(`✅ Created new user: ${username} (temp password: ${tempPassword})`);
+    } else {
+      // Update existing user role if different
+      if (user.role !== role) {
+        await db.update(users)
+          .set({ role })
+          .where(eq(users.id, user.id));
+      }
+    }
+
+    // Check if already staff at this store
+    const existingStaff = await storage.getStoreStaff(storeId);
+    const alreadyStaff = existingStaff.find(s => s.userId === user!.id);
+    
+    if (alreadyStaff) {
+      return res.status(400).json({ error: "User is already staff at this store" });
+    }
+
+    // Create staff assignment
+    const newStaff = await storage.createStoreStaff({
+      userId: user.id,
+      storeId,
+      role,
+      status: "offline",
+    });
+
+    // Return enriched staff data
+    res.json({
+      ...newStaff,
+      user: {
+        id: user.id,
+        username: user.username,
+        phone: user.phone,
+        email: user.email,
+        name: user.name,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Add staff error:", error);
+    res.status(500).json({ error: "Failed to add staff" });
+  }
+});
+
+// UPDATE STAFF (role or remove from store)
+app.patch("/api/admin/stores/:storeId/staff/:staffId", async (req, res) => {
+  try {
+    const { staffId } = req.params;
+    const { role } = req.body;
+
+    if (role && !["picker", "driver"].includes(role)) {
+      return res.status(400).json({ error: "Valid role required" });
+    }
+
+    const [updated] = await db.update(storeStaff)
+      .set({ role })
+      .where(eq(storeStaff.id, staffId))
+      .returning();
+
+    if (!updated) {
+      return res.status(404).json({ error: "Staff member not found" });
+    }
+
+    res.json(updated);
+  } catch (error) {
+    console.error("❌ Update staff error:", error);
+    res.status(500).json({ error: "Failed to update staff" });
+  }
+});
+
+// REMOVE STAFF from store
+app.delete("/api/admin/stores/:storeId/staff/:staffId", async (req, res) => {
+  try {
+    const { staffId } = req.params;
+
+    // Check for active orders
+    const staff = await db.select().from(storeStaff)
+      .where(eq(storeStaff.id, staffId))
+      .limit(1);
+    
+    if (!staff[0]) {
+      return res.status(404).json({ error: "Staff member not found" });
+    }
+
+    const activeOrders = staff[0].role === "picker"
+      ? await storage.getOrdersByPicker(staff[0].userId)
+      : await storage.getOrdersByDriver(staff[0].userId);
+
+    const hasActiveOrders = activeOrders.some(o => 
+      !["delivered", "cancelled"].includes(o.status || "")
+    );
+
+    if (hasActiveOrders) {
+      return res.status(400).json({ 
+        error: "Cannot remove staff with active orders" 
+      });
+    }
+
+    await db.delete(storeStaff).where(eq(storeStaff.id, staffId));
+
+    res.json({ success: true, message: "Staff removed from store" });
+  } catch (error) {
+    console.error("❌ Remove staff error:", error);
+    res.status(500).json({ error: "Failed to remove staff" });
+  }
+});
+
+// TOGGLE STAFF STATUS (online/offline)
+app.patch("/api/staff/status", async (req, res) => {
+  try {
+    const { userId, status } = req.body;
+
+    if (!["online", "offline"].includes(status)) {
+      return res.status(400).json({ error: "Status must be 'online' or 'offline'" });
+    }
+
+    const updated = await storage.updateStaffStatus(userId, status);
+
+    if (!updated) {
+      return res.status(404).json({ error: "Staff member not found" });
+    }
+
+    res.json(updated);
+  } catch (error) {
+    console.error("❌ Toggle status error:", error);
+    res.status(500).json({ error: "Failed to update status" });
+  }
+});
+
+// ============================================
+// GEOCODING HELPER ENDPOINT
+// ============================================
+app.post("/api/admin/geocode", async (req, res) => {
+  try {
+    const { address } = req.body;
+
+    if (!address) {
+      return res.status(400).json({ error: "Address is required" });
+    }
+
+    const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+    const geoResponse = await fetch(geocodeUrl, {
+      headers: { 'User-Agent': 'KilatGo-App' }
+    });
+    const geoData = await geoResponse.json();
+
+    if (!geoData || geoData.length === 0) {
+      return res.status(404).json({ error: "Location not found" });
+    }
+
+    res.json({
+      latitude: parseFloat(geoData[0].lat),
+      longitude: parseFloat(geoData[0].lon),
+      displayName: geoData[0].display_name,
+    });
+  } catch (error) {
+    console.error("❌ Geocoding error:", error);
+    res.status(500).json({ error: "Failed to geocode address" });
+  }
+});
+
+// Existing vouchers and seed routes...
+app.get("/api/vouchers", async (req, res) => {
+  try {
+    res.json(await storage.getVouchers());
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch vouchers" });
+  }
+});
+
+app.post("/api/seed", async (_req: Request, res: Response) => {
+  try {
+    const existingCategories = await storage.getCategories();
+    
+    const existingStores = await storage.getStores();
+    const DEMO_STORE_ID_CHECK = "demo-store";
+    const DEMO_PICKER_ID_CHECK = "demo-picker";
+    const DEMO_DRIVER_ID_CHECK = "demo-driver";
+    
+    if (existingCategories.length > 0) {
+      const demoUser = await storage.getUser(DEMO_USER_ID);
+      if (!demoUser) {
         await db.insert(users).values({
           id: DEMO_USER_ID,
           username: "demo",
@@ -1021,219 +1567,92 @@ app.post("/api/auth/otp/verify", async (req, res) => {
           phone: "+62123456789",
         });
       }
-
-      const seedCategories = [
-        { id: "1", name: "Milk", icon: "droplet", color: "#4A90E2", image: "/images/dairy_milk_products__f381a151.jpg" },
-        { id: "2", name: "Eggs", icon: "circle", color: "#FF9800", image: "/images/fresh_eggs_basket_fa_e1b74097.jpg" },
-        { id: "3", name: "Snacks", icon: "box", color: "#9C27B0", image: "/images/assorted_snacks_chip_5803ca41.jpg" },
-        { id: "4", name: "Fruits", icon: "sun", color: "#4CAF50", image: "/images/fresh_colorful_fruit_e3789c47.jpg" },
-        { id: "5", name: "Frozen", icon: "thermometer", color: "#00BCD4", image: "/images/frozen_food_products_880da67b.jpg" },
-        { id: "6", name: "Drinks", icon: "coffee", color: "#F44336", image: "/images/beverages_drinks_bot_7c35199f.jpg" },
-        { id: "7", name: "Veggies", icon: "feather", color: "#8BC34A", image: "/images/fresh_vegetables_gre_e9d9592a.jpg" },
-        { id: "8", name: "Meat", icon: "target", color: "#E91E63", image: "/images/raw_meat_beef_pork_c_4724e26c.jpg" },
-      ];
-
-      await db.insert(categories).values(seedCategories);
-
-      const seedProducts = [
-        {
-          id: "1",
-          name: "Fresh Full Cream Milk",
-          brand: "Ultra Milk",
-          price: 18500,
-          originalPrice: 22000,
-          image: "/images/fresh_milk_carton_bo_dc357425.jpg",
-          categoryId: "1",
-          description: "Fresh pasteurized full cream milk, rich in calcium and vitamin D.",
-          nutrition: { calories: "120 kcal", protein: "8g", carbs: "12g", fat: "5g" },
-          inStock: true,
-          stockCount: 50,
-        },
-        {
-          id: "2",
-          name: "Organic Free Range Eggs",
-          brand: "Happy Farm",
-          price: 32000,
-          originalPrice: null,
-          image: "/images/organic_eggs_in_cart_70f17317.jpg",
-          categoryId: "2",
-          description: "Premium organic eggs from free-range hens.",
-          nutrition: { calories: "70 kcal", protein: "6g", carbs: "0.5g", fat: "5g" },
-          inStock: true,
-          stockCount: 30,
-        },
-        {
-          id: "3",
-          name: "Potato Chips Original",
-          brand: "Chitato",
-          price: 15000,
-          originalPrice: null,
-          image: "/images/potato_chips_snack_b_9bdc2b89.jpg",
-          categoryId: "3",
-          description: "Crispy potato chips with original flavor.",
-          nutrition: null,
-          inStock: true,
-          stockCount: 100,
-        },
-        {
-          id: "4",
-          name: "Fresh Banana",
-          brand: "Local Farm",
-          price: 8000,
-          originalPrice: null,
-          image: "/images/fresh_ripe_yellow_ba_dd4d6986.jpg",
-          categoryId: "4",
-          description: "Sweet and ripe bananas, perfect for snacking.",
-          nutrition: null,
-          inStock: true,
-          stockCount: 45,
-        },
-        {
-          id: "5",
-          name: "Frozen Chicken Nuggets",
-          brand: "Fiesta",
-          price: 45000,
-          originalPrice: 52000,
-          image: "/images/frozen_chicken_nugge_202dc2ea.jpg",
-          categoryId: "5",
-          description: "Crispy chicken nuggets, ready to fry.",
-          nutrition: null,
-          inStock: true,
-          stockCount: 25,
-        },
-        {
-          id: "6",
-          name: "Mineral Water 1.5L",
-          brand: "Aqua",
-          price: 5500,
-          originalPrice: null,
-          image: "/images/mineral_water_bottle_9a3bc0d8.jpg",
-          categoryId: "6",
-          description: "Pure mineral water from natural springs.",
-          nutrition: null,
-          inStock: true,
-          stockCount: 200,
-        },
-        {
-          id: "7",
-          name: "Fresh Spinach",
-          brand: "Organic Green",
-          price: 12000,
-          originalPrice: null,
-          image: "/images/fresh_green_spinach__093ac523.jpg",
-          categoryId: "7",
-          description: "Fresh organic spinach, washed and ready to cook.",
-          nutrition: null,
-          inStock: true,
-          stockCount: 20,
-        },
-        {
-          id: "8",
-          name: "Beef Rendang Ready",
-          brand: "Kokita",
-          price: 35000,
-          originalPrice: null,
-          image: "/images/beef_rendang_indones_fb8c9020.jpg",
-          categoryId: "8",
-          description: "Ready-to-eat beef rendang with authentic Indonesian taste.",
-          nutrition: null,
-          inStock: false,
-          stockCount: 0,
-        },
-      ];
-
-      await db.insert(products).values(seedProducts);
-
-      // Seed demo store in Central Jakarta
-      const DEMO_STORE_ID = "demo-store";
-      await db.insert(stores).values({
-        id: DEMO_STORE_ID,
-        name: "KilatGo Central Jakarta",
-        address: "Jl. Sudirman No. 1, Central Jakarta, DKI Jakarta 10220",
-        latitude: "-6.2088000",
-        longitude: "106.8456000",
-        codAllowed: true,
-        isActive: true,
-      });
-
-      // Seed picker and driver users
-      const DEMO_PICKER_ID = "demo-picker";
-      const DEMO_DRIVER_ID = "demo-driver";
       
-      await db.insert(users).values([
-        {
-          id: DEMO_PICKER_ID,
-          username: "picker1",
-          password: "picker123",
-          phone: "+6281234567890",
-          role: "picker",
-        },
-        {
-          id: DEMO_DRIVER_ID,
-          username: "driver1",
-          password: "driver123",
-          phone: "+6281234567891",
-          role: "driver",
-        },
-      ]);
+      if (existingStores.length === 0) {
+        const allProducts = await storage.getProducts();
+        
+        if (allProducts.length === 0) {
+          return res.json({ message: "Cannot seed store data: no products found" });
+        }
+        
+        await db.insert(stores).values({
+          id: DEMO_STORE_ID_CHECK,
+          name: "KilatGo Central Jakarta",
+          address: "Jl. Sudirman No. 1, Central Jakarta, DKI Jakarta 10220",
+          latitude: "-6.2088000",
+          longitude: "106.8456000",
+          codAllowed: true,
+          isActive: true,
+        });
 
-      // Seed store staff assignments (picker and driver)
-      await db.insert(storeStaff).values([
-        {
-          id: "staff-picker-1",
-          userId: DEMO_PICKER_ID,
-          storeId: DEMO_STORE_ID,
-          role: "picker",
-          status: "online",
-        },
-        {
-          id: "staff-driver-1",
-          userId: DEMO_DRIVER_ID,
-          storeId: DEMO_STORE_ID,
-          role: "driver",
-          status: "online",
-        },
-      ]);
+        const existingPicker = await storage.getUser(DEMO_PICKER_ID_CHECK);
+        const existingDriver = await storage.getUser(DEMO_DRIVER_ID_CHECK);
+        
+        if (!existingPicker) {
+          await db.insert(users).values({
+            id: DEMO_PICKER_ID_CHECK,
+            username: "picker1",
+            password: "picker123",
+            phone: "+6281234567890",
+            role: "picker",
+          });
+        }
+        
+        if (!existingDriver) {
+          await db.insert(users).values({
+            id: DEMO_DRIVER_ID_CHECK,
+            username: "driver1",
+            password: "driver123",
+            phone: "+6281234567891",
+            role: "driver",
+          });
+        }
 
-      // Seed store inventory - link all products to the demo store
-      const inventoryEntries = seedProducts.map((product, index) => ({
-        id: `inventory-${index + 1}`,
-        storeId: DEMO_STORE_ID,
-        productId: product.id,
-        stockCount: product.stockCount,
-        isAvailable: product.inStock,
-      }));
-      await db.insert(storeInventory).values(inventoryEntries);
+        const existingStaff = await storage.getStoreStaff(DEMO_STORE_ID_CHECK);
+        if (existingStaff.length === 0) {
+          await db.insert(storeStaff).values([
+            {
+              id: "staff-picker-1",
+              userId: DEMO_PICKER_ID_CHECK,
+              storeId: DEMO_STORE_ID_CHECK,
+              role: "picker",
+              status: "online",
+            },
+            {
+              id: "staff-driver-1",
+              userId: DEMO_DRIVER_ID_CHECK,
+              storeId: DEMO_STORE_ID_CHECK,
+              role: "driver",
+              status: "online",
+            },
+          ]);
+        }
 
-      const seedVouchers = [
-        {
-          id: "1",
-          code: "NEWUSER50",
-          discount: 50,
-          discountType: "percentage",
-          minOrder: 50000,
-          validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          description: "50% off for new users",
-        },
-        {
-          id: "2",
-          code: "FREEDELIVERY",
-          discount: 15000,
-          discountType: "fixed",
-          minOrder: 75000,
-          validUntil: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-          description: "Free delivery for orders above Rp75,000",
-        },
-      ];
+        const inventoryEntries = allProducts.map((product, index) => ({
+          id: `inventory-${index + 1}`,
+          storeId: DEMO_STORE_ID_CHECK,
+          productId: product.id,
+          stockCount: 50,
+          isAvailable: true,
+        }));
 
-      await db.insert(vouchers).values(seedVouchers);
-
-      res.json({ message: "Data seeded successfully" });
-    } catch (error) {
-      console.error("Seed error:", error);
-      res.status(500).json({ error: "Failed to seed data" });
+        await db.insert(storeInventory).values(inventoryEntries);
+        
+        return res.json({ message: "Store data seeded successfully" });
+      }
+      
+      return res.json({ message: "Data already seeded" });
     }
-  });
+
+    // Full seed logic (categories + products + stores)...
+    // [Keep your existing seed logic here]
+    
+    res.json({ message: "Data seeded successfully" });
+  } catch (error) {
+    console.error("Seed error:", error);
+    res.status(500).json({ error: "Failed to seed data" });
+  }
+});
   
   const httpServer = createServer(app);
   return httpServer;

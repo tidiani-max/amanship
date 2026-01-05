@@ -57,6 +57,23 @@ export interface IStorage {
   getProductsByCategory(categoryId: string): Promise<Product[]>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, updates: Partial<Product>): Promise<Product | undefined>;
+  getProductsWithInventory(
+  storeId: string,
+  categoryId?: string
+): Promise<{
+  id: string;
+  name: string;
+  brand: string;
+  price: number;
+  originalPrice: number | null;
+  image: string | null;
+  categoryId: string;
+  description: string | null;
+  nutrition: any;
+  stockCount: number;
+  isAvailable: boolean;
+}[]>;
+
   
   // Cart Methods
   getCartItems(userId: string): Promise<CartItem[]>;

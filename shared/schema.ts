@@ -101,14 +101,13 @@ export const products = pgTable("products", {
   name: text("name").notNull(),
   brand: text("brand").notNull().default("Generic"),
   price: integer("price").notNull(),
-  originalPrice: integer("original_price"), // Use this for discount logic (Original > Price)
+  originalPrice: integer("original_price"),
   image: text("image"),
   categoryId: varchar("category_id").notNull().references(() => categories.id),
-  description: text("description"), // Added for your requirements
+  description: text("description"),
   nutrition: jsonb("nutrition"),
-  inStock: boolean("in_stock").default(true).notNull(),
-  stockCount: integer("stock_count").default(0).notNull(),
 });
+
 
 export const storeInventory = pgTable("store_inventory", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

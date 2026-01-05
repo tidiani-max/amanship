@@ -35,7 +35,7 @@ export default function OrderTrackingScreen() {
   const { data: order, isLoading } = useQuery({
     queryKey: ["order-tracking", orderId],
     queryFn: async () => {
-      const response = await fetch(`http://10.30.230.213:5000/api/orders/${orderId}`);
+      const response = await fetch(`http://192.168.10.210:5000/api/orders/${orderId}`);
       if (!response.ok) throw new Error("Order not found");
       return response.json();
     },

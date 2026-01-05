@@ -7,15 +7,9 @@ export interface Product {
   image: string;
   category: string;
   description: string;
-  nutrition?: {
-    calories: string;
-    protein: string;
-    carbs: string;
-    fat: string;
-  };
-  inStock: boolean;
-  stockCount: number;
+  nutrition: any;
 }
+
 
 export interface Category {
   id: string;

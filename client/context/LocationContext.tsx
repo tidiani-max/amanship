@@ -10,6 +10,7 @@ interface StoreInfo {
   address: string;
   distanceKm: number;
   codAllowed: boolean;
+  
 }
 
 interface LocationContextType {

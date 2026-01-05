@@ -52,22 +52,21 @@ const { data: cartData = [], isLoading } = useQuery<CartItemFromAPI[]>({
   });
 
   const items: CartItemType[] = cartData.map((item) => ({
-    product: {
-      id: item.product.id,
-      name: item.product.name,
-      brand: item.product.brand,
-      price: item.product.price,
-      originalPrice: item.product.originalPrice || undefined,
-      image: item.product.image || "",
-      category: item.product.categoryId,
-      description: item.product.description || "",
-      nutrition: item.product.nutrition,
-      inStock: item.product.inStock,
-      stockCount: item.product.stockCount,
-    },
-    quantity: item.quantity,
-    cartItemId: item.id,
-  }));
+  product: {
+    id: item.product.id,
+    name: item.product.name,
+    brand: item.product.brand,
+    price: item.product.price,
+    originalPrice: item.product.originalPrice || undefined,
+    image: item.product.image || "",
+    category: item.product.categoryId,
+    description: item.product.description || "",
+    nutrition: item.product.nutrition,
+  },
+  quantity: item.quantity,
+  cartItemId: item.id,
+}));
+
 
 const addMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: string; quantity: number }) => {

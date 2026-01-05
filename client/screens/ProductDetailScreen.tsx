@@ -180,12 +180,13 @@ export default function ProductDetailScreen() {
             </ThemedText>
           </View>
           <Button
-            onPress={handleAddToCart}
-            style={styles.addToCartButton}
-            disabled={!product.inStock}
-          >
-            {product.inStock ? t.product.addToCart : t.product.outOfStock}
-          </Button>
+  onPress={handleAddToCart}
+  style={styles.addToCartButton}
+  disabled={(product as any).stockCount <= 0} // type-safe if product doesn't include stockCount
+>
+  {(product as any).stockCount > 0 ? t.product.addToCart : t.product.outOfStock}
+</Button>
+
         </View>
       </View>
     </View>

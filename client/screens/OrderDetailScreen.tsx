@@ -37,7 +37,7 @@ export default function OrderDetailScreen() {
   const { data: order, isLoading } = useQuery({
     queryKey: ["order-detail", initialOrder.id],
     queryFn: async () => {
-      const response = await fetch(`http://10.30.230.213:5000/api/orders/${initialOrder.id}`);
+      const response = await fetch(`http://192.168.10.210:5000/api/orders/${initialOrder.id}`);
       if (!response.ok) throw new Error("Order not found");
       return response.json();
     },

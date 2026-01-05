@@ -1,5 +1,12 @@
 import React from "react";
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Image } from "react-native";
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  Image,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -16,9 +23,15 @@ import { Product } from "@/types";
 import { useCart } from "@/context/CartContext";
 import { getImageUrl } from "@/lib/image-url";
 import { getApiUrl } from "@/lib/query-client";
+import { useLocation } from "@/context/LocationContext";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type CategoryRouteProp = RouteProp<RootStackParamList, "Category">;
+
+type UIProduct = Product & {
+  inStock: boolean;
+  stockCount: number;
+};
 
 interface APIProduct {
   id: string;
@@ -30,8 +43,8 @@ interface APIProduct {
   categoryId: string;
   description: string | null;
   nutrition: any;
-  inStock: boolean;
   stockCount: number;
+  isAvailable: boolean;
 }
 
 export default function CategoryScreen() {
@@ -44,16 +57,33 @@ export default function CategoryScreen() {
   const { category } = route.params;
   const { addToCart } = useCart();
 
-  const { data: apiProducts = [], isLoading } = useQuery<APIProduct[]>({
-    queryKey: ["/api/products", `categoryId=${category.id}`],
-    queryFn: async () => {
-      const url = new URL(`/api/products?categoryId=${category.id}`, getApiUrl());
-      const res = await fetch(url.toString());
-      return res.json();
-    },
-  });
 
-  const products: Product[] = apiProducts.map((p) => ({
+  // ✅ CORRECT ENDPOINT (backend already filters 3km + category)
+const { location } = useLocation();
+const latitude = location?.latitude;
+const longitude = location?.longitude;
+
+const { data: apiProducts = [], isLoading } = useQuery<APIProduct[]>({
+  queryKey: ["/api/category/products", category.id, latitude, longitude],
+  enabled: !!latitude && !!longitude && !!category.id,
+  queryFn: async () => {
+    const url = new URL("/api/category/products", getApiUrl());
+
+    url.searchParams.set("categoryId", category.id); // UUID ✅
+    url.searchParams.set("lat", String(latitude));
+    url.searchParams.set("lng", String(longitude));
+
+    console.log("📡 Category products:", url.toString());
+
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error("Failed to fetch category products");
+    return res.json();
+  },
+});
+
+
+  // ✅ SIMPLE MAPPING (NO FILTERING HERE)
+  const products: UIProduct[] = apiProducts.map((p) => ({
     id: p.id,
     name: p.name,
     brand: p.brand,
@@ -63,41 +93,48 @@ export default function CategoryScreen() {
     category: p.categoryId,
     description: p.description || "",
     nutrition: p.nutrition,
-    inStock: p.inStock,
     stockCount: p.stockCount,
+    inStock: p.isAvailable && p.stockCount > 0,
   }));
 
-  const formatPrice = (price: number) => {
-    return `Rp ${price.toLocaleString("id-ID")}`;
-  };
+  const formatPrice = (price: number) =>
+    `Rp ${price.toLocaleString("id-ID")}`;
 
-  const handleProductPress = (product: Product) => {
+  const handleProductPress = (product: UIProduct) =>
     navigation.navigate("ProductDetail", { product });
-  };
 
-  const handleAddToCart = (product: Product) => {
+  const handleAddToCart = (product: Product) =>
     addToCart(product, 1);
-  };
 
-  const renderProduct = ({ item }: { item: Product }) => (
+  const renderProduct = ({ item }: { item: UIProduct }) => (
     <Pressable
       style={[styles.productCard, { backgroundColor: theme.cardBackground }]}
       onPress={() => handleProductPress(item)}
     >
-      <View style={[styles.productImageContainer, { backgroundColor: theme.backgroundDefault }]}>
+      <View
+        style={[
+          styles.productImageContainer,
+          { backgroundColor: theme.backgroundDefault },
+        ]}
+      >
         {item.image ? (
-          <Image source={{ uri: getImageUrl(item.image) }} style={styles.productImage} />
+          <Image
+            source={{ uri: getImageUrl(item.image) }}
+            style={styles.productImage}
+          />
         ) : (
           <Feather name="package" size={32} color={theme.textSecondary} />
         )}
-        {!item.inStock ? (
+
+        {!item.inStock && (
           <View style={[styles.outOfStock, { backgroundColor: theme.error }]}>
-            <ThemedText type="small" style={{ color: "#FFFFFF", fontSize: 10 }}>
+            <ThemedText type="small" style={{ color: "#fff", fontSize: 10 }}>
               {t.product.outOfStock}
             </ThemedText>
           </View>
-        ) : null}
+        )}
       </View>
+
       <View style={styles.productInfo}>
         <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
           {item.name}
@@ -105,22 +142,28 @@ export default function CategoryScreen() {
         <ThemedText type="small" style={{ color: theme.textSecondary }}>
           {item.brand}
         </ThemedText>
+
         <View style={styles.priceRow}>
           <View>
             <ThemedText type="body" style={{ fontWeight: "600", color: theme.primary }}>
               {formatPrice(item.price)}
             </ThemedText>
-            {item.originalPrice ? (
+
+            {item.originalPrice && (
               <ThemedText
                 type="small"
-                style={{ color: theme.textSecondary, textDecorationLine: "line-through" }}
+                style={{
+                  color: theme.textSecondary,
+                  textDecorationLine: "line-through",
+                }}
               >
                 {formatPrice(item.originalPrice)}
               </ThemedText>
-            ) : null}
+            )}
           </View>
-          {item.inStock ? (
-            <Pressable 
+
+          {item.inStock && (
+            <Pressable
               style={[styles.addButton, { backgroundColor: theme.primary }]}
               onPress={(e) => {
                 e.stopPropagation();
@@ -129,7 +172,7 @@ export default function CategoryScreen() {
             >
               <Feather name="plus" size={16} color={theme.buttonText} />
             </Pressable>
-          ) : null}
+          )}
         </View>
       </View>
     </Pressable>
@@ -173,29 +216,11 @@ export default function CategoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  listContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  row: {
-    gap: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  productCard: {
-    flex: 1,
-    borderRadius: BorderRadius.md,
-    overflow: "hidden",
-  },
-  productImageContainer: {
-    height: 120,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  productImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
+  listContent: { paddingHorizontal: Spacing.lg },
+  row: { gap: Spacing.md, marginBottom: Spacing.md },
+  productCard: { flex: 1, borderRadius: BorderRadius.md, overflow: "hidden" },
+  productImageContainer: { height: 120, alignItems: "center", justifyContent: "center" },
+  productImage: { width: "100%", height: "100%", resizeMode: "cover" },
   outOfStock: {
     position: "absolute",
     top: Spacing.sm,
@@ -204,13 +229,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.xs,
   },
-  productInfo: {
-    padding: Spacing.md,
-  },
-  productName: {
-    marginBottom: Spacing.xs,
-    minHeight: 36,
-  },
+  productInfo: { padding: Spacing.md },
+  productName: { marginBottom: Spacing.xs, minHeight: 36 },
   priceRow: {
     flexDirection: "row",
     justifyContent: "space-between",

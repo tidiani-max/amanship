@@ -35,7 +35,7 @@ export default function OrdersScreen() {
       if (!userId) return [];
       
       const response = await fetch(
-        `http://10.30.230.213:5000/api/orders?userId=${userId}`
+        `http://192.168.10.210:5000/api/orders?userId=${userId}`
       );
       if (!response.ok) throw new Error("Network response was not ok");
       return response.json();

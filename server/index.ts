@@ -22,7 +22,7 @@ function setupCors(app: express.Application) {
     const allowedOrigins = [
       'http://localhost:8081', 
       'http://127.0.0.1:8081', 
-      'http://10.30.230.213:8081' 
+      'http://192.168.10.210:8081' 
     ];
     
     const origin = req.headers.origin;
@@ -170,7 +170,7 @@ function setupErrorHandler(app: express.Application) {
     log(`-----------------------------------------`);
     log(`🚀 KilatGo Server started!`);
     log(`🔗 Localhost: http://localhost:${port}`);
-    log(`📱 Network:   http://10.30.230.213:${port}`);
+    log(`📱 Network:   http://192.168.10.210:${port}`);
     log(`-----------------------------------------`);
   });
 })();

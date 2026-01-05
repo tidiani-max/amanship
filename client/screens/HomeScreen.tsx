@@ -21,8 +21,50 @@ import { useLocation } from "@/context/LocationContext";
 import { getImageUrl } from "@/lib/image-url";
 import { useLanguage } from "@/context/LanguageContext";
 
+
 const { width } = Dimensions.get("window");
+const BASE_DELIVERY_MINUTES = 10;
+const SPEED_KM_PER_MIN = 0.5;
+
+function toRad(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function calculateDistanceKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+) {
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function calculateDeliveryMinutes(distanceKm: number) {
+  return Math.max(
+    BASE_DELIVERY_MINUTES,
+    Math.ceil(BASE_DELIVERY_MINUTES + distanceKm / SPEED_KM_PER_MIN)
+  );
+}
+
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+type UIProduct = Product & {
+  inStock: boolean;
+  stockCount: number;
+};
+
 
 interface APICategory {
   id: string;
@@ -70,13 +112,37 @@ export default function HomeScreen() {
   } = useLocation();
 
   // --- DATA FETCHING ---
-  const { data: apiCategories = [], isLoading: categoriesLoading } = useQuery<APICategory[]>({
+  const { data, isLoading: categoriesLoading } =
+  useQuery<{ data: APICategory[] }>({
     queryKey: ["/api/categories"],
+    queryFn: async () => {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/categories`);
+      return res.json();
+    },
   });
 
-  const { data: apiProducts = [], isLoading: productsLoading } = useQuery<APIProduct[]>({
-    queryKey: ["/api/products"],
+const apiCategories = data?.data ?? [];
+
+
+  const { location } = useLocation();
+
+const latitude = location?.latitude;
+const longitude = location?.longitude;
+
+const { data: apiProducts = [], isLoading: productsLoading } =
+  useQuery<APIProduct[]>({
+    queryKey: ["/api/home/products", latitude, longitude],
+    enabled: !!latitude && !!longitude,
+    queryFn: async () => {
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/home/products?lat=${latitude}&lng=${longitude}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch home products");
+      return res.json();
+    },
+    
   });
+
 
   // --- TRANSFORMATIONS ---
   const categories: Category[] = apiCategories.map((c) => ({
@@ -87,21 +153,30 @@ export default function HomeScreen() {
     image: c.image || undefined,
   }));
 
-  const products: Product[] = apiProducts.map((p) => ({
-    id: p.id,
-    name: p.name,
-    brand: p.brand,
-    price: p.price,
-    originalPrice: p.originalPrice || undefined,
-    image: p.image || "",
-    category: p.categoryId,
-    description: p.description || "",
-    nutrition: p.nutrition,
-    inStock: p.inStock && p.stockCount > 0,
-    stockCount: p.stockCount,
-  }));
+ const products: UIProduct[] = apiProducts.map((p) => ({
+  id: p.id,
+  name: p.name,
+  brand: p.brand,
+  price: p.price,
+  originalPrice: p.originalPrice || undefined,
+  image: p.image || "",
+  category: p.categoryId,
+  description: p.description || "",
+  nutrition: p.nutrition,
+  stockCount: p.stockCount,
+  inStock: p.stockCount > 0,
+}));
+// --- FILTER CATEGORIES THAT HAVE PRODUCTS IN STOCK ---
+const availableCategories = useMemo(() => {
+  const categoryIdsWithProducts = new Set(
+    products.filter(p => p.inStock).map(p => p.category)
+  );
+  return categories.filter(c => categoryIdsWithProducts.has(c.id));
+}, [categories, products]);
 
-  const filteredProducts = useMemo(() => {
+
+
+  const filteredProducts = useMemo<UIProduct[]>(() => {
     if (!searchQuery.trim()) return products;
     const query = searchQuery.toLowerCase();
     return products.filter(p => 
@@ -112,10 +187,10 @@ export default function HomeScreen() {
 
   // --- HANDLERS ---
   const handleCategoryPress = (category: Category) => navigation.navigate("Category", { category });
-  const handleProductPress = (product: Product) => navigation.navigate("ProductDetail", { product });
+  const handleProductPress = (product: UIProduct) => navigation.navigate("ProductDetail", { product });
   const formatPrice = (price: number) => `Rp ${price.toLocaleString("id-ID")}`;
 
-  const handleAddToCart = (product: Product) => {
+  const handleAddToCart = (product: UIProduct) => {
     if (!product.inStock) return;
     addToCart(product, 1);
     setLastAddedProduct(product.name);
@@ -130,7 +205,7 @@ export default function HomeScreen() {
   ];
 
   // --- REUSABLE PRODUCT CARD COMPONENT ---
-  const renderProductCard = (product: Product) => {
+  const renderProductCard = (product: UIProduct) =>{
     const hasDiscount = product.originalPrice && product.originalPrice > product.price;
     const discountPercent = hasDiscount ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) : 0;
 
@@ -146,7 +221,12 @@ export default function HomeScreen() {
           </View>
         )}
         <View style={[styles.productImageContainer, { backgroundColor: theme.backgroundDefault }]}>
-          {product.image ? <Image source={{ uri: getImageUrl(product.image) }} style={styles.productImage} /> : <Feather name="package" size={32} color={theme.textSecondary} />}
+          {product.image ? <Image
+  source={{ uri: getImageUrl(product.image) }}
+  style={styles.productImage}
+  resizeMode="cover"
+/>
+ : <Feather name="package" size={32} color={theme.textSecondary} />}
           {!product.inStock && (
             <View style={styles.outOfStockOverlay}>
               <ThemedText style={styles.outOfStockText}>OUT OF STOCK</ThemedText>
@@ -238,14 +318,15 @@ export default function HomeScreen() {
           <View style={styles.section}>
             <ThemedText type="h3" style={styles.sectionTitle}>{t.home.categories}</ThemedText>
             <View style={styles.categoriesGrid}>
-              {categories.map((category) => (
-                <Pressable key={category.id} style={styles.categoryItem} onPress={() => handleCategoryPress(category)}>
-                  <View style={[styles.categoryIcon, { backgroundColor: category.color + "20", overflow: "hidden" }]}>
-                    {category.image ? <Image source={{ uri: getImageUrl(category.image) }} style={styles.categoryImage} /> : <Feather name={category.icon as any} size={24} color={category.color} />}
-                  </View>
-                  <ThemedText type="small" style={styles.categoryLabel} numberOfLines={1}>{category.name}</ThemedText>
-                </Pressable>
-              ))}
+              {availableCategories.map((category) => (
+  <Pressable key={category.id} style={styles.categoryItem} onPress={() => handleCategoryPress(category)}>
+    <View style={[styles.categoryIcon, { backgroundColor: category.color + "20", overflow: "hidden" }]}>
+      {category.image ? <Image source={{ uri: getImageUrl(category.image) }} style={styles.categoryImage} /> : <Feather name={category.icon as any} size={24} color={category.color} />}
+    </View>
+    <ThemedText type="small" style={styles.categoryLabel} numberOfLines={1}>{category.name}</ThemedText>
+  </Pressable>
+))}
+
             </View>
           </View>
         )}
@@ -321,7 +402,10 @@ const styles = StyleSheet.create({
   productsGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: Spacing.lg, gap: Spacing.md },
   productCard: { width: "47%", borderRadius: BorderRadius.md, overflow: "hidden", position: 'relative' },
   productImageContainer: { height: 100, alignItems: "center", justifyContent: "center", overflow: "hidden", position: 'relative' },
-  productImage: { width: "100%", height: "100%", resizeMode: "cover" },
+  productImage: {
+  width: "100%",
+  height: "100%",
+},
   productInfo: { padding: Spacing.sm },
   productName: { marginBottom: 2, fontWeight: '500' },
   productPriceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.xs },

@@ -17,7 +17,7 @@ import { getImageUrl } from "@/lib/image-url";
 import { Spacing } from "@/constants/theme";
 
 // --- CONFIGURATION ---
-const BASE_URL = "http://10.30.230.213:5000";
+const BASE_URL = "http://192.168.10.210:5000";
 
 // --- INTERFACES ---
 interface Category {
@@ -119,13 +119,22 @@ export default function PickerDashboardScreen() {
   const [formImage, setFormImage] = useState<string | null>(null);
 
   // --- QUERIES ---
-  const { data: categories } = useQuery<Category[]>({
-    queryKey: ["/api/categories"],
-    queryFn: async () => {
-      const res = await fetch(`${BASE_URL}/api/categories`);
-      return res.json();
-    }
-  });
+const { data: categories = [] } = useQuery<Category[]>({
+  queryKey: ["/api/categories"],
+  queryFn: async () => {
+    const res = await fetch(`${BASE_URL}/api/categories`);
+    const json = await res.json();
+
+    // ✅ normalize backend response
+    if (Array.isArray(json)) return json;
+    if (Array.isArray(json.categories)) return json.categories;
+    if (Array.isArray(json.data)) return json.data;
+
+    console.warn("⚠️ Unexpected categories response:", json);
+    return [];
+  }
+});
+
 
   const { data: inventory, isLoading: invLoading, refetch: refetchInv } = useQuery<InventoryItem[]>({
     queryKey: ["/api/picker/inventory", user?.id],
@@ -379,15 +388,26 @@ export default function PickerDashboardScreen() {
           <ScrollView showsVerticalScrollIndicator={false}>
             <ThemedText style={styles.label}>Category</ThemedText>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryArea}>
-              {categories?.map(cat => (
-                <TouchableOpacity 
-                  key={cat.id} 
-                  onPress={() => setFormCategoryId(cat.id)}
-                  style={[styles.categoryChip, formCategoryId === cat.id && { backgroundColor: theme.primary }]}
-                >
-                  <ThemedText style={[styles.chipText, formCategoryId === cat.id && { color: 'white' }]}>{cat.name}</ThemedText>
-                </TouchableOpacity>
-              ))}
+              {Array.isArray(categories) && categories.map(cat => (
+  <TouchableOpacity 
+    key={cat.id} 
+    onPress={() => setFormCategoryId(cat.id)}
+    style={[
+      styles.categoryChip,
+      formCategoryId === cat.id && { backgroundColor: theme.primary }
+    ]}
+  >
+    <ThemedText
+      style={[
+        styles.chipText,
+        formCategoryId === cat.id && { color: "white" }
+      ]}
+    >
+      {cat.name}
+    </ThemedText>
+  </TouchableOpacity>
+))}
+
             </ScrollView>
 
             <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
