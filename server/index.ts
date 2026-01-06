@@ -19,31 +19,46 @@ declare global {
 }
 
 function setupCors(app: express.Application) {
-  app.use((req, res, next) => {
-    // UPDATED: Ensure your frontend IP is permitted
-    const allowedOrigins = [
-      'http://localhost:8081', 
-      'http://127.0.0.1:8081', 
-      'http://192.168.10.210:8081' 
-    ];
-    
-    const origin = req.headers.origin;
+ app.use((req, res, next) => {
+  const isProd = process.env.NODE_ENV === "production";
 
-    // Allow listed origins or any local network IP starting with 10.30.
-    if (origin && (allowedOrigins.includes(origin) || origin.includes('10.30.'))) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-    } else {
-      res.setHeader('Access-Control-Allow-Origin', origin || "*");
-    }
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    
-    if (req.method === "OPTIONS") {
-      return res.status(200).end();
-    }
-    next();
-  });
+  const allowedOrigins = isProd
+    ? ["https://amanship-production.up.railway.app"]
+    : [
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
+        "http://192.168.10.210:8081",
+      ];
+
+  const origin = req.headers.origin;
+
+  if (
+    origin &&
+    (
+      allowedOrigins.includes(origin) ||
+      (!isProd && origin.includes("10.30."))
+    )
+  ) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With"
+  );
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  next();
+});
+
 }
 
 function setupBodyParsing(app: express.Application) {
