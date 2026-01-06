@@ -650,9 +650,7 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
     console.log("✅ home products found:", result.rows.length);
 
     // Debug all product images
-    result.rows.forEach((row: HomeProductRow) => {
-      console.log("🖼 product image from DB:", row.image);
-    });
+    
 
     res.json(result.rows);
   } catch (error) {
@@ -1214,22 +1212,90 @@ res.json({
   // ==================== 13. ADMIN ====================
  // Add these routes to your server/routes.ts file
 
+// Add these routes to your server/routes.ts file
+
+
 console.log("👑 Registering admin routes...");
 
 // ============================================
-// ADMIN METRICS ENDPOINT
+// ADMIN METRICS ENDPOINT - Enhanced with financials
 // ============================================
 app.get("/api/admin/metrics", async (req, res) => {
   try {
-    const stores = await storage.getStores();
+    const allStores = await storage.getStores();
     const allOrders = await storage.getAllOrders();
     
-    const metrics = await Promise.all(stores.map(async (store) => {
+    const metrics = await Promise.all(allStores.map(async (store) => {
       const staff = await storage.getStoreStaff(store.id);
       const storeOrders = allOrders.filter((o) => o.storeId === store.id);
       
+      // Calculate financials
+      const totalRevenue = storeOrders
+        .filter(o => o.status === "delivered")
+        .reduce((sum, o) => sum + (o.total || 0), 0);
+      
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      
+      const todayOrders = storeOrders.filter(o => 
+        new Date(o.createdAt) >= todayStart
+      );
+      
+      const todayRevenue = todayOrders
+        .filter(o => o.status === "delivered")
+        .reduce((sum, o) => sum + (o.total || 0), 0);
+      
+      const thisMonthStart = new Date();
+      thisMonthStart.setDate(1);
+      thisMonthStart.setHours(0, 0, 0, 0);
+      
+      const monthOrders = storeOrders.filter(o => 
+        new Date(o.createdAt) >= thisMonthStart
+      );
+      
+      const monthRevenue = monthOrders
+        .filter(o => o.status === "delivered")
+        .reduce((sum, o) => sum + (o.total || 0), 0);
+      
+      // Calculate average order value
+      const deliveredOrders = storeOrders.filter(o => o.status === "delivered");
+      const avgOrderValue = deliveredOrders.length > 0
+        ? totalRevenue / deliveredOrders.length
+        : 0;
+      
+      // Calculate completion rate
+      const completedOrders = storeOrders.filter(o => 
+        ["delivered", "cancelled"].includes(o.status || "")
+      );
+      const completionRate = completedOrders.length > 0
+        ? (deliveredOrders.length / completedOrders.length) * 100
+        : 0;
+      
+      // COD collection stats
+      const codOrders = storeOrders.filter(o => o.paymentMethod === "cod");
+      const codCollected = codOrders
+        .filter(o => o.codCollected)
+        .reduce((sum, o) => sum + (o.total || 0), 0);
+      const codPending = codOrders
+        .filter(o => !o.codCollected && o.status === "delivered")
+        .reduce((sum, o) => sum + (o.total || 0), 0);
+      
       const enriched = await Promise.all(staff.map(async (s) => {
         const u = await storage.getUser(s.userId);
+        
+        // Get staff-specific stats
+        let staffOrders: any[] = [];
+        if (s.role === "picker") {
+          staffOrders = await storage.getOrdersByPicker(s.userId);
+        } else if (s.role === "driver") {
+          staffOrders = await storage.getOrdersByDriver(s.userId);
+        }
+        
+        const staffDelivered = staffOrders.filter(o => o.status === "delivered").length;
+        const staffActive = staffOrders.filter(o => 
+          !["delivered", "cancelled"].includes(o.status || "")
+        ).length;
+        
         return { 
           ...s, 
           user: u ? { 
@@ -1238,7 +1304,12 @@ app.get("/api/admin/metrics", async (req, res) => {
             phone: u.phone, 
             email: u.email,
             name: u.name 
-          } : null 
+          } : null,
+          stats: {
+            totalOrders: staffOrders.length,
+            delivered: staffDelivered,
+            active: staffActive,
+          }
         };
       }));
       
@@ -1254,11 +1325,34 @@ app.get("/api/admin/metrics", async (req, res) => {
         activeOrders: storeOrders.filter(o => 
           ["confirmed", "picking", "packed", "delivering"].includes(o.status || "")
         ).length,
+        deliveredOrders: deliveredOrders.length,
+        cancelledOrders: storeOrders.filter(o => o.status === "cancelled").length,
+        // Financial metrics
+        totalRevenue,
+        todayRevenue,
+        todayOrders: todayOrders.length,
+        monthRevenue,
+        monthOrders: monthOrders.length,
+        avgOrderValue,
+        completionRate,
+        codCollected,
+        codPending,
       };
     }));
     
+    // Global totals
+    const globalTotals = {
+      totalRevenue: metrics.reduce((sum, m) => sum + m.totalRevenue, 0),
+      todayRevenue: metrics.reduce((sum, m) => sum + m.todayRevenue, 0),
+      monthRevenue: metrics.reduce((sum, m) => sum + m.monthRevenue, 0),
+      avgOrderValue: metrics.reduce((sum, m) => sum + m.avgOrderValue, 0) / (metrics.length || 1),
+      codCollected: metrics.reduce((sum, m) => sum + m.codCollected, 0),
+      codPending: metrics.reduce((sum, m) => sum + m.codPending, 0),
+    };
+    
     res.json({
       stores: metrics,
+      globalTotals,
       orderSummary: {
         total: allOrders.length,
         pending: allOrders.filter(o => o.status === "pending").length,
@@ -1386,11 +1480,15 @@ app.delete("/api/admin/stores/:id", async (req, res) => {
   try {
     const { id } = req.params;
     
+    console.log(`🗑️ Attempting to delete store: ${id}`);
+    
     // Check if store has active orders
-    const orders = await storage.getOrdersByStore(id);
-    const activeOrders = orders.filter(o => 
+    const storeOrders = await storage.getOrdersByStore(id);
+    const activeOrders = storeOrders.filter(o => 
       !["delivered", "cancelled"].includes(o.status || "")
     );
+    
+    console.log(`📊 Store has ${storeOrders.length} total orders, ${activeOrders.length} active`);
     
     if (activeOrders.length > 0) {
       return res.status(400).json({ 
@@ -1401,9 +1499,11 @@ app.delete("/api/admin/stores/:id", async (req, res) => {
     const updated = await storage.updateStore(id, { isActive: false });
     
     if (!updated) {
+      console.log(`❌ Store not found: ${id}`);
       return res.status(404).json({ error: "Store not found" });
     }
 
+    console.log(`✅ Store deactivated: ${id}`);
     res.json({ success: true, message: "Store deactivated" });
   } catch (error) {
     console.error("❌ Delete store error:", error);
@@ -1420,6 +1520,8 @@ app.post("/api/admin/stores/:storeId/staff", async (req, res) => {
   try {
     const { storeId } = req.params;
     const { phone, email, role, name } = req.body;
+
+    console.log(`👤 Adding staff to store ${storeId}:`, { phone, email, role, name });
 
     if (!role || !["picker", "driver"].includes(role)) {
       return res.status(400).json({ error: "Valid role required (picker or driver)" });
@@ -1461,6 +1563,7 @@ app.post("/api/admin/stores/:storeId/staff", async (req, res) => {
         await db.update(users)
           .set({ role })
           .where(eq(users.id, user.id));
+        console.log(`📝 Updated user ${user.id} role to ${role}`);
       }
     }
 
@@ -1479,6 +1582,8 @@ app.post("/api/admin/stores/:storeId/staff", async (req, res) => {
       role,
       status: "offline",
     });
+
+    console.log(`✅ Staff added: ${newStaff.id}`);
 
     // Return enriched staff data
     res.json({
@@ -1503,6 +1608,8 @@ app.patch("/api/admin/stores/:storeId/staff/:staffId", async (req, res) => {
     const { staffId } = req.params;
     const { role } = req.body;
 
+    console.log(`📝 Updating staff ${staffId} to role: ${role}`);
+
     if (role && !["picker", "driver"].includes(role)) {
       return res.status(400).json({ error: "Valid role required" });
     }
@@ -1516,6 +1623,7 @@ app.patch("/api/admin/stores/:storeId/staff/:staffId", async (req, res) => {
       return res.status(404).json({ error: "Staff member not found" });
     }
 
+    console.log(`✅ Staff updated: ${staffId}`);
     res.json(updated);
   } catch (error) {
     console.error("❌ Update staff error:", error);
@@ -1527,6 +1635,8 @@ app.patch("/api/admin/stores/:storeId/staff/:staffId", async (req, res) => {
 app.delete("/api/admin/stores/:storeId/staff/:staffId", async (req, res) => {
   try {
     const { staffId } = req.params;
+
+    console.log(`🗑️ Removing staff: ${staffId}`);
 
     // Check for active orders
     const staff = await db.select().from(storeStaff)
@@ -1553,6 +1663,7 @@ app.delete("/api/admin/stores/:storeId/staff/:staffId", async (req, res) => {
 
     await db.delete(storeStaff).where(eq(storeStaff.id, staffId));
 
+    console.log(`✅ Staff removed: ${staffId}`);
     res.json({ success: true, message: "Staff removed from store" });
   } catch (error) {
     console.error("❌ Remove staff error:", error);
@@ -1565,6 +1676,8 @@ app.patch("/api/staff/status", async (req, res) => {
   try {
     const { userId, status } = req.body;
 
+    console.log(`🔄 Toggling staff ${userId} status to: ${status}`);
+
     if (!["online", "offline"].includes(status)) {
       return res.status(400).json({ error: "Status must be 'online' or 'offline'" });
     }
@@ -1575,6 +1688,7 @@ app.patch("/api/staff/status", async (req, res) => {
       return res.status(404).json({ error: "Staff member not found" });
     }
 
+    console.log(`✅ Status updated: ${userId} -> ${status}`);
     res.json(updated);
   } catch (error) {
     console.error("❌ Toggle status error:", error);
@@ -1589,28 +1703,76 @@ app.post("/api/admin/geocode", async (req, res) => {
   try {
     const { address } = req.body;
 
+    console.log(`🗺️ Geocoding address: ${address}`);
+
     if (!address) {
       return res.status(400).json({ error: "Address is required" });
     }
 
-    const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
-    const geoResponse = await fetch(geocodeUrl, {
-      headers: { 'User-Agent': 'KilatGo-App' }
-    });
-    const geoData = await geoResponse.json();
+    try {
+      const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+      console.log(`Fetching: ${geocodeUrl}`);
+      
+      const geoResponse = await fetch(geocodeUrl, {
+        headers: { 
+          'User-Agent': 'KilatGo-App/1.0',
+          'Accept': 'application/json'
+        }
+      });
 
-    if (!geoData || geoData.length === 0) {
-      return res.status(404).json({ error: "Location not found" });
+      if (!geoResponse.ok) {
+        console.error(`Nominatim API error: ${geoResponse.status}`);
+        // Return default Jakarta coordinates instead of error
+        return res.json({
+          latitude: -6.2088,
+          longitude: 106.8456,
+          displayName: "Default location (Jakarta) - geocoding service unavailable",
+          isDefault: true
+        });
+      }
+
+      const geoData = await geoResponse.json();
+      console.log(`Geocoding response:`, geoData);
+
+      if (!geoData || geoData.length === 0) {
+        console.log(`❌ Location not found for: ${address}, using default`);
+        // Return default Jakarta coordinates instead of 404
+        return res.json({
+          latitude: -6.2088,
+          longitude: 106.8456,
+          displayName: "Default location (Jakarta) - address not found",
+          isDefault: true
+        });
+      }
+
+      const result = {
+        latitude: parseFloat(geoData[0].lat),
+        longitude: parseFloat(geoData[0].lon),
+        displayName: geoData[0].display_name,
+        isDefault: false
+      };
+
+      console.log(`✅ Geocoded:`, result);
+      res.json(result);
+    } catch (fetchError) {
+      console.error("Geocoding fetch error:", fetchError);
+      // Return default coordinates on any error
+      res.json({
+        latitude: -6.2088,
+        longitude: 106.8456,
+        displayName: "Default location (Jakarta) - geocoding error",
+        isDefault: true
+      });
     }
-
-    res.json({
-      latitude: parseFloat(geoData[0].lat),
-      longitude: parseFloat(geoData[0].lon),
-      displayName: geoData[0].display_name,
-    });
   } catch (error) {
     console.error("❌ Geocoding error:", error);
-    res.status(500).json({ error: "Failed to geocode address" });
+    // Return default coordinates instead of 500 error
+    res.json({
+      latitude: -6.2088,
+      longitude: 106.8456,
+      displayName: "Default location (Jakarta)",
+      isDefault: true
+    });
   }
 });
 

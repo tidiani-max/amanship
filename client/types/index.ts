@@ -4,11 +4,22 @@ export interface Product {
   brand: string;
   price: number;
   originalPrice?: number;
-  image: string;
+
+  image?: string;          // ✅ optional
   category: string;
   description: string;
-  nutrition: any;
+
+  nutrition?: {            // ✅ optional & typed
+    calories?: string;
+    protein?: string;
+    carbs?: string;
+    fat?: string;
+  };
+
+  inStock?: boolean;       // ✅ inventory
+  stockCount?: number;     // ✅ inventory
 }
+
 
 
 export interface Category {

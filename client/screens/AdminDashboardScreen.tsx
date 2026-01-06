@@ -22,6 +22,16 @@ import { useLanguage } from "@/context/LanguageContext";
 import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 
+// ---------------------- HELPERS ----------------------
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+};
+
 // ---------------------- STYLES ----------------------
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -37,8 +47,11 @@ const styles = StyleSheet.create({
   },
   metricsGrid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm },
   metricCard: { flex: 1, minWidth: "45%", alignItems: "center", padding: Spacing.md },
+  wideMetricCard: { width: "100%", padding: Spacing.md },
   metricIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: "center", alignItems: "center", marginBottom: Spacing.xs },
   metricValue: { marginTop: Spacing.xs },
+  metricSubtext: { marginTop: Spacing.xs },
+  financialRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: Spacing.sm },
   addButton: { flexDirection: "row", alignItems: "center", gap: Spacing.xs, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.sm },
   storeCard: { marginBottom: Spacing.md, padding: Spacing.md },
   storeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
@@ -47,10 +60,12 @@ const styles = StyleSheet.create({
   iconButton: { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center" },
   activeBadge: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.xs, marginTop: Spacing.xs },
   divider: { height: 1, marginVertical: Spacing.md },
-  statsRow: { flexDirection: "row", alignItems: "center", gap: Spacing.lg },
+  statsRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: Spacing.md },
   statItem: { flexDirection: "row", alignItems: "center", gap: Spacing.xs },
   tag: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.xs },
   sectionLabel: { marginBottom: Spacing.sm, letterSpacing: 1 },
+  financialGrid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm, marginTop: Spacing.md },
+  financialItem: { flex: 1, minWidth: "45%", padding: Spacing.sm, borderRadius: BorderRadius.sm, borderWidth: 1 },
   staffRow: { flexDirection: "row", alignItems: "center", paddingVertical: Spacing.sm },
   staffIcon: { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center" },
   staffInfo: { flex: 1, marginLeft: Spacing.sm },
@@ -75,6 +90,9 @@ const styles = StyleSheet.create({
   geocodeButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: Spacing.xs, paddingVertical: Spacing.sm, borderWidth: 1, borderRadius: BorderRadius.sm, marginBottom: Spacing.md },
   submitButton: { paddingVertical: Spacing.md, borderRadius: BorderRadius.sm, alignItems: "center" },
   deleteButton: { paddingVertical: Spacing.md, borderRadius: BorderRadius.sm, alignItems: "center", marginTop: Spacing.sm },
+  globalCard: { padding: Spacing.lg, marginBottom: Spacing.md },
+  globalGrid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.md, marginTop: Spacing.md },
+  globalItem: { flex: 1, minWidth: "45%", alignItems: "center" },
 });
 
 // ---------------------- TYPES ----------------------
@@ -84,6 +102,11 @@ interface StaffMember {
   role: "picker" | "driver";
   status: "online" | "offline";
   user: { id: string; username: string; phone: string | null; email: string | null; name: string | null } | null;
+  stats?: {
+    totalOrders: number;
+    delivered: number;
+    active: number;
+  };
 }
 
 interface StoreData {
@@ -95,10 +118,30 @@ interface StoreData {
   isActive: boolean;
   codAllowed: boolean;
   staff: StaffMember[];
+  totalRevenue: number;
+  todayRevenue: number;
+  todayOrders: number;
+  monthRevenue: number;
+  monthOrders: number;
+  avgOrderValue: number;
+  completionRate: number;
+  codCollected: number;
+  codPending: number;
+  orderCount: number;
+  deliveredOrders: number;
+  cancelledOrders: number;
 }
 
 interface AdminMetrics {
   stores: StoreData[];
+  globalTotals: {
+    totalRevenue: number;
+    todayRevenue: number;
+    monthRevenue: number;
+    avgOrderValue: number;
+    codCollected: number;
+    codPending: number;
+  };
   orderSummary: {
     total: number;
     pending: number;
@@ -112,7 +155,7 @@ interface AdminMetrics {
   timestamp: string;
 }
 
-// ---------------------- STORE MODAL ----------------------
+// ---------------------- STORE MODAL (same as before with logging) ----------------------
 function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: {
   visible: boolean;
   store: StoreData | null;
@@ -136,12 +179,6 @@ function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: 
       setLatitude(store.latitude);
       setLongitude(store.longitude);
       setCodAllowed(store.codAllowed);
-    } else {
-      setName("");
-      setAddress("");
-      setLatitude("-6.2088");
-      setLongitude("106.8456");
-      setCodAllowed(true);
     }
   }, [store]);
 
@@ -156,15 +193,31 @@ function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: 
     setGeocoding(true);
     try {
       const response = await apiRequest("POST", "/api/admin/geocode", { address });
+      
       const data = await response.json();
       
       if (data.latitude && data.longitude) {
         setLatitude(String(data.latitude));
         setLongitude(String(data.longitude));
-        Alert.alert("Success", `Location found: ${data.displayName || "Address geocoded"}`);
+        
+        if (data.isDefault) {
+          Alert.alert(
+            "Using Default Location", 
+            data.displayName + "\n\nYou can manually adjust the coordinates if needed."
+          );
+        } else {
+          Alert.alert("Success", `Location found:\n${data.displayName || "Address geocoded"}`);
+        }
       }
     } catch (error) {
-      Alert.alert("Error", "Could not find location. Please enter coordinates manually.");
+      console.error("Geocode error:", error);
+      // Set default Jakarta coordinates
+      setLatitude("-6.2088");
+      setLongitude("106.8456");
+      Alert.alert(
+        "Geocoding Unavailable", 
+        "Using default Jakarta coordinates. You can manually adjust them if needed."
+      );
     } finally {
       setGeocoding(false);
     }
@@ -177,15 +230,13 @@ function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: 
       return;
     }
 
-    const data = {
+    onSubmit({
       name: name.trim(),
       address: address.trim(),
       latitude: parseFloat(latitude) || -6.2088,
       longitude: parseFloat(longitude) || 106.8456,
       codAllowed,
-    };
-
-    onSubmit(data);
+    });
   };
 
   return (
@@ -277,7 +328,15 @@ function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: 
           {store && onDelete && (
             <Pressable
               style={[styles.deleteButton, { backgroundColor: theme.error + "20", borderWidth: 1, borderColor: theme.error }]}
-              onPress={onDelete}
+              onPress={() => {
+                console.log("🔴 Modal delete button pressed for store:", store.id);
+                if (onDelete) {
+                  console.log("🔴 Calling onDelete function");
+                  onDelete();
+                } else {
+                  console.error("❌ onDelete is undefined!");
+                }
+              }}
             >
               <ThemedText type="button" style={{ color: theme.error }}>Delete Store</ThemedText>
             </Pressable>
@@ -288,7 +347,7 @@ function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: 
   );
 }
 
-// ---------------------- STAFF MODAL ----------------------
+// ---------------------- STAFF MODAL (same as before) ----------------------
 function StaffModal({ visible, storeId, storeName, staff, onClose, onSubmit, onDelete, isLoading }: {
   visible: boolean;
   storeId: string;
@@ -311,11 +370,6 @@ function StaffModal({ visible, storeId, storeName, staff, onClose, onSubmit, onD
       setEmail(staff.user?.email || "");
       setName(staff.user?.name || "");
       setRole(staff.role);
-    } else {
-      setPhone("");
-      setEmail("");
-      setName("");
-      setRole("picker");
     }
   }, [staff]);
 
@@ -327,15 +381,13 @@ function StaffModal({ visible, storeId, storeName, staff, onClose, onSubmit, onD
       return;
     }
 
-    const data = {
+    onSubmit({
       storeId,
       phone: phone.trim(),
       email: email.trim(),
       name: name.trim(),
       role,
-    };
-
-    onSubmit(data);
+    });
   };
 
   return (
@@ -439,7 +491,7 @@ function StaffModal({ visible, storeId, storeName, staff, onClose, onSubmit, onD
   );
 }
 
-// ---------------------- STAFF ROW ----------------------
+// ---------------------- STAFF ROW WITH STATS ----------------------
 function StaffRow({ staff, onToggleStatus, onEdit, onDelete }: { 
   staff: StaffMember; 
   onToggleStatus: (userId: string, currentStatus: string) => void;
@@ -460,6 +512,11 @@ function StaffRow({ staff, onToggleStatus, onEdit, onDelete }: {
         <ThemedText type="small" style={{ color: theme.textSecondary }}>
           {staff.user?.phone || staff.user?.email || "No contact"}
         </ThemedText>
+        {staff.stats && (
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>
+            {staff.stats.delivered} delivered • {staff.stats.active} active
+          </ThemedText>
+        )}
       </View>
       <View style={styles.staffActions}>
         <Pressable
@@ -482,7 +539,7 @@ function StaffRow({ staff, onToggleStatus, onEdit, onDelete }: {
   );
 }
 
-// ---------------------- STORE CARD ----------------------
+// ---------------------- ENHANCED STORE CARD ----------------------
 function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteStaff, onToggleStatus }: { 
   store: StoreData;
   onEdit: () => void;
@@ -513,7 +570,18 @@ function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteS
           <Pressable style={[styles.iconButton, { backgroundColor: theme.secondary + "15" }]} onPress={onEdit}>
             <Feather name="edit-2" size={14} color={theme.secondary} />
           </Pressable>
-          <Pressable style={[styles.iconButton, { backgroundColor: theme.error + "15" }]} onPress={onDelete}>
+          <Pressable 
+            style={[styles.iconButton, { backgroundColor: theme.error + "15" }]} 
+            onPress={() => {
+              console.log("🔴 StoreCard trash icon pressed for store:", store.id, store.name);
+              if (onDelete) {
+                console.log("🔴 Calling onDelete callback");
+                onDelete();
+              } else {
+                console.error("❌ onDelete callback is undefined!");
+              }
+            }}
+          >
             <Feather name="trash-2" size={14} color={theme.error} />
           </Pressable>
           <Pressable style={[styles.iconButton, { backgroundColor: theme.border }]} onPress={() => setExpanded(!expanded)}>
@@ -524,6 +592,7 @@ function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteS
 
       <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
+      {/* Quick Stats */}
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
           <Feather name="package" size={16} color={theme.secondary} />
@@ -535,12 +604,57 @@ function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteS
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>Drivers</ThemedText>
           <ThemedText type="body">{drivers.filter(d => d.status === "online").length}/{drivers.length}</ThemedText>
         </View>
+        <View style={styles.statItem}>
+          <Feather name="shopping-bag" size={16} color={theme.success} />
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>Orders</ThemedText>
+          <ThemedText type="body">{store.orderCount}</ThemedText>
+        </View>
         {store.codAllowed && (
           <View style={[styles.tag, { backgroundColor: theme.success + "20" }]}>
             <ThemedText type="small" style={{ color: theme.success }}>COD</ThemedText>
           </View>
         )}
       </View>
+
+      {/* Financial Overview */}
+      <View style={styles.financialGrid}>
+        <View style={[styles.financialItem, { borderColor: theme.border, backgroundColor: theme.success + "10" }]}>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>Total Revenue</ThemedText>
+          <ThemedText type="h3" style={{ color: theme.success }}>{formatCurrency(store.totalRevenue)}</ThemedText>
+        </View>
+        <View style={[styles.financialItem, { borderColor: theme.border, backgroundColor: theme.primary + "10" }]}>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>Today</ThemedText>
+          <ThemedText type="h3" style={{ color: theme.primary }}>{formatCurrency(store.todayRevenue)}</ThemedText>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>{store.todayOrders} orders</ThemedText>
+        </View>
+        <View style={[styles.financialItem, { borderColor: theme.border, backgroundColor: theme.secondary + "10" }]}>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>This Month</ThemedText>
+          <ThemedText type="h3" style={{ color: theme.secondary }}>{formatCurrency(store.monthRevenue)}</ThemedText>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>{store.monthOrders} orders</ThemedText>
+        </View>
+        <View style={[styles.financialItem, { borderColor: theme.border, backgroundColor: theme.warning + "10" }]}>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>Avg Order</ThemedText>
+          <ThemedText type="h3" style={{ color: theme.warning }}>{formatCurrency(store.avgOrderValue)}</ThemedText>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>{store.completionRate.toFixed(1)}% complete</ThemedText>
+        </View>
+      </View>
+
+      {/* COD Status */}
+      {store.codAllowed && (store.codCollected > 0 || store.codPending > 0) && (
+        <View style={[styles.infoBox, { backgroundColor: theme.warning + "10", borderColor: theme.warning + "30", marginTop: Spacing.md }]}>
+          <Feather name="dollar-sign" size={16} color={theme.warning} />
+          <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+              COD Collected: {formatCurrency(store.codCollected)}
+            </ThemedText>
+            {store.codPending > 0 && (
+              <ThemedText type="small" style={{ color: theme.warning }}>
+                Pending Collection: {formatCurrency(store.codPending)}
+              </ThemedText>
+            )}
+          </View>
+        </View>
+      )}
 
       {expanded && (
         <>
@@ -591,7 +705,13 @@ function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteS
 }
 
 // ---------------------- METRIC CARD ----------------------
-function MetricCard({ icon, label, value, color }: { icon: string; label: string; value: number; color: string }) {
+function MetricCard({ icon, label, value, color, subtext }: { 
+  icon: string; 
+  label: string; 
+  value: number | string; 
+  color: string;
+  subtext?: string;
+}) {
   const { theme } = useTheme();
   return (
     <Card style={styles.metricCard}>
@@ -600,6 +720,11 @@ function MetricCard({ icon, label, value, color }: { icon: string; label: string
       </View>
       <ThemedText type="h2" style={styles.metricValue}>{value}</ThemedText>
       <ThemedText type="caption" style={{ color: theme.textSecondary }}>{label}</ThemedText>
+      {subtext && (
+        <ThemedText type="small" style={[styles.metricSubtext, { color: theme.textSecondary }]}>
+          {subtext}
+        </ThemedText>
+      )}
     </Card>
   );
 }
@@ -625,8 +750,12 @@ export default function AdminDashboardScreen() {
   // ---------------------- STORE MUTATIONS ----------------------
   const createStoreMutation = useMutation({
     mutationFn: async (data: any) => {
+      console.log("Creating store with data:", data);
       const response = await apiRequest("POST", "/api/admin/stores", data);
-      if (!response.ok) throw new Error((await response.json()).error);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create store");
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -635,13 +764,20 @@ export default function AdminDashboardScreen() {
       setSelectedStore(null);
       Alert.alert("Success", "Store created successfully");
     },
-    onError: (error: Error) => Alert.alert("Error", error.message),
+    onError: (error: Error) => {
+      console.error("Create store error:", error);
+      Alert.alert("Error", error.message);
+    },
   });
 
   const updateStoreMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      console.log("Updating store:", id, data);
       const response = await apiRequest("PATCH", `/api/admin/stores/${id}`, data);
-      if (!response.ok) throw new Error((await response.json()).error);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update store");
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -650,29 +786,49 @@ export default function AdminDashboardScreen() {
       setSelectedStore(null);
       Alert.alert("Success", "Store updated successfully");
     },
-    onError: (error: Error) => Alert.alert("Error", error.message),
+    onError: (error: Error) => {
+      console.error("Update store error:", error);
+      Alert.alert("Error", error.message);
+    },
   });
 
   const deleteStoreMutation = useMutation({
     mutationFn: async (id: string) => {
+      console.log("🗑️ Delete mutation started for store:", id);
       const response = await apiRequest("DELETE", `/api/admin/stores/${id}`);
-      if (!response.ok) throw new Error((await response.json()).error);
-      return response.json();
+      
+      console.log("Delete response status:", response.status);
+      const responseData = await response.json();
+      console.log("Delete response data:", responseData);
+      
+      if (!response.ok) {
+        console.error("Delete error response:", responseData);
+        throw new Error(responseData.error || "Failed to delete store");
+      }
+      return responseData;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("✅ Store deleted successfully:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
       setShowStoreModal(false);
       setSelectedStore(null);
-      Alert.alert("Success", "Store deleted successfully");
+      Alert.alert("Success", "Store deactivated successfully");
     },
-    onError: (error: Error) => Alert.alert("Error", error.message),
+    onError: (error: Error) => {
+      console.error("❌ Delete store mutation error:", error);
+      Alert.alert("Error", error.message);
+    },
   });
 
   // ---------------------- STAFF MUTATIONS ----------------------
   const addStaffMutation = useMutation({
     mutationFn: async (data: any) => {
+      console.log("Adding staff:", data);
       const response = await apiRequest("POST", `/api/admin/stores/${data.storeId}/staff`, data);
-      if (!response.ok) throw new Error((await response.json()).error);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to add staff");
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -681,13 +837,20 @@ export default function AdminDashboardScreen() {
       setSelectedStaff(null);
       Alert.alert("Success", "Staff member added successfully");
     },
-    onError: (error: Error) => Alert.alert("Error", error.message),
+    onError: (error: Error) => {
+      console.error("Add staff error:", error);
+      Alert.alert("Error", error.message);
+    },
   });
 
   const updateStaffMutation = useMutation({
     mutationFn: async ({ storeId, staffId, data }: any) => {
+      console.log("Updating staff:", staffId, data);
       const response = await apiRequest("PATCH", `/api/admin/stores/${storeId}/staff/${staffId}`, data);
-      if (!response.ok) throw new Error((await response.json()).error);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update staff");
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -696,29 +859,49 @@ export default function AdminDashboardScreen() {
       setSelectedStaff(null);
       Alert.alert("Success", "Staff updated successfully");
     },
-    onError: (error: Error) => Alert.alert("Error", error.message),
+    onError: (error: Error) => {
+      console.error("Update staff error:", error);
+      Alert.alert("Error", error.message);
+    },
   });
 
   const deleteStaffMutation = useMutation({
     mutationFn: async ({ storeId, staffId }: { storeId: string; staffId: string }) => {
+      console.log("🗑️ Delete staff mutation started:", { storeId, staffId });
       const response = await apiRequest("DELETE", `/api/admin/stores/${storeId}/staff/${staffId}`);
-      if (!response.ok) throw new Error((await response.json()).error);
-      return response.json();
+      
+      console.log("Delete staff response status:", response.status);
+      const responseData = await response.json();
+      console.log("Delete staff response data:", responseData);
+      
+      if (!response.ok) {
+        console.error("Delete staff error response:", responseData);
+        throw new Error(responseData.error || "Failed to remove staff");
+      }
+      return responseData;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("✅ Staff removed successfully:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
       Alert.alert("Success", "Staff removed from store");
     },
-    onError: (error: Error) => Alert.alert("Error", error.message),
+    onError: (error: Error) => {
+      console.error("❌ Delete staff error:", error);
+      Alert.alert("Error", error.message);
+    },
   });
 
   const toggleStaffStatusMutation = useMutation({
     mutationFn: async ({ userId, status }: { userId: string; status: string }) => {
+      console.log("Toggling staff status:", userId, status);
       const response = await apiRequest("PATCH", "/api/staff/status", { userId, status });
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
+    },
+    onError: (error: Error) => {
+      console.error("Toggle status error:", error);
     },
   });
 
@@ -732,16 +915,29 @@ export default function AdminDashboardScreen() {
   };
 
   const handleStoreDelete = () => {
-    if (!selectedStore) return;
+    if (!selectedStore) {
+      console.error("No store selected for deletion");
+      return;
+    }
+    
+    console.log("handleStoreDelete called for store:", selectedStore.id);
+    
     Alert.alert(
       "Delete Store",
       `Are you sure you want to delete ${selectedStore.name}? This will deactivate the store.`,
       [
-        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Cancel", 
+          style: "cancel",
+          onPress: () => console.log("Delete cancelled")
+        },
         { 
           text: "Delete", 
           style: "destructive",
-          onPress: () => deleteStoreMutation.mutate(selectedStore.id)
+          onPress: () => {
+            console.log("Delete confirmed, calling mutation for:", selectedStore.id);
+            deleteStoreMutation.mutate(selectedStore.id);
+          }
         }
       ]
     );
@@ -760,6 +956,8 @@ export default function AdminDashboardScreen() {
   };
 
   const handleStaffDelete = (staffId: string) => {
+    console.log("handleStaffDelete called for:", staffId);
+    
     Alert.alert(
       "Remove Staff",
       "Are you sure you want to remove this staff member from the store?",
@@ -768,7 +966,10 @@ export default function AdminDashboardScreen() {
         { 
           text: "Remove", 
           style: "destructive",
-          onPress: () => deleteStaffMutation.mutate({ storeId: currentStoreId, staffId })
+          onPress: () => {
+            console.log("Staff delete confirmed:", staffId);
+            deleteStaffMutation.mutate({ storeId: currentStoreId, staffId });
+          }
         }
       ]
     );
@@ -791,6 +992,7 @@ export default function AdminDashboardScreen() {
   }
 
   const orderSummary = metrics?.orderSummary;
+  const globalTotals = metrics?.globalTotals;
   const stores = metrics?.stores || [];
   const isSubmitting = createStoreMutation.isPending || updateStoreMutation.isPending || 
                       addStaffMutation.isPending || updateStaffMutation.isPending;
@@ -811,19 +1013,114 @@ export default function AdminDashboardScreen() {
           />
         }
       >
+        {/* Global Financial Overview */}
+        {globalTotals && (
+          <Card style={styles.globalCard}>
+            <ThemedText type="h2">Global Overview</ThemedText>
+            <View style={styles.globalGrid}>
+              <View style={styles.globalItem}>
+                <Feather name="dollar-sign" size={24} color={theme.success} />
+                <ThemedText type="h3" style={{ marginTop: Spacing.xs, color: theme.success }}>
+                  {formatCurrency(globalTotals.totalRevenue)}
+                </ThemedText>
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>Total Revenue</ThemedText>
+              </View>
+              <View style={styles.globalItem}>
+                <Feather name="trending-up" size={24} color={theme.primary} />
+                <ThemedText type="h3" style={{ marginTop: Spacing.xs, color: theme.primary }}>
+                  {formatCurrency(globalTotals.todayRevenue)}
+                </ThemedText>
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>Today's Revenue</ThemedText>
+              </View>
+              <View style={styles.globalItem}>
+                <Feather name="calendar" size={24} color={theme.secondary} />
+                <ThemedText type="h3" style={{ marginTop: Spacing.xs, color: theme.secondary }}>
+                  {formatCurrency(globalTotals.monthRevenue)}
+                </ThemedText>
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>This Month</ThemedText>
+              </View>
+              <View style={styles.globalItem}>
+                <Feather name="shopping-cart" size={24} color={theme.warning} />
+                <ThemedText type="h3" style={{ marginTop: Spacing.xs, color: theme.warning }}>
+                  {formatCurrency(globalTotals.avgOrderValue)}
+                </ThemedText>
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>Avg Order Value</ThemedText>
+              </View>
+            </View>
+            
+            {(globalTotals.codCollected > 0 || globalTotals.codPending > 0) && (
+              <View style={[styles.divider, { backgroundColor: theme.border }]} />
+            )}
+            
+            {(globalTotals.codCollected > 0 || globalTotals.codPending > 0) && (
+              <View style={styles.financialRow}>
+                <View>
+                  <ThemedText type="small" style={{ color: theme.textSecondary }}>COD Collected</ThemedText>
+                  <ThemedText type="h3" style={{ color: theme.success }}>
+                    {formatCurrency(globalTotals.codCollected)}
+                  </ThemedText>
+                </View>
+                {globalTotals.codPending > 0 && (
+                  <View style={{ alignItems: "flex-end" }}>
+                    <ThemedText type="small" style={{ color: theme.textSecondary }}>Pending Collection</ThemedText>
+                    <ThemedText type="h3" style={{ color: theme.warning }}>
+                      {formatCurrency(globalTotals.codPending)}
+                    </ThemedText>
+                  </View>
+                )}
+              </View>
+            )}
+          </Card>
+        )}
+
+        {/* Order Summary */}
         <View style={styles.section}>
-          <ThemedText type="h3" style={styles.sectionTitle}>{t.checkout.orderSummary}</ThemedText>
+          <ThemedText type="h3" style={styles.sectionTitle}>Order Summary</ThemedText>
           <View style={styles.metricsGrid}>
-            <MetricCard icon="shopping-bag" label={t.admin.totalOrders} value={orderSummary?.total || 0} color={theme.secondary} />
-            <MetricCard icon="clock" label={t.orders.pending} value={orderSummary?.pending || 0} color={theme.warning} />
-            <MetricCard icon="check-circle" label={t.orders.delivered} value={orderSummary?.delivered || 0} color={theme.success} />
-            <MetricCard icon="x-circle" label={t.orders.cancelled} value={orderSummary?.cancelled || 0} color={theme.error} />
+            <MetricCard 
+              icon="shopping-bag" 
+              label="Total Orders" 
+              value={orderSummary?.total || 0} 
+              color={theme.secondary} 
+            />
+            <MetricCard 
+              icon="clock" 
+              label="Pending" 
+              value={orderSummary?.pending || 0} 
+              color={theme.warning} 
+            />
+            <MetricCard 
+              icon="package" 
+              label="Picking" 
+              value={orderSummary?.picking || 0} 
+              color={theme.secondary}
+              subtext={`${orderSummary?.packed || 0} packed`}
+            />
+            <MetricCard 
+              icon="truck" 
+              label="Delivering" 
+              value={orderSummary?.delivering || 0} 
+              color={theme.primary}
+            />
+            <MetricCard 
+              icon="check-circle" 
+              label="Delivered" 
+              value={orderSummary?.delivered || 0} 
+              color={theme.success} 
+            />
+            <MetricCard 
+              icon="x-circle" 
+              label="Cancelled" 
+              value={orderSummary?.cancelled || 0} 
+              color={theme.error} 
+            />
           </View>
         </View>
 
+        {/* Stores Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <ThemedText type="h3">{t.admin.stores} ({stores.length})</ThemedText>
+            <ThemedText type="h3">Stores ({stores.length})</ThemedText>
             <Pressable 
               style={[styles.addButton, { backgroundColor: theme.primary }]} 
               onPress={() => {
@@ -845,6 +1142,7 @@ export default function AdminDashboardScreen() {
                 setShowStoreModal(true);
               }}
               onDelete={() => {
+                console.log("StoreCard onDelete triggered for:", store.id);
                 setSelectedStore(store);
                 handleStoreDelete();
               }}
@@ -871,7 +1169,7 @@ export default function AdminDashboardScreen() {
               <Feather name="home" size={48} color={theme.textSecondary} />
               <ThemedText type="h3" style={{ marginTop: Spacing.md }}>No Stores Yet</ThemedText>
               <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}>
-                Add your first store to start managing deliveries
+                Add your first store to start managing deliveries and tracking revenue
               </ThemedText>
             </Card>
           )}
@@ -879,7 +1177,7 @@ export default function AdminDashboardScreen() {
 
         {metrics?.timestamp && (
           <ThemedText type="small" style={[styles.timestamp, { color: theme.textSecondary }]}>
-            {t.admin.lastUpdated}: {new Date(metrics.timestamp).toLocaleTimeString()}
+            Last updated: {new Date(metrics.timestamp).toLocaleTimeString()}
           </ThemedText>
         )}
       </ScrollView>
