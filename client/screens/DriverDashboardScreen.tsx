@@ -233,7 +233,7 @@ export default function DriverDashboardScreen() {
  const { data: dashboard, isLoading, refetch, isRefetching } = useQuery<DriverDashboardData>({
     queryKey: ["/api/driver/dashboard", user?.id],
     queryFn: async () => {
-      const baseUrl = "https://amanship-production.up.railway.app/"; 
+      const baseUrl = "http://192.168.10.210:5000"; 
       const response = await fetch(`${baseUrl}/api/driver/dashboard?userId=${user?.id}`);
       if (!response.ok) throw new Error("Failed to fetch dashboard");
       return response.json();

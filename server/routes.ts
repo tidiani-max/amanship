@@ -7,13 +7,12 @@ import {
   categories, products, vouchers, users, stores, storeStaff, 
   storeInventory, otpCodes, addresses, orders, orderItems, 
   cartItems, messages
-} from "../shared/schema"
+} from "@shared/schema";
 import { findNearestAvailableStore, getStoresWithAvailability, estimateDeliveryTime } from "./storeAvailability";
 import express, { Express } from 'express';
 import path from 'path';
 import { Expo } from 'expo-server-sdk';
 import multer from "multer";
-import type { StoreWithDistance } from "./storeAvailability";
 
 
 // ==================== CONFIGURATION ====================
@@ -63,7 +62,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log("🌐 Setting up CORS middleware...");
   
   app.use((req, res, next) => {
-    const allowedOrigins = ["http://localhost:8081", "http://https://amanship-production.up.railway.app/:8081"];
+    const allowedOrigins = ["http://localhost:8081", "http://192.168.10.210:8081"];
     const origin = req.headers.origin;
     
     if (origin && allowedOrigins.includes(origin)) {
@@ -1085,7 +1084,7 @@ app.put("/api/driver/orders/:id/status", async (req, res) => {
     try {
       const { orderId, senderId, type } = req.body;
       let content = req.body.content;
-      if (req.file) content = `https://amanship-production.up.railway.app//uploads/chat/${req.file.filename}`;
+      if (req.file) content = `http://192.168.10.210:5000/uploads/chat/${req.file.filename}`;
       if (!orderId || !senderId || !content) return res.status(400).json({ error: "Missing fields" });
       
       const [msg] = await db.insert(messages).values({

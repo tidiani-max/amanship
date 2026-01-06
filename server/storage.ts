@@ -31,7 +31,7 @@ import {
   type InsertStoreStaff,
   type StoreInventory,
   type InsertStoreInventory,
-} from "../shared/schema"
+} from "../shared/schema";
 
 export interface IStorage {
   // User Methods

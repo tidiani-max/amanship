@@ -21,11 +21,11 @@ declare global {
 function setupCors(app: express.Application) {
   app.use((req, res, next) => {
     // UPDATED: Ensure your frontend IP is permitted
-   const allowedOrigins = [
-  'http://localhost:8081',
-  'https://amanship-production.up.railway.app'
-];
-
+    const allowedOrigins = [
+      'http://localhost:8081', 
+      'http://127.0.0.1:8081', 
+      'http://192.168.10.210:8081' 
+    ];
     
     const origin = req.headers.origin;
 
@@ -172,7 +172,7 @@ function setupErrorHandler(app: express.Application) {
     log(`-----------------------------------------`);
     log(`🚀 KilatGo Server started!`);
     log(`🔗 Localhost: http://localhost:${port}`);
-    log(`📱 Network:   http://https://amanship-production.up.railway.app/:${port}`);
+    log(`📱 Network:   http://192.168.10.210:${port}`);
     log(`-----------------------------------------`);
   });
 })();

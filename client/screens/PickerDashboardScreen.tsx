@@ -17,7 +17,7 @@ import { getImageUrl } from "@/lib/image-url";
 import { Spacing } from "@/constants/theme";
 
 // --- CONFIGURATION ---
-const BASE_URL = "https://amanship-production.up.railway.app/";
+const BASE_URL = "http://192.168.10.210:5000";
 
 // --- INTERFACES ---
 interface Category {
