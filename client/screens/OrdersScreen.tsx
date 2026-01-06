@@ -35,7 +35,7 @@ export default function OrdersScreen() {
       if (!userId) return [];
       
       const response = await fetch(
-        `http://192.168.10.210:5000/api/orders?userId=${userId}`
+        `https://amanship-production.up.railway.app//api/orders?userId=${userId}`
       );
       if (!response.ok) throw new Error("Network response was not ok");
       return response.json();
