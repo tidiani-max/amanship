@@ -1,12 +1,12 @@
 {
   "name": "my-app",
-  "main": "client/index.js",
   "version": "1.0.0",
+  "private": true,
   "scripts": {
-    "start": "node server/index.js",
-    "build": "tsc",
-    "expo:dev": "EXPO_PUBLIC_DOMAIN=10.30.0.208 npx expo start --tunnel",
+    "build": "tsc -p tsconfig.server.json",
+    "start": "node dist/server/index.js",
     "server:dev": "NODE_ENV=development tsx --env-file=.env server/index.ts",
+    "expo:dev": "EXPO_PUBLIC_DOMAIN=10.30.0.208 npx expo start --tunnel",
     "all:dev": "npm run server:dev & sleep 5 && npm run expo:dev",
     "db:push": "drizzle-kit push",
     "lint": "npx expo lint",
@@ -25,6 +25,7 @@
     "@react-navigation/native-stack": "^7.3.16",
     "@tanstack/react-query": "^5.90.7",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
     "drizzle-orm": "^0.39.3",
     "drizzle-zod": "^0.7.0",
     "expo": "^54.0.23",
@@ -86,6 +87,5 @@
     "eslint-plugin-prettier": "^5.5.4",
     "prettier": "3.6.2",
     "typescript": "~5.9.2"
-  },
-  "private": true
+  }
 }

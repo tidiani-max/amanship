@@ -1,4 +1,6 @@
+import "dotenv/config";
 import express from "express";
+import { db } from "./db";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import * as fs from "fs";
