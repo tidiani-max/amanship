@@ -173,6 +173,7 @@ function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: 
   const handleSubmit = () => {
     if (!name.trim() || !address.trim()) {
       Alert.alert("Error", "Store name and address are required");
+      
       return;
     }
 
