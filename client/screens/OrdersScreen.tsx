@@ -35,7 +35,7 @@ export default function OrdersScreen() {
       if (!userId) return [];
       
       const response = await fetch(
-       `process.env.EXPO_PUBLIC_DOMAIN/api/orders?userId=${userId}&role=customer`
+       `${process.env.EXPO_PUBLIC_DOMAIN}/api/orders?userId=${userId}&role=customer`
       );
       if (!response.ok) throw new Error("Network response was not ok");
       return response.json();

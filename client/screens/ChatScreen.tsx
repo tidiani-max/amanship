@@ -26,7 +26,7 @@ export default function ChatScreen() {
   const { data: orderDetails } = useQuery({
     queryKey: ["order-chat-details", orderId],
     queryFn: async () => {
-      const res = await fetch(`process.env.EXPO_PUBLIC_DOMAIN/api/orders/${orderId}`);
+      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}`);
       return res.json();
     },
   });
@@ -34,7 +34,7 @@ export default function ChatScreen() {
   const { data: messages = [] } = useQuery({
     queryKey: ["messages", orderId],
     queryFn: async () => {
-      const res = await fetch(`process.env.EXPO_PUBLIC_DOMAIN/api/orders/${orderId}/messages`);
+      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}/messages`);
       return res.json();
     },
     refetchInterval: 3000,
@@ -66,7 +66,7 @@ export default function ChatScreen() {
       }
     }
 
-    const res = await fetch(`process.env.EXPO_PUBLIC_DOMAIN/api/messages`, {
+    const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/messages`, {
       method: "POST",
       body: formData,
       // IMPORTANT: Do NOT set 'Content-Type' header manually when using FormData
