@@ -14,29 +14,25 @@ const isProd = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_EN
 function setupCors(app: express.Application) {
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-
-    // List of explicitly allowed origins
     const allowedOrigins = [
       "http://localhost:8081",
       "https://amanship-production.up.railway.app"
     ];
 
-    // Check if the origin is an Expo tunnel (ends with .exp.direct)
     const isExpoTunnel = origin?.endsWith('.exp.direct');
 
-    // ✅ Fix: Allow the origin if it's in our list OR it's a dynamic Expo tunnel
     if (origin && (allowedOrigins.includes(origin) || isExpoTunnel)) {
       res.setHeader("Access-Control-Allow-Origin", origin);
+      // ✅ VERY IMPORTANT FOR WEB BROWSERS:
+      res.setHeader("Vary", "Origin"); 
     } else if (!isProd) {
-      // Local fallback
-      res.setHeader("Access-Control-Allow-Origin", origin || "*");
+      res.setHeader("Access-Control-Allow-Origin", "*");
     }
 
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
     res.setHeader("Access-Control-Allow-Credentials", "true");
 
-    // ✅ Fix: Ensure Preflight 'OPTIONS' requests always return 200
     if (req.method === "OPTIONS") {
       return res.status(200).end();
     }

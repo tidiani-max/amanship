@@ -408,18 +408,21 @@ async getProductsWithInventory(storeId: string, categoryId?: string) {
     return db.select().from(storeInventory).where(eq(storeInventory.storeId, storeId));
   }
 
-  async getStoreInventoryWithProducts(storeId: string): Promise<(StoreInventory & { product: Product })[]> {
-    const inventory = await db.select().from(storeInventory)
-      .where(eq(storeInventory.storeId, storeId));
-    
-    const result = await Promise.all(
-      inventory.map(async (inv) => {
-        const product = await this.getProductById(inv.productId);
-        return product ? { ...inv, product } : null;
-      })
-    );
-    return result.filter((item): item is (StoreInventory & { product: Product }) => item !== null);
-  }
+ async getStoreInventoryWithProducts(storeId: string): Promise<(StoreInventory & { product: Product })[]> {
+  const results = await db
+    .select({
+      inventory: storeInventory,
+      product: products,
+    })
+    .from(storeInventory)
+    .innerJoin(products, eq(storeInventory.productId, products.id))
+    .where(eq(storeInventory.storeId, storeId));
+
+  return results.map(r => ({
+    ...r.inventory,
+    product: r.product
+  }));
+}
 
   async createStoreInventory(inventory: InsertStoreInventory): Promise<StoreInventory> {
     const [result] = await db.insert(storeInventory).values(inventory).returning();
