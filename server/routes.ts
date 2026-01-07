@@ -57,7 +57,14 @@ async function sendPushNotification(userId: string, title: string, body: string,
 
 export async function registerRoutes(app: Express): Promise<Server> {
 
-
+// 🟢 HEALTH CHECK & DEBUG ROUTE
+  app.get("/api/health", (req, res) => {
+    res.json({ 
+      status: "alive", 
+      time: new Date().toISOString(),
+      env: process.env.NODE_ENV || "not set"
+    });
+  });
   
   
   // ==================== 1. CORS MIDDLEWARE (MUST BE FIRST!) ====================
