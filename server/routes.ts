@@ -91,9 +91,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 });
 
   // ==================== 2. STATIC FILES ====================
-  app.use('/images', express.static(path.join(__dirname, '../../../../../../attached_assets')));
+  app.use('/attached_assets', express.static(path.join(process.cwd(), 'attached_assets')));
   app.use('/attached_assets', express.static(path.join(process.cwd(), 'attached_assets')));
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+  // Replace those long ../../../ paths with this:
+
 
    app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async (req: Request, res: Response) => {
   try {
