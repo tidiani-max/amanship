@@ -1,19 +1,39 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 /**
- * Gets the base URL for the Express API server (e.g., "http://localhost:5000")
- * @returns {string} The API base URL
+ * Automatically determines the API URL based on the environment.
  */
 export function getApiUrl(): string {
-  const host = process.env.EXPO_PUBLIC_DOMAIN;
-  return host || "http://localhost:5000";
+  // 1. Check if the environment variable is explicitly set
+  if (process.env.EXPO_PUBLIC_DOMAIN) {
+    return process.env.EXPO_PUBLIC_DOMAIN.replace(/\/$/, "");
+  }
+
+  // 2. If running in a Web Browser (localhost:8081), point to your Railway backend
+  // This is the most common fix for the "Network Error" you are seeing.
+  if (typeof window !== 'undefined') {
+    return "https://amanship-production.up.railway.app";
+  }
+
+  // 3. Fallback for local mobile development
+  return "http://localhost:5000";
 }
 
-async function throwIfResNotOk(res: Response) {
+async function handleResponse(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    // Try to get a clean error message from the JSON response
+    let errorMessage = `Error ${res.status}`;
+    try {
+      const data = await res.json();
+      errorMessage = data.error || data.message || errorMessage;
+    } catch (e) {
+      // If not JSON, try plain text
+      const text = await res.text();
+      if (text) errorMessage = text;
+    }
+    throw new Error(errorMessage);
   }
+  return res;
 }
 
 export async function apiRequest(
@@ -22,38 +42,47 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const baseUrl = getApiUrl();
-  const url = new URL(route, baseUrl);
+  // Ensure the route starts with a slash
+  const cleanRoute = route.startsWith("/") ? route : `/${route}`;
+  const url = `${baseUrl}${cleanRoute}`;
 
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: {
+      "Accept": "application/json",
+      ...(data ? { "Content-Type": "application/json" } : {}),
+    },
     body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
+    // Note: Use "omit" or "same-origin" if you aren't using cookie-based sessions
+    // to avoid some strict CORS preflight issues.
+    credentials: "omit", 
   });
 
-  await throwIfResNotOk(res);
-  return res;
+  return await handleResponse(res);
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
+
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const baseUrl = getApiUrl();
-    const url = new URL(queryKey.join("/") as string, baseUrl);
+    const cleanRoute = queryKey.join("/");
+    const url = `${baseUrl}/${cleanRoute.startsWith('/') ? cleanRoute.slice(1) : cleanRoute}`;
 
     const res = await fetch(url, {
-      credentials: "include",
+      headers: { "Accept": "application/json" },
+      credentials: "omit",
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;
     }
 
-    await throwIfResNotOk(res);
-    return await res.json();
+    const validatedRes = await handleResponse(res);
+    return await validatedRes.json();
   };
 
 export const queryClient = new QueryClient({
@@ -62,7 +91,7 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      staleTime: 1000 * 60 * 5, // 5 minutes
       retry: false,
     },
     mutations: {

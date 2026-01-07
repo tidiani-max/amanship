@@ -12,32 +12,16 @@ const log = console.log;
 const isProd = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT;
 
 function setupCors(app: express.Application) {
-  app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    const allowedOrigins = [
-      "http://localhost:8081",
-      "https://amanship-production.up.railway.app"
-    ];
-
-    const isExpoTunnel = origin?.endsWith('.exp.direct');
-
-    if (origin && (allowedOrigins.includes(origin) || isExpoTunnel)) {
-      res.setHeader("Access-Control-Allow-Origin", origin);
-      // ✅ VERY IMPORTANT FOR WEB BROWSERS:
-      res.setHeader("Vary", "Origin"); 
-    } else if (!isProd) {
-      res.setHeader("Access-Control-Allow-Origin", "*");
-    }
-
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-
-    if (req.method === "OPTIONS") {
-      return res.status(200).end();
-    }
-    next();
-  });
+  app.use(cors({
+    origin: [
+      "http://localhost:8081", 
+      "https://amanship-production.up.railway.app",
+      /\.exp\.direct$/ // This allows all Expo tunnels automatically
+    ],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+    credentials: true,
+  }));
 }
 
 function setupBodyParsing(app: express.Application) {
