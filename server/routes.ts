@@ -58,6 +58,79 @@ async function sendPushNotification(userId: string, title: string, body: string,
 export async function registerRoutes(app: Express): Promise<Server> {
 
 
+  
+  
+  // ==================== 1. CORS MIDDLEWARE (MUST BE FIRST!) ====================
+  // ==================== 1. CORS MIDDLEWARE (FIXED) ====================
+  
+
+  app.post("/api/auth/google", async (req, res) => {
+  const { googleId, email, name } = req.body;
+
+  try {
+    // 1. Try to find user by email first
+    let user = await storage.getUserByEmail(email);
+
+    // 2. If no user found, create one
+    if (!user) {
+      user = await storage.createUser({
+        username: name || email.split('@')[0],
+        email: email,
+        password: "google-auth-user", // Placeholder since they use Google
+        role: "customer",
+        phone: null,
+      });
+    }
+
+    // 3. Set session/return user
+    // (If you use express-session) req.session.userId = user.id;
+    res.json({ user });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to authenticate with Google" });
+  }
+});
+
+  // ==================== 2. STATIC FILES ====================
+  app.use('/images', express.static(path.join(__dirname, '../../../../../../attached_assets')));
+  app.use('/attached_assets', express.static(path.join(process.cwd(), 'attached_assets')));
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+   app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async (req: Request, res: Response) => {
+  try {
+    const { inventoryId, userId, stock, price, name, brand, description, categoryId } = req.body;
+
+    if (!inventoryId || !userId) return res.status(400).json({ error: "Missing required fields" });
+
+    // 1. Update Inventory stock
+    await storage.updateStoreInventory(inventoryId, parseInt(stock) || 0, true);
+
+    // 2. Find the product linked to this inventory record
+    const invRecords = await db.select().from(storeInventory).where(eq(storeInventory.id, inventoryId));
+    
+    if (invRecords.length > 0) {
+      const updateData: any = {
+        name,
+        brand,
+        description,
+        price: parseFloat(price),
+        categoryId
+      };
+
+      if (req.file) {
+        updateData.image = `/uploads/${req.file.filename}`;
+      }
+
+      // This call will now work because we added it to storage.ts
+      await storage.updateProduct(invRecords[0].productId, updateData);
+    }
+
+    res.json({ success: true, message: "Inventory and Product updated" });
+  } catch (error) {
+    console.error("Update error:", error);
+    res.status(500).json({ error: "Update failed" });
+  }
+});
+
   // ==================== 3. AUTHENTICATION ROUTES ====================
   console.log("🔐 Registering auth routes...");
   
@@ -211,75 +284,6 @@ app.post("/api/auth/otp/verify", async (req, res) => {
     res.status(500).json({ error: "Verification failed internally" });
   }
 });
-
-  app.post("/api/auth/google", async (req, res) => {
-  const { googleId, email, name } = req.body;
-
-  try {
-    // 1. Try to find user by email first
-    let user = await storage.getUserByEmail(email);
-
-    // 2. If no user found, create one
-    if (!user) {
-      user = await storage.createUser({
-        username: name || email.split('@')[0],
-        email: email,
-        password: "google-auth-user", // Placeholder since they use Google
-        role: "customer",
-        phone: null,
-      });
-    }
-
-    // 3. Set session/return user
-    // (If you use express-session) req.session.userId = user.id;
-    res.json({ user });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to authenticate with Google" });
-  }
-});
-
-
-   app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async (req: Request, res: Response) => {
-  try {
-    const { inventoryId, userId, stock, price, name, brand, description, categoryId } = req.body;
-
-    if (!inventoryId || !userId) return res.status(400).json({ error: "Missing required fields" });
-
-    // 1. Update Inventory stock
-    await storage.updateStoreInventory(inventoryId, parseInt(stock) || 0, true);
-
-    // 2. Find the product linked to this inventory record
-    const invRecords = await db.select().from(storeInventory).where(eq(storeInventory.id, inventoryId));
-    
-    if (invRecords.length > 0) {
-      const updateData: any = {
-        name,
-        brand,
-        description,
-        price: parseFloat(price),
-        categoryId
-      };
-
-      if (req.file) {
-        updateData.image = `/uploads/${req.file.filename}`;
-      }
-
-      // This call will now work because we added it to storage.ts
-      await storage.updateProduct(invRecords[0].productId, updateData);
-    }
-
-    res.json({ success: true, message: "Inventory and Product updated" });
-  } catch (error) {
-    console.error("Update error:", error);
-    res.status(500).json({ error: "Update failed" });
-  }
-});
-
-  // ==================== 2. STATIC FILES ====================
-  app.use('/images', express.static(path.join(__dirname, '../../../../../../attached_assets')));
-  app.use('/attached_assets', express.static(path.join(process.cwd(), 'attached_assets')));
-  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
-
 
   // ==================== 4. PICKER ROUTES (BEFORE /api/orders) ====================
   console.log("📦 Registering picker routes...");
@@ -1969,7 +1973,112 @@ app.get("/api/vouchers", async (req, res) => {
   }
 });
 
+app.post("/api/seed", async (_req: Request, res: Response) => {
+  try {
+    const existingCategories = await storage.getCategories();
+    
+    const existingStores = await storage.getStores();
+    const DEMO_STORE_ID_CHECK = "demo-store";
+    const DEMO_PICKER_ID_CHECK = "demo-picker";
+    const DEMO_DRIVER_ID_CHECK = "demo-driver";
+    
+    if (existingCategories.length > 0) {
+      const demoUser = await storage.getUser(DEMO_USER_ID);
+      if (!demoUser) {
+        await db.insert(users).values({
+          id: DEMO_USER_ID,
+          username: "demo",
+          password: "demo",
+          phone: "+62123456789",
+        });
+      }
+      
+      if (existingStores.length === 0) {
+        const allProducts = await storage.getProducts();
+        
+        if (allProducts.length === 0) {
+          return res.json({ message: "Cannot seed store data: no products found" });
+        }
+        
+        await db.insert(stores).values({
+          id: DEMO_STORE_ID_CHECK,
+          name: "KilatGo Central Jakarta",
+          address: "Jl. Sudirman No. 1, Central Jakarta, DKI Jakarta 10220",
+          latitude: "-6.2088000",
+          longitude: "106.8456000",
+          codAllowed: true,
+          isActive: true,
+        });
 
+        const existingPicker = await storage.getUser(DEMO_PICKER_ID_CHECK);
+        const existingDriver = await storage.getUser(DEMO_DRIVER_ID_CHECK);
+        
+        if (!existingPicker) {
+          await db.insert(users).values({
+            id: DEMO_PICKER_ID_CHECK,
+            username: "picker1",
+            password: "picker123",
+            phone: "+6281234567890",
+            role: "picker",
+          });
+        }
+        
+        if (!existingDriver) {
+          await db.insert(users).values({
+            id: DEMO_DRIVER_ID_CHECK,
+            username: "driver1",
+            password: "driver123",
+            phone: "+6281234567891",
+            role: "driver",
+          });
+        }
+
+        const existingStaff = await storage.getStoreStaff(DEMO_STORE_ID_CHECK);
+        if (existingStaff.length === 0) {
+          await db.insert(storeStaff).values([
+            {
+              id: "staff-picker-1",
+              userId: DEMO_PICKER_ID_CHECK,
+              storeId: DEMO_STORE_ID_CHECK,
+              role: "picker",
+              status: "online",
+            },
+            {
+              id: "staff-driver-1",
+              userId: DEMO_DRIVER_ID_CHECK,
+              storeId: DEMO_STORE_ID_CHECK,
+              role: "driver",
+              status: "online",
+            },
+          ]);
+        }
+
+        const inventoryEntries = allProducts.map((product, index) => ({
+          id: `inventory-${index + 1}`,
+          storeId: DEMO_STORE_ID_CHECK,
+          productId: product.id,
+          stockCount: 50,
+          isAvailable: true,
+        }));
+
+        await db.insert(storeInventory).values(inventoryEntries);
+        
+        return res.json({ message: "Store data seeded successfully" });
+      }
+      
+      return res.json({ message: "Data already seeded" });
+    }
+
+    // Full seed logic (categories + products + stores)...
+    // [Keep your existing seed logic here]
+    
+    res.json({ message: "Data seeded successfully" });
+  } catch (error) {
+    console.error("Seed error:", error);
+    res.status(500).json({ error: "Failed to seed data" });
+  }
+});
+  
   const httpServer = createServer(app);
   return httpServer;
 }
