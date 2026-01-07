@@ -11,17 +11,23 @@ const log = console.log;
 // Detect if we are running on Railway or locally
 const isProd = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT;
 
+
 function setupCors(app: express.Application) {
+  // Use the standard middleware - it handles the OPTIONS/Preflight automatically
   app.use(cors({
-    origin: [
-      "http://localhost:8081", 
-      "https://amanship-production.up.railway.app",
-      /\.exp\.direct$/ // This allows all Expo tunnels automatically
-    ],
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+    origin: ["http://localhost:8081", "https://amanship-production.up.railway.app"],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
   }));
+  
+  // Explicitly handle OPTIONS for Railway/Cloudfront edge cases
+  app.options('*', (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.sendStatus(200);
+  });
 }
 
 function setupBodyParsing(app: express.Application) {
