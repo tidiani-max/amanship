@@ -7,7 +7,7 @@ import {
   categories, products, vouchers, users, stores, storeStaff, 
   storeInventory, otpCodes, addresses, orders, orderItems, 
   cartItems, messages
-} from "@shared/schema";
+} from "../shared/schema";
 import { findNearestAvailableStore, getStoresWithAvailability, estimateDeliveryTime } from "./storeAvailability";
 import express, { Express } from 'express';
 import path from 'path';
