@@ -19,6 +19,8 @@ import multer from "multer";
 const DEMO_USER_ID = "demo-user";
 
 // Multer storage configuration
+const UPLOADS_PATH = path.resolve(process.cwd(), "uploads");
+
 const chatStorage = multer.diskStorage({
   destination: "./uploads/chat",
   filename: (_req, file, cb) => {
@@ -62,7 +64,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   console.log("🌐 Setting up CORS middleware...");
   
   app.use((req, res, next) => {
-    const allowedOrigins = ["http://localhost:8081", "http://192.168.10.210:8081"];
+  const allowedOrigins = [
+    "http://localhost:8081",
+    "https://amanship-production.up.railway.app" // Your production link
+  ];
     const origin = req.headers.origin;
     
     if (origin && allowedOrigins.includes(origin)) {
@@ -311,10 +316,7 @@ app.post("/api/auth/otp/verify", async (req, res) => {
 app.get("/api/picker/dashboard", async (req, res) => {
   try {
     const { userId } = req.query;
-
-    if (!userId) {
-      return res.status(400).json({ error: "userId required" });
-    }
+    if (!userId) return res.status(400).json({ error: "userId required" });
 
     const [staff] = await db
       .select()
@@ -324,33 +326,54 @@ app.get("/api/picker/dashboard", async (req, res) => {
     if (!staff) {
       return res.json({
         store: null,
-        orders: { pending: [], active: [], completed: [] },
+        orders: { pending: [], active: [], packed: [] },
       });
     }
 
-    const storeOrders = await db
+    const storeId = staff.storeId;
+
+    const pending = await db
       .select()
       .from(orders)
-      .where(eq(orders.storeId, staff.storeId));
+      .where(
+        and(
+          eq(orders.storeId, storeId),
+          eq(orders.status, "pending")
+        )
+      );
+
+    const active = await db
+      .select()
+      .from(orders)
+      .where(
+        and(
+          eq(orders.storeId, storeId),
+          eq(orders.pickerId, userId as string),
+          eq(orders.status, "picking")
+        )
+      );
+
+    const packed = await db
+      .select()
+      .from(orders)
+      .where(
+        and(
+          eq(orders.storeId, storeId),
+          eq(orders.pickerId, userId as string),
+          eq(orders.status, "packed")
+        )
+      );
 
     res.json({
       user: { id: userId, role: "picker" },
       store: staff.storeId,
-      orders: {
-        pending: storeOrders.filter(o => o.status === "pending"),
-        active: storeOrders.filter(o => o.status === "picking"),
-        completed: storeOrders.filter(o =>
-          ["packed", "delivering", "delivered"].includes(o.status || "")
-        ),
-      },
+      orders: { pending, active, packed },
     });
   } catch (error) {
     console.error("❌ Picker dashboard error:", error);
     res.status(500).json({ error: "Failed to fetch dashboard" });
   }
 });
-
-
 
   app.get("/api/picker/inventory", async (req, res) => {
     try {
@@ -451,26 +474,43 @@ app.get("/api/picker/dashboard", async (req, res) => {
   // ==================== 5. DRIVER ROUTES ====================
   console.log("🚗 Registering driver routes...");
   
-  app.get("/api/driver/dashboard", async (req, res) => {
+console.log("🚗 Registering driver routes...");
+
+app.get("/api/driver/dashboard", async (req, res) => {
   try {
     const { userId } = req.query;
     if (!userId) return res.status(400).json({ error: "Missing userId" });
 
-    // 1. Check if driver already has an active delivery
+    // 1️⃣ Get driver staff record (same pattern as picker)
+    const [staff] = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.userId, userId as string));
+
+    if (!staff) {
+      return res.json({
+        user: { id: userId, role: "driver" },
+        store: null,
+        orders: { ready: [], active: [], completed: [] }
+      });
+    }
+
+    // 2️⃣ Check if driver already has an active delivery (LOCK MODE)
     const activeOrders = await db
       .select()
       .from(orders)
       .where(
         and(
           eq(orders.driverId, userId as string),
-          eq(orders.status, "delivering")
+          eq(orders.status, "delivering"),
+          eq(orders.storeId, staff.storeId) // 🔒 store isolation
         )
       );
 
-    // 2. If active delivery exists → lock driver to that order only
     if (activeOrders.length > 0) {
       return res.json({
         user: { id: userId, role: "driver" },
+        store: staff.storeId,
         staffRecord: { status: "online" },
         orders: {
           ready: [],
@@ -480,29 +520,33 @@ app.get("/api/picker/dashboard", async (req, res) => {
       });
     }
 
-    // 3. Otherwise show only unassigned packed orders
+    // 3️⃣ Ready orders → ONLY packed orders from this store
     const readyOrders = await db
       .select()
       .from(orders)
       .where(
         and(
           eq(orders.status, "packed"),
-          isNull(orders.driverId)
+          isNull(orders.driverId),
+          eq(orders.storeId, staff.storeId) // 🔒 critical fix
         )
       );
 
+    // 4️⃣ Completed orders → same store
     const completedOrders = await db
       .select()
       .from(orders)
       .where(
         and(
           eq(orders.driverId, userId as string),
-          eq(orders.status, "delivered")
+          eq(orders.status, "delivered"),
+          eq(orders.storeId, staff.storeId)
         )
       );
 
     res.json({
       user: { id: userId, role: "driver" },
+      store: staff.storeId,
       staffRecord: { status: "online" },
       orders: {
         ready: readyOrders,
@@ -517,26 +561,47 @@ app.get("/api/picker/dashboard", async (req, res) => {
   }
 });
 
+app.put("/api/driver/orders/:id/status", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, userId } = req.body;
 
-  app.put("/api/driver/orders/:id/status", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { status, userId } = req.body;
-      console.log(`🔄 Driver update order ${id} - status: ${status}`);
+    // 1️⃣ Get driver store
+    const [staff] = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.userId, userId));
 
-      const updateData: any = { status };
-      if (status === "delivering") updateData.driverId = userId;
-
-      const [updatedOrder] = await db.update(orders).set(updateData).where(eq(orders.id, id)).returning();
-      if (!updatedOrder) return res.status(404).json({ error: "Not found" });
-
-      console.log("✅ Updated");
-      res.json(updatedOrder);
-    } catch (error) {
-      console.error("❌ Update error:", error);
-      res.status(500).json({ error: "Update failed" });
+    if (!staff) {
+      return res.status(403).json({ error: "Driver not assigned to store" });
     }
-  });
+
+    const updateData: any = { status };
+    if (status === "delivering") updateData.driverId = userId;
+
+    // 2️⃣ HARD STORE LOCK
+    const [updatedOrder] = await db
+      .update(orders)
+      .set(updateData)
+      .where(
+        and(
+          eq(orders.id, id),
+          eq(orders.storeId, staff.storeId)
+        )
+      )
+      .returning();
+
+    if (!updatedOrder) {
+      return res.status(403).json({ error: "Order not accessible" });
+    }
+
+    res.json(updatedOrder);
+  } catch (error) {
+    console.error("❌ Driver update error:", error);
+    res.status(500).json({ error: "Update failed" });
+  }
+});
+
 
   // ==================== 6. CATEGORIES ====================
   console.log("📂 Registering category routes...");
@@ -876,7 +941,6 @@ app.post("/api/orders", async (req, res) => {
     const {
       userId,
       addressId,
-      total,
       items,
       customerLat,
       customerLng,
@@ -886,66 +950,84 @@ app.post("/api/orders", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // 1️⃣ Find nearest available store
-    const nearestStore = await findNearestAvailableStore(
-      Number(customerLat),
-      Number(customerLng)
-    );
+    // 1️⃣ Resolve store per product
+    const itemsWithStore = await Promise.all(
+      items.map(async (item: any) => {
+        const [inv] = await db
+          .select()
+          .from(storeInventory)
+          .where(eq(storeInventory.productId, item.productId))
+          .limit(1);
 
-    if (!nearestStore) {
-      return res.status(400).json({ error: "No store available nearby" });
-    }
+        if (!inv) throw new Error("Product not available");
 
-    const storeId = nearestStore.id;
-
-    // 2️⃣ Create order (items REQUIRED by schema)
-    const [newOrder] = await db
-      .insert(orders)
-      .values({
-        userId,
-        storeId,
-        addressId,
-        total: Number(total),
-        status: "pending",
-        orderNumber: `ORD-${Math.random()
-          .toString(36)
-          .toUpperCase()
-          .substring(2, 9)}`,
-        items, // ✅ REQUIRED
-        customerLat: String(customerLat),
-        customerLng: String(customerLng),
+        return { ...item, storeId: inv.storeId };
       })
-      .returning();
-
-    // 3️⃣ Insert order items (normalized table)
-    await db.insert(orderItems).values(
-      items.map((item: any) => ({
-        orderId: newOrder.id,
-        productId: item.productId,
-        quantity: item.quantity,
-        priceAtEntry: String(item.price),
-      }))
     );
 
-    // 4️⃣ Notify store staff (pickers + drivers)
-    const staff = await db
-      .select()
-      .from(storeStaff)
-      .where(eq(storeStaff.storeId, storeId));
-
-    for (const s of staff) {
-      await sendPushNotification(
-        s.userId,
-        "📦 New Order",
-        `Order ${newOrder.orderNumber} is ready`,
-        { orderId: newOrder.id }
-      );
+    // 2️⃣ Group items by store
+    const itemsByStore: Record<string, any[]> = {};
+    for (const item of itemsWithStore) {
+      if (!itemsByStore[item.storeId]) itemsByStore[item.storeId] = [];
+      itemsByStore[item.storeId].push(item);
     }
 
-    // 5️⃣ Clear cart
-    await storage.clearCart(userId);
+    const createdOrders = [];
 
-    res.status(201).json(newOrder);
+    // 3️⃣ Create ONE order per store
+    for (const storeId of Object.keys(itemsByStore)) {
+      const storeItems = itemsByStore[storeId];
+
+      const total = storeItems.reduce(
+        (sum, i) => sum + Number(i.price) * Number(i.quantity),
+        0
+      );
+
+      const [order] = await db
+        .insert(orders)
+        .values({
+          userId,
+          storeId,
+          addressId,
+          total,
+          status: "pending",
+          orderNumber: `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`,
+          items: storeItems,
+          customerLat: String(customerLat),
+          customerLng: String(customerLng),
+        })
+        .returning();
+
+      await db.insert(orderItems).values(
+        storeItems.map(i => ({
+          orderId: order.id,
+          productId: i.productId,
+          quantity: i.quantity,
+          priceAtEntry: String(i.price),
+        }))
+      );
+
+      // Notify store staff
+      const staff = await db
+        .select()
+        .from(storeStaff)
+        .where(eq(storeStaff.storeId, storeId));
+
+      for (const s of staff) {
+        await sendPushNotification(
+          s.userId,
+          "📦 New Order",
+          `Order ${order.orderNumber} is ready`,
+          { orderId: order.id }
+        );
+      }
+
+      createdOrders.push(order);
+    }
+
+    await storage.clearCart(userId);
+    res.status(201).json(createdOrders);
+
   } catch (error) {
     console.error("❌ Create order error:", error);
     res.status(500).json({ error: "Failed to create order" });
@@ -953,19 +1035,92 @@ app.post("/api/orders", async (req, res) => {
 });
 
 
-  app.patch("/api/orders/:id/take", async (req, res) => {
-    try {
-      const { staffId, role } = req.body;
-      const updateData: any = {};
-      if (role === 'picker') { updateData.pickerId = staffId; updateData.status = 'picking'; }
-      else if (role === 'driver') { updateData.driverId = staffId; updateData.status = 'delivering'; }
-      const [updated] = await db.update(orders).set(updateData).where(eq(orders.id, req.params.id)).returning();
-      res.json(updated);
-    } catch (error) {
-      console.error("❌ Take order error:", error);
-      res.status(500).json({ error: "Failed to assign" });
+
+app.patch("/api/orders/:id/take", async (req, res) => {
+  try {
+    const { userId, role } = req.body;
+
+    // 1️⃣ Find staff membership
+    const [staff] = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.userId, userId));
+
+    if (!staff) {
+      return res.status(403).json({ error: "Not store staff" });
     }
-  });
+
+    // 2️⃣ Ensure order belongs to same store
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, req.params.id));
+
+    if (!order || order.storeId !== staff.storeId) {
+      return res.status(403).json({ error: "Order not from your store" });
+    }
+
+    // 3️⃣ Update order safely
+    const updateData: any = {};
+    if (role === "picker") {
+      updateData.pickerId = userId;
+      updateData.status = "picking";
+    } else if (role === "driver") {
+      updateData.driverId = userId;
+      updateData.status = "delivering";
+    }
+
+    const [updated] = await db
+      .update(orders)
+      .set(updateData)
+      .where(eq(orders.id, req.params.id))
+      .returning();
+
+    res.json(updated);
+  } catch (error) {
+    console.error("❌ Take order error:", error);
+    res.status(500).json({ error: "Failed to assign" });
+  }
+});
+
+
+
+app.patch("/api/orders/:id/pack", async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    const [staff] = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.userId, userId));
+
+    if (!staff) {
+      return res.status(403).json({ error: "Not store staff" });
+    }
+
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, req.params.id));
+
+    if (!order || order.storeId !== staff.storeId) {
+      return res.status(403).json({ error: "Order not from your store" });
+    }
+
+    const [updated] = await db
+      .update(orders)
+      .set({ status: "packed" })
+      .where(eq(orders.id, req.params.id))
+      .returning();
+
+    res.json(updated);
+  } catch (err) {
+    console.error("❌ Pack order error:", err);
+    res.status(500).json({ error: "Failed to pack order" });
+  }
+});
+
+
 
 app.put("/api/driver/orders/:id/status", async (req, res) => {
   try {
@@ -1016,38 +1171,70 @@ app.put("/api/driver/orders/:id/status", async (req, res) => {
   }
 });
 
+app.get("/api/orders", async (req, res) => {
+  try {
+    const { userId, role } = req.query;
 
-  app.get("/api/orders", async (req, res) => {
-    try {
-      const { userId, storeId, role } = req.query;
-      const filters = [];
-      if (role === 'customer') {
-        if (!userId) return res.status(400).json({ error: "userId required" });
-        filters.push(eq(orders.userId, userId as string));
-      } else if (role === 'picker' || role === 'driver') {
-        if (!storeId) return res.status(400).json({ error: "storeId required" });
-        filters.push(eq(orders.storeId, storeId as string));
-      } else {
-        if (!userId) return res.status(400).json({ error: "userId required" });
-        filters.push(eq(orders.userId, userId as string));
-      }
-      
-      const userOrders = await db.select().from(orders).where(and(...filters)).orderBy(sql`${orders.createdAt} DESC`);
-      const ordersWithItems = await Promise.all(userOrders.map(async (o) => {
-        const items = await db.select({
-          id: orderItems.id, quantity: orderItems.quantity, priceAtEntry: orderItems.priceAtEntry,
-          productId: orderItems.productId, productName: products.name, productImage: products.image,
-        }).from(orderItems).leftJoin(products, eq(orderItems.productId, products.id)).where(eq(orderItems.orderId, o.id));
-        return { ...o, items };
-      }));
-      res.json(ordersWithItems);
-    } catch (error) {
-      console.error("❌ Fetch orders error:", error);
-      res.status(500).json({ error: "Failed to fetch orders" });
+    if (!userId || !role) {
+      return res.status(400).json({ error: "userId and role required" });
     }
-  });
 
-  app.get("/api/orders/:id", async (req, res) => {
+    let whereCondition;
+
+    if (role === "customer") {
+      whereCondition = eq(orders.userId, userId as string);
+    } 
+    else if (role === "picker" || role === "driver") {
+      const [staff] = await db
+        .select()
+        .from(storeStaff)
+        .where(eq(storeStaff.userId, userId as string));
+
+      if (!staff) {
+        return res.status(403).json({ error: "Not store staff" });
+      }
+
+      whereCondition = eq(orders.storeId, staff.storeId);
+    } 
+    else {
+      return res.status(403).json({ error: "Invalid role" });
+    }
+
+    const userOrders = await db
+      .select()
+      .from(orders)
+      .where(whereCondition)
+      .orderBy(sql`${orders.createdAt} DESC`);
+
+    const ordersWithItems = await Promise.all(
+      userOrders.map(async (o) => {
+        const items = await db
+          .select({
+            id: orderItems.id,
+            quantity: orderItems.quantity,
+            priceAtEntry: orderItems.priceAtEntry,
+            productId: orderItems.productId,
+            productName: products.name,
+            productImage: products.image,
+          })
+          .from(orderItems)
+          .leftJoin(products, eq(orderItems.productId, products.id))
+          .where(eq(orderItems.orderId, o.id));
+
+        return { ...o, items };
+      })
+    );
+
+    res.json(ordersWithItems);
+  } catch (error) {
+    console.error("❌ Fetch orders error:", error);
+    res.status(500).json({ error: "Failed to fetch orders" });
+  }
+});
+
+
+
+app.get("/api/orders/:id", async (req, res) => {
     try {
       const [orderData] = await db.select().from(orders).where(eq(orders.id, req.params.id)).limit(1);
       if (!orderData) return res.status(404).json({ error: "Order not found" });
@@ -1081,25 +1268,49 @@ app.put("/api/driver/orders/:id/status", async (req, res) => {
   });
 
   app.post("/api/messages", uploadChat.single("file"), async (req, res) => {
-    try {
-      const { orderId, senderId, type } = req.body;
-      let content = req.body.content;
-      if (req.file) content = `http://192.168.10.210:5000/uploads/chat/${req.file.filename}`;
-      if (!orderId || !senderId || !content) return res.status(400).json({ error: "Missing fields" });
-      
-      const [msg] = await db.insert(messages).values({
-        orderId, senderId, type: type || (req.file ? "image" : "text"), content,
-      }).returning();
-      
-      const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
-      const receiverId = (senderId === order.userId) ? order.driverId : order.userId;
-      if (receiverId) await sendPushNotification(receiverId, "New Message 💬", type === "image" ? "📷 Image" : content, { orderId });
-      res.json(msg);
-    } catch (error) {
-      console.error("❌ Send message error:", error);
-      res.status(500).json({ error: "Failed to send message" });
+  try {
+    const { orderId, senderId, type } = req.body;
+    let content = req.body.content;
+
+    // ✅ FIX: Use template literals ${} to insert the actual domain variable
+    // We also handle the slash to ensure the URL is formed correctly
+    if (req.file) {
+      const baseUrl = process.env.EXPO_PUBLIC_DOMAIN || "";
+      content = `${baseUrl}/uploads/chat/${req.file.filename}`;
     }
-  });
+
+    if (!orderId || !senderId || !content) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
+    const [msg] = await db.insert(messages).values({
+      orderId,
+      senderId,
+      type: type || (req.file ? "image" : "text"),
+      content,
+    }).returning();
+
+    // Fetch order to determine receiver
+    const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+    
+    if (order) {
+      const receiverId = (senderId === order.userId) ? order.driverId : order.userId;
+      if (receiverId) {
+        await sendPushNotification(
+          receiverId, 
+          "New Message 💬", 
+          req.file ? "📷 Image" : content, 
+          { orderId }
+        );
+      }
+    }
+
+    res.json(msg);
+  } catch (error) {
+    console.error("❌ Send message error:", error);
+    res.status(500).json({ error: "Failed to send message" });
+  }
+});
 
   // ==================== 12. STORES ====================
   console.log("🏪 Registering store routes...");

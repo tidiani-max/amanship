@@ -129,7 +129,6 @@ export default function CheckoutScreen() {
         deliveryFee,
         addressId,
         userId: user.id,
-        storeId: store?.id,
       });
 
       if (!res.ok) throw new Error("Order failed");

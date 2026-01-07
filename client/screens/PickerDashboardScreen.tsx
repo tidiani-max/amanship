@@ -17,7 +17,7 @@ import { getImageUrl } from "@/lib/image-url";
 import { Spacing } from "@/constants/theme";
 
 // --- CONFIGURATION ---
-const BASE_URL = "http://192.168.10.210:5000";
+const BASE_URL = "process.env.EXPO_PUBLIC_DOMAIN";
 
 // --- INTERFACES ---
 interface Category {
@@ -154,9 +154,14 @@ const { data: categories = [] } = useQuery<Category[]>({
 
   // --- MEMOS ---
   const ordersToDisplay = useMemo(() => {
-    if (!dashboard?.orders) return [];
-    return [...(dashboard.orders.pending || []), ...(dashboard.orders.active || [])];
-  }, [dashboard]);
+  if (!dashboard?.orders) return [];
+  return [
+    ...(dashboard.orders.pending || []),
+    ...(dashboard.orders.active || []),
+    ...(dashboard.orders.packed || []), // ✅ REQUIRED
+  ];
+}, [dashboard]);
+
 
   const filteredInventory = useMemo(() => {
     if (!inventory) return [];
@@ -292,16 +297,35 @@ const { data: categories = [] } = useQuery<Category[]>({
     ]);
   };
 
-  const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
-    try {
-      const response = await fetch(`${BASE_URL}/api/orders/${orderId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus }),
-      });
-      if (response.ok) queryClient.invalidateQueries({ queryKey: ["/api/picker/dashboard"] });
-    } catch (err) { Alert.alert("Error", "Update failed."); }
-  };
+const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
+  if (!user?.id) return;
+
+  const url =
+    nextStatus === "picking"
+      ? `${BASE_URL}/api/orders/${orderId}/take`
+      : `${BASE_URL}/api/orders/${orderId}/pack`;
+
+  const body =
+    nextStatus === "picking"
+      ? { userId: user.id, role: "picker" }
+      :{ userId: user.id };
+
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    Alert.alert("Error", err.error || "Update failed");
+    return;
+  }
+
+  queryClient.invalidateQueries({ queryKey: ["/api/picker/dashboard"] });
+};
+
+
 
   return (
     <ThemedView style={styles.container}>

@@ -2,18 +2,19 @@
   "name": "my-app",
   "version": "1.0.0",
   "private": true,
-  "scripts": {
-    "build": "tsc -p tsconfig.server.json",
-    "start": "node dist/server/index.js",
-    "server:dev": "NODE_ENV=development tsx --env-file=.env server/index.ts",
-    "expo:dev": "EXPO_PUBLIC_DOMAIN=10.30.0.208 npx expo start --tunnel",
-    "all:dev": "npm run server:dev & sleep 5 && npm run expo:dev",
-    "db:push": "drizzle-kit push",
-    "lint": "npx expo lint",
-    "format": "prettier --write \"**/*.{js,ts,tsx,css,json}\"",
-    "android": "expo run:android",
-    "ios": "expo run:ios"
-  },
+
+ "scripts": {
+  "build": "tsc -p tsconfig.server.json",
+  "start": "node dist/server/index.js",
+  "server:dev": "NODE_ENV=development tsx --env-file=.env server/index.ts",
+  "expo:dev": "npx expo start --tunnel",
+  "all:dev": "npm run server:dev & sleep 5 && npm run expo:dev",
+  "db:push": "drizzle-kit push",
+  "lint": "npx expo lint",
+  "format": "prettier --write \"**/*.{js,ts,tsx,css,json}\"",
+  "android": "expo run:android",
+  "ios": "expo run:ios"
+},
   "dependencies": {
     "@expo/ngrok": "^4.1.3",
     "@expo/vector-icons": "^15.0.2",
