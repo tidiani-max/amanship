@@ -3,6 +3,7 @@ import express from "express";
 import { registerRoutes } from "./routes";
 import * as fs from "fs";
 import * as path from "path";
+import cors from 'cors';
 
 const app = express();
 const log = console.log;
@@ -10,7 +11,38 @@ const log = console.log;
 // Detect if we are running on Railway or locally
 const isProd = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT;
 
+function setupCors(app: express.Application) {
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
 
+    // List of explicitly allowed origins
+    const allowedOrigins = [
+      "http://localhost:8081",
+      "https://amanship-production.up.railway.app"
+    ];
+
+    // Check if the origin is an Expo tunnel (ends with .exp.direct)
+    const isExpoTunnel = origin?.endsWith('.exp.direct');
+
+    // ✅ Fix: Allow the origin if it's in our list OR it's a dynamic Expo tunnel
+    if (origin && (allowedOrigins.includes(origin) || isExpoTunnel)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    } else if (!isProd) {
+      // Local fallback
+      res.setHeader("Access-Control-Allow-Origin", origin || "*");
+    }
+
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+
+    // ✅ Fix: Ensure Preflight 'OPTIONS' requests always return 200
+    if (req.method === "OPTIONS") {
+      return res.status(200).end();
+    }
+    next();
+  });
+}
 
 function setupBodyParsing(app: express.Application) {
   app.use(express.json({
@@ -20,7 +52,6 @@ function setupBodyParsing(app: express.Application) {
 }
 
 function configureStaticFiles(app: express.Application) {
-  // Use absolute paths to ensure Railway Volumes work correctly
   const uploadsPath = path.resolve(process.cwd(), "uploads");
   const assetsPath = path.resolve(process.cwd(), "assets");
 
@@ -30,22 +61,25 @@ function configureStaticFiles(app: express.Application) {
 }
 
 (async () => {
+  // 1. Setup CORS before any routes or other middleware
+  setupCors(app);
   
+  // 2. Setup parsing and static files
   setupBodyParsing(app);
   configureStaticFiles(app);
 
+  // 3. Register routes (IMPORTANT: Ensure routes.ts has NO internal CORS logic now)
   const server = await registerRoutes(app);
 
-  // 1. Get port from Railway's environment variable
   const port = parseInt(process.env.PORT || "5000", 10);
 
-  // 2. Ensure upload directories exist (Persistent via Volumes)
+  // Ensure upload directories exist
   const chatDir = path.join(process.cwd(), "uploads", "chat");
   if (!fs.existsSync(chatDir)) {
     fs.mkdirSync(chatDir, { recursive: true });
   }
 
-  // 3. Start server on 0.0.0.0 (required for Railway and external access)
+  // Start server on 0.0.0.0
   server.listen(port, "0.0.0.0", () => {
     const mode = isProd ? "PRODUCTION 🚀" : "DEVELOPMENT 🛠️";
     log(`-----------------------------------------`);

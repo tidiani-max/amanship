@@ -62,38 +62,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // ==================== 1. CORS MIDDLEWARE (MUST BE FIRST!) ====================
   // ==================== 1. CORS MIDDLEWARE (FIXED) ====================
-  console.log("🌐 Setting up CORS middleware...");
   
-  app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    
-    // Check if the request is from your Expo Tunnel (iPhone testing)
-    const isExpoTunnel = origin?.endsWith('.exp.direct');
-    
-    const allowedOrigins = [
-      "http://localhost:8081",
-      "https://amanship-production.up.railway.app"
-    ];
-
-    // ✅ If it's a known origin OR an Expo tunnel, allow it
-    if (origin && (allowedOrigins.includes(origin) || isExpoTunnel)) {
-      res.header('Access-Control-Allow-Origin', origin);
-    } else if (!origin) {
-      // Allows mobile apps or Postman that don't send an "Origin" header
-      res.header('Access-Control-Allow-Origin', '*');
-    }
-    
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    
-    // ✅ Handle the "Preflight" request that was failing
-    if (req.method === 'OPTIONS') {
-      return res.status(200).end();
-    }
-    
-    next();
-  });
 
   app.post("/api/auth/google", async (req, res) => {
   const { googleId, email, name } = req.body;
