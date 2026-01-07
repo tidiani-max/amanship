@@ -10,29 +10,7 @@ const log = console.log;
 // Detect if we are running on Railway or locally
 const isProd = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT;
 
-function setupCors(app: express.Application) {
-  app.use((req, res, next) => {
-    const origin = req.headers.origin;
 
-    // In Production: Only allow your official Railway URL
-    // In Development: Allow everything (including random Expo Tunnel URLs)
-    if (!isProd) {
-      res.setHeader("Access-Control-Allow-Origin", origin || "*");
-    } else {
-      const allowedOrigins = ["https://amanship-production.up.railway.app"];
-      if (origin && allowedOrigins.includes(origin)) {
-        res.setHeader("Access-Control-Allow-Origin", origin);
-      }
-    }
-
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-
-    if (req.method === "OPTIONS") return res.status(200).end();
-    next();
-  });
-}
 
 function setupBodyParsing(app: express.Application) {
   app.use(express.json({
@@ -52,7 +30,7 @@ function configureStaticFiles(app: express.Application) {
 }
 
 (async () => {
-  setupCors(app);
+  
   setupBodyParsing(app);
   configureStaticFiles(app);
 

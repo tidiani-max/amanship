@@ -24,7 +24,7 @@ import { useLocation } from "@/context/LocationContext";
 import { apiRequest } from "@/lib/query-client";
 import { useLanguage } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
-import { Address } from "../shared/schema";
+import { Address } from "../../shared/schema";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
