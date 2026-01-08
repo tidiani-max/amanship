@@ -62,9 +62,14 @@
                     <a href="#categories" class="text-gray-700 hover:text-yellow-500 font-medium">Categories</a>
                     <a href="#download" class="text-gray-700 hover:text-yellow-500 font-medium">Download App</a>
                 </div>
-                <button class="bg-yellow-400 text-white px-6 py-2 rounded-full font-semibold hover:bg-yellow-500 transition">
-                    Order Now
-                </button>
+                <a id="order-now-btn" 
+   href="http://j1vzzpk-dioti-8081.exp.direct" 
+   target="_blank" 
+   class="bg-yellow-400 text-white px-6 py-2 rounded-full font-semibold hover:bg-yellow-500 transition inline-block text-center shadow-md">
+    Order Now
+</a>
+
+
             </div>
         </div>
     </nav>
@@ -259,67 +264,36 @@
 
     <!-- Download App -->
     <section id="download" class="py-20 gradient-bg">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid md:grid-cols-2 gap-12 items-center">
-                <div class="text-white">
-                    <h2 class="text-4xl font-bold mb-6">Download Amanship App Now</h2>
-                    <p class="text-xl mb-8 text-gray-800">
-                        Get exclusive deals and experience the fastest grocery delivery. Scan the QR code or download from your app store.
-                    </p>
-                    <div class="flex space-x-4 mb-8">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Google Play" class="h-14 hover-scale cursor-pointer">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="App Store" class="h-14 hover-scale cursor-pointer">
-                    </div>
-                    <div class="bg-white p-2 rounded-2xl inline-block">
-                        <svg class="w-48 h-48" viewBox="0 0 200 200">
-                            <rect width="200" height="200" fill="white"/>
-                            <g transform="translate(20,20)">
-                                <rect x="0" y="0" width="20" height="20" fill="black"/>
-                                <rect x="20" y="0" width="20" height="20" fill="black"/>
-                                <rect x="40" y="0" width="20" height="20" fill="black"/>
-                                <rect x="60" y="0" width="20" height="20" fill="black"/>
-                                <rect x="80" y="0" width="20" height="20" fill="black"/>
-                                <rect x="100" y="0" width="20" height="20" fill="black"/>
-                                <rect x="120" y="0" width="20" height="20" fill="black"/>
-                                <rect x="0" y="20" width="20" height="20" fill="black"/>
-                                <rect x="120" y="20" width="20" height="20" fill="black"/>
-                                <rect x="0" y="40" width="20" height="20" fill="black"/>
-                                <rect x="40" y="40" width="20" height="20" fill="black"/>
-                                <rect x="60" y="40" width="20" height="20" fill="black"/>
-                                <rect x="80" y="40" width="20" height="20" fill="black"/>
-                                <rect x="120" y="40" width="20" height="20" fill="black"/>
-                                <rect x="0" y="60" width="20" height="20" fill="black"/>
-                                <rect x="40" y="60" width="20" height="20" fill="black"/>
-                                <rect x="60" y="60" width="20" height="20" fill="black"/>
-                                <rect x="80" y="60" width="20" height="20" fill="black"/>
-                                <rect x="120" y="60" width="20" height="20" fill="black"/>
-                                <rect x="0" y="80" width="20" height="20" fill="black"/>
-                                <rect x="40" y="80" width="20" height="20" fill="black"/>
-                                <rect x="60" y="80" width="20" height="20" fill="black"/>
-                                <rect x="80" y="80" width="20" height="20" fill="black"/>
-                                <rect x="120" y="80" width="20" height="20" fill="black"/>
-                                <rect x="0" y="100" width="20" height="20" fill="black"/>
-                                <rect x="120" y="100" width="20" height="20" fill="black"/>
-                                <rect x="0" y="120" width="20" height="20" fill="black"/>
-                                <rect x="20" y="120" width="20" height="20" fill="black"/>
-                                <rect x="40" y="120" width="20" height="20" fill="black"/>
-                                <rect x="60" y="120" width="20" height="20" fill="black"/>
-                                <rect x="80" y="120" width="20" height="20" fill="black"/>
-                                <rect x="100" y="120" width="20" height="20" fill="black"/>
-                                <rect x="120" y="120" width="20" height="20" fill="black"/>
-                                <rect x="40" y="140" width="20" height="20" fill="black"/>
-                                <rect x="100" y="140" width="20" height="20" fill="black"/>
-                            </g>
-                        </svg>
-                        <p class="text-center text-gray-800 font-semibold mt-2">Scan to Download</p>
-                    </div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid md:grid-cols-2 gap-12 items-center">
+            <div class="text-white">
+                <h2 class="text-4xl font-bold mb-6">Download Amanship App Now</h2>
+                <p class="text-xl mb-8 text-gray-800">
+                    Get exclusive deals and experience the fastest grocery delivery. 
+                    Scan the QR code with **Expo Go** to open your project instantly.
+                </p>
+                
+                <div class="flex space-x-4 mb-8">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Google Play" class="h-14 hover-scale cursor-pointer">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="App Store" class="h-14 hover-scale cursor-pointer">
                 </div>
-                <div class="relative">
-                    <img src="https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=500" alt="App Screenshot" class="rounded-3xl shadow-2xl floating">
+
+                <div class="bg-white p-4 rounded-2xl inline-block shadow-xl">
+                    <img id="real-expo-qr" 
+                         src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=exp://j1vzzpk-dioti-8081.exp.direct" 
+                         alt="Scan to Download" 
+                         class="w-48 h-48">
+                    <p class="text-center text-gray-800 font-semibold mt-2">Scan with Expo Go</p>
                 </div>
             </div>
+
+            <div class="relative">
+                <img src="https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=500" alt="App Screenshot" class="rounded-3xl shadow-2xl floating">
+            </div>
         </div>
-    </section>
+    </div>
+</section>
+
 
     <!-- Footer -->
     <footer class="bg-gray-900 text-white py-12">
@@ -368,5 +342,38 @@
             </div>
         </div>
     </footer>
+
+<script>
+    /** * HOW TO UPDATE YOUR QR:
+     * If your terminal link changes, just replace the URL after "data=" in the <img> tag above, 
+     * or change it here:
+     */
+    const myTerminalLink = "exp://j1vzzpk-dioti-8081.exp.direct";
+    const qrElement = document.getElementById('real-expo-qr');
+    
+    // This updates the image automatically
+    qrElement.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(myTerminalLink)}`;
+</script>
+<script>
+    (function() {
+        // --- CONFIGURATION ---
+        // Your tunnel links from the terminal
+        const WEB_URL = "http://j1vzzpk-dioti-8081.exp.direct"; 
+        const EXPO_GO_URL = "exp://j1vzzpk-dioti-8081.exp.direct";
+
+        const btn = document.getElementById('order-now-btn');
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+        if (isMobile) {
+            // If the user is on a phone, try to launch the actual app
+            btn.href = EXPO_GO_URL;
+            btn.innerText = "Buka di App";
+        } else {
+            // If the user is on a laptop, open the Web Home Page
+            btn.href = WEB_URL;
+            btn.innerText = "Pesan Sekarang";
+        }
+    })();
+</script>
 </body>
 </html>
