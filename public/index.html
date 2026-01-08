@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Amanship - Download Our App</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 50px; }
+        .download-btn { padding: 15px 30px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; font-size: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Welcome to Amanship</h1>
+    <p>Scan the QR code or click below to get the app.</p>
+    
+    <div id="download-container">
+        <a href="#" id="app-link" class="download-btn">Download App</a>
+    </div>
+
+    <script>
+        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+        const link = document.getElementById('app-link');
+
+        if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) {
+            link.href = "https://apps.apple.com/app/your-app-id"; // Your App Store Link
+            link.innerText = "Download on App Store";
+        } else if (/android/i.test(userAgent)) {
+            link.href = "https://play.google.com/store/apps/details?id=your.package.name"; // Your Play Store Link
+            link.innerText = "Get it on Google Play";
+        } else {
+            link.href = "#"; 
+            link.innerText = "Open on Mobile to Download";
+        }
+    </script>
+</body>
+</html>
