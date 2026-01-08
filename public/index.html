@@ -1,189 +1,122 @@
-
 <!DOCTYPE html>
-<html lang="id" class="scroll-smooth">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Amanship - Kebutuhan Harian, 10 Menit Sampai</title>
+    <title>Amanship - Groceries in 10 Minutes</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
         
-        * {
+        body {
             font-family: 'Inter', sans-serif;
         }
         
         .gradient-bg {
-            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            background: linear-gradient(135deg, #FCD34D 0%, #F59E0B 100%);
         }
         
-        .hero-pattern {
-            background-image: radial-gradient(circle at 1px 1px, rgba(46, 204, 113, 0.1) 1px, transparent 0);
-            background-size: 40px 40px;
+        .hover-scale {
+            transition: transform 0.3s ease;
         }
         
-        .card-hover {
-            transition: all 0.3s ease;
+        .hover-scale:hover {
+            transform: scale(1.05);
         }
         
-        .card-hover:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 20px 40px rgba(46, 204, 113, 0.2);
+        .floating {
+            animation: floating 3s ease-in-out infinite;
         }
         
-        .pulse-green {
-            animation: pulse-green 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-        
-        @keyframes pulse-green {
-            0%, 100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: .7;
-            }
-        }
-        
-        .float-animation {
-            animation: float 3s ease-in-out infinite;
-        }
-        
-        @keyframes float {
-            0%, 100% {
-                transform: translateY(0px);
-            }
-            50% {
-                transform: translateY(-20px);
-            }
+        @keyframes floating {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
         }
         
         .fade-in {
-            animation: fadeIn 0.8s ease-in;
+            animation: fadeIn 1s ease-in;
         }
         
         @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        .bg-primary {
-            background-color: #2ecc71;
-        }
-        
-        .text-primary {
-            color: #2ecc71;
-        }
-        
-        .border-primary {
-            border-color: #2ecc71;
-        }
-        
-        .qr-container {
-            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
         }
     </style>
 </head>
 <body class="bg-gray-50">
     <!-- Navigation -->
-    <nav class="fixed top-0 w-full gradient-bg backdrop-blur-lg z-50 border-b border-gray-800">
+    <nav class="bg-white shadow-md fixed w-full top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
                 <div class="flex items-center space-x-2">
-                    <div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-                        <i data-lucide="zap" class="w-6 h-6 text-white"></i>
+                    <div class="bg-yellow-400 rounded-lg p-2">
+                        <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>
+                        </svg>
                     </div>
-                    <span class="text-white text-xl font-bold">Amanship</span>
+                    <span class="text-2xl font-bold text-gray-800">Amanship</span>
                 </div>
-                <div class="hidden md:flex items-center space-x-8">
-                    <a href="#layanan" class="text-gray-300 hover:text-primary transition">Layanan</a>
-                    <a href="#fitur" class="text-gray-300 hover:text-primary transition">Fitur</a>
-                    <a href="#download" class="text-gray-300 hover:text-primary transition">Download</a>
-                    <a href="#kontak" class="text-gray-300 hover:text-primary transition">Kontak</a>
+                <div class="hidden md:flex space-x-8">
+                    <a href="#home" class="text-gray-700 hover:text-yellow-500 font-medium">Home</a>
+                    <a href="#how-it-works" class="text-gray-700 hover:text-yellow-500 font-medium">How It Works</a>
+                    <a href="#categories" class="text-gray-700 hover:text-yellow-500 font-medium">Categories</a>
+                    <a href="#download" class="text-gray-700 hover:text-yellow-500 font-medium">Download App</a>
                 </div>
-                <button class="bg-primary text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-600 transition">
-                    Unduh Sekarang
+                <button class="bg-yellow-400 text-white px-6 py-2 rounded-full font-semibold hover:bg-yellow-500 transition">
+                    Order Now
                 </button>
             </div>
         </div>
     </nav>
 
     <!-- Hero Section -->
-    <section class="relative gradient-bg hero-pattern pt-24 pb-20 overflow-hidden">
-        <div class="absolute inset-0 opacity-10">
-            <img src="https://images.unsplash.com/photo-1542838132-92c53300491e?w=1600&q=80" alt="Fresh Groceries" class="w-full h-full object-cover">
-        </div>
-        
-        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+    <section id="home" class="pt-24 pb-12 gradient-bg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="grid md:grid-cols-2 gap-12 items-center">
-                <div class="fade-in">
-                    <div class="inline-flex items-center space-x-2 bg-primary/20 border border-primary px-4 py-2 rounded-full mb-6">
-                        <i data-lucide="zap" class="w-4 h-4 text-primary pulse-green"></i>
-                        <span class="text-primary font-semibold text-sm">10 Menit Pengiriman</span>
-                    </div>
-                    
-                    <h1 class="text-5xl md:text-6xl font-bold text-white leading-tight mb-6">
-                        Kebutuhan Harian,<br>
-                        <span class="text-primary">10 Menit Sampai</span>
+                <div class="text-white fade-in">
+                    <h1 class="text-5xl md:text-6xl font-bold mb-6 leading-tight">
+                        Groceries Delivered in <span class="text-gray-900">10 Minutes</span>
                     </h1>
-                    
-                    <p class="text-xl text-gray-300 mb-8 leading-relaxed">
-                        Belanja kebutuhan sehari-hari dengan mudah dan cepat. AmanMart menghadirkan ribuan produk segar berkualitas langsung ke pintu rumah Anda.
+                    <p class="text-xl mb-8 text-gray-800">
+                        Fresh groceries from AmanMart delivered to your doorstep faster than ever. Experience the future of grocery shopping.
                     </p>
-                    
-                    <div class="flex flex-col sm:flex-row gap-4">
-                        <button class="bg-primary text-white px-8 py-4 rounded-lg font-semibold text-lg hover:bg-green-600 transition shadow-lg flex items-center justify-center space-x-2">
-                            <i data-lucide="smartphone" class="w-5 h-5"></i>
-                            <span>Download Aplikasi</span>
+                    <div class="flex space-x-4">
+                        <button class="bg-white text-yellow-600 px-8 py-4 rounded-full font-bold text-lg hover-scale shadow-lg">
+                            Download App
                         </button>
-                        <button class="bg-white/10 backdrop-blur text-white px-8 py-4 rounded-lg font-semibold text-lg hover:bg-white/20 transition border border-white/20 flex items-center justify-center space-x-2">
-                            <i data-lucide="play-circle" class="w-5 h-5"></i>
-                            <span>Lihat Demo</span>
+                        <button class="bg-gray-900 text-white px-8 py-4 rounded-full font-bold text-lg hover-scale shadow-lg">
+                            Learn More
                         </button>
                     </div>
-                    
-                    <div class="flex items-center space-x-8 mt-12">
+                    <div class="mt-8 flex items-center space-x-6">
                         <div>
-                            <div class="text-3xl font-bold text-white">10 Min</div>
-                            <div class="text-sm text-gray-400">Pengiriman</div>
+                            <p class="text-3xl font-bold text-white">10 min</p>
+                            <p class="text-sm text-gray-800">Delivery Time</p>
                         </div>
-                        <div class="h-12 w-px bg-gray-700"></div>
+                        <div class="h-12 w-px bg-gray-300"></div>
                         <div>
-                            <div class="text-3xl font-bold text-white">5000+</div>
-                            <div class="text-sm text-gray-400">Produk</div>
+                            <p class="text-3xl font-bold text-white">5000+</p>
+                            <p class="text-sm text-gray-800">Products</p>
                         </div>
-                        <div class="h-12 w-px bg-gray-700"></div>
+                        <div class="h-12 w-px bg-gray-300"></div>
                         <div>
-                            <div class="text-3xl font-bold text-white">24/7</div>
-                            <div class="text-sm text-gray-400">Tersedia</div>
+                            <p class="text-3xl font-bold text-white">24/7</p>
+                            <p class="text-sm text-gray-800">Available</p>
                         </div>
                     </div>
                 </div>
-                
-                <div class="relative float-animation">
-                    <div class="relative z-10">
-                        <img src="https://images.unsplash.com/photo-1607082349566-187342175e2f?w=800&q=80" alt="Delivery Rider" class="rounded-3xl shadow-2xl">
-                        <div class="absolute -bottom-6 -left-6 bg-white rounded-2xl p-6 shadow-2xl max-w-xs">
-                            <div class="flex items-center space-x-4">
-                                <div class="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
-                                    <i data-lucide="package-check" class="w-6 h-6 text-primary"></i>
-                                </div>
-                                <div>
-                                    <div class="text-sm text-gray-500">Pesanan Anda</div>
-                                    <div class="font-bold text-gray-900">Dalam Perjalanan</div>
-                                </div>
+                <div class="relative floating">
+                    <img src="https://images.unsplash.com/photo-1542838132-92c53300491e?w=600" alt="Delivery" class="rounded-3xl shadow-2xl">
+                    <div class="absolute -bottom-6 -left-6 bg-white p-6 rounded-2xl shadow-xl">
+                        <div class="flex items-center space-x-4">
+                            <div class="bg-yellow-400 rounded-full p-3">
+                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                </svg>
                             </div>
-                            <div class="mt-4 flex items-center space-x-2">
-                                <div class="flex-1 bg-gray-200 h-2 rounded-full overflow-hidden">
-                                    <div class="bg-primary h-full w-3/4 rounded-full"></div>
-                                </div>
-                                <span class="text-sm font-semibold text-primary">8 min</span>
+                            <div>
+                                <p class="font-bold text-2xl text-gray-800">10 min</p>
+                                <p class="text-gray-600">Super Fast Delivery</p>
                             </div>
                         </div>
                     </div>
@@ -192,258 +125,131 @@
         </div>
     </section>
 
-    <!-- Value Props -->
-    <section id="layanan" class="py-20 bg-white">
+    <!-- How It Works -->
+    <section id="how-it-works" class="py-20 bg-white">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center mb-16">
-                <h2 class="text-4xl font-bold text-gray-900 mb-4">Kenapa Pilih AmanMart?</h2>
-                <p class="text-xl text-gray-600">Pengalaman belanja yang cepat, aman, dan terpercaya</p>
+                <h2 class="text-4xl font-bold text-gray-900 mb-4">How Amanship Works</h2>
+                <p class="text-xl text-gray-600">Get your groceries in three simple steps</p>
             </div>
-            
             <div class="grid md:grid-cols-3 gap-8">
-                <div class="card-hover bg-white rounded-2xl p-8 border-2 border-gray-100">
-                    <div class="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6">
-                        <i data-lucide="zap" class="w-8 h-8 text-primary"></i>
+                <div class="text-center p-8 rounded-2xl hover:shadow-xl transition">
+                    <div class="bg-yellow-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <span class="text-3xl font-bold text-yellow-600">1</span>
                     </div>
-                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Sangat Cepat</h3>
-                    <p class="text-gray-600 leading-relaxed mb-6">
-                        Pengiriman dalam 10 menit dari toko terdekat. Teknologi kami memastikan produk sampai dalam kondisi segar dan tepat waktu.
-                    </p>
-                    <div class="flex items-center text-primary font-semibold">
-                        <span>Pelajari Lebih Lanjut</span>
-                        <i data-lucide="arrow-right" class="w-4 h-4 ml-2"></i>
-                    </div>
+                    <img src="https://images.unsplash.com/photo-1516594798947-e65505dbb29d?w=400" alt="Browse" class="rounded-xl mb-6 shadow-md">
+                    <h3 class="text-2xl font-bold mb-4 text-gray-900">Browse & Select</h3>
+                    <p class="text-gray-600">Choose from 5000+ products from AmanMart's fresh collection</p>
                 </div>
-                
-                <div class="card-hover bg-white rounded-2xl p-8 border-2 border-gray-100">
-                    <div class="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6">
-                        <i data-lucide="shield-check" class="w-8 h-8 text-primary"></i>
+                <div class="text-center p-8 rounded-2xl hover:shadow-xl transition">
+                    <div class="bg-yellow-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <span class="text-3xl font-bold text-yellow-600">2</span>
                     </div>
-                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Amanah & Aman</h3>
-                    <p class="text-gray-600 leading-relaxed mb-6">
-                        Pembayaran digital yang aman, produk higienis, dan pengemudi terverifikasi. Kepercayaan Anda adalah prioritas kami.
-                    </p>
-                    <div class="flex items-center text-primary font-semibold">
-                        <span>Pelajari Lebih Lanjut</span>
-                        <i data-lucide="arrow-right" class="w-4 h-4 ml-2"></i>
-                    </div>
+                    <img src="https://images.unsplash.com/photo-1556740758-90de374c12ad?w=400" alt="Order" class="rounded-xl mb-6 shadow-md">
+                    <h3 class="text-2xl font-bold mb-4 text-gray-900">Place Your Order</h3>
+                    <p class="text-gray-600">Quick checkout with multiple payment options available</p>
                 </div>
-                
-                <div class="card-hover bg-white rounded-2xl p-8 border-2 border-gray-100">
-                    <div class="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6">
-                        <i data-lucide="shopping-bag" class="w-8 h-8 text-primary"></i>
+                <div class="text-center p-8 rounded-2xl hover:shadow-xl transition">
+                    <div class="bg-yellow-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <span class="text-3xl font-bold text-yellow-600">3</span>
                     </div>
-                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Pilihan Lengkap</h3>
-                    <p class="text-gray-600 leading-relaxed mb-6">
-                        Lebih dari 5000 produk mulai dari sayuran segar, buah, daging, hingga kebutuhan rumah tangga. Semua tersedia di satu aplikasi.
-                    </p>
-                    <div class="flex items-center text-primary font-semibold">
-                        <span>Pelajari Lebih Lanjut</span>
-                        <i data-lucide="arrow-right" class="w-4 h-4 ml-2"></i>
-                    </div>
+                    <img src="https://images.unsplash.com/photo-1526367790999-0150786686a2?w=400" alt="Delivery" class="rounded-xl mb-6 shadow-md">
+                    <h3 class="text-2xl font-bold mb-4 text-gray-900">Receive in 10 Min</h3>
+                    <p class="text-gray-600">Our riders deliver fresh groceries to your doorstep instantly</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- App Showcase -->
-    <section id="fitur" class="py-20 gradient-bg">
+    <!-- Categories -->
+    <section id="categories" class="py-20 bg-gray-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center mb-16">
-                <h2 class="text-4xl font-bold text-white mb-4">Fitur Canggih, Mudah Digunakan</h2>
-                <p class="text-xl text-gray-300">Teknologi terdepan untuk pengalaman belanja terbaik</p>
+                <h2 class="text-4xl font-bold text-gray-900 mb-4">Shop by Category</h2>
+                <p class="text-xl text-gray-600">Everything you need from AmanMart</p>
             </div>
-            
-            <div class="grid md:grid-cols-3 gap-8">
-                <!-- Feature 1: Search -->
-                <div class="bg-white/5 backdrop-blur rounded-2xl p-8 border border-white/10">
-                    <div class="bg-white rounded-xl p-4 mb-6 shadow-xl">
-                        <div class="flex items-center space-x-2 bg-gray-100 rounded-lg px-3 py-2 mb-3">
-                            <i data-lucide="search" class="w-4 h-4 text-gray-500"></i>
-                            <span class="text-sm text-gray-400">Cari produk...</span>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div class="bg-gray-50 rounded-lg p-2">
-                                <div class="w-full h-12 bg-gray-200 rounded mb-1"></div>
-                                <div class="h-2 bg-gray-200 rounded w-3/4"></div>
-                            </div>
-                            <div class="bg-gray-50 rounded-lg p-2">
-                                <div class="w-full h-12 bg-gray-200 rounded mb-1"></div>
-                                <div class="h-2 bg-gray-200 rounded w-3/4"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <h3 class="text-xl font-bold text-white mb-3">Pencarian Cerdas</h3>
-                    <p class="text-gray-300">Temukan produk favorit dengan mudah. Hasil pencarian yang akurat dan cepat.</p>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div class="bg-white rounded-2xl p-6 text-center hover-scale cursor-pointer shadow-md">
+                    <img src="https://images.unsplash.com/photo-1563636619-e9143da7973b?w=200" alt="Fruits" class="w-24 h-24 object-cover rounded-full mx-auto mb-4">
+                    <h3 class="font-bold text-lg text-gray-800">Fresh Fruits</h3>
                 </div>
-                
-                <!-- Feature 2: Voice Order -->
-                <div class="bg-white/5 backdrop-blur rounded-2xl p-8 border border-white/10">
-                    <div class="bg-gradient-to-br from-primary to-green-600 rounded-xl p-8 mb-6 shadow-xl flex items-center justify-center">
-                        <div class="text-center">
-                            <div class="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3 pulse-green">
-                                <i data-lucide="mic" class="w-10 h-10 text-white"></i>
-                            </div>
-                            <div class="text-white text-sm font-semibold">Tekan untuk bicara</div>
-                        </div>
-                    </div>
-                    <h3 class="text-xl font-bold text-white mb-3">Pesanan Suara</h3>
-                    <p class="text-gray-300">Pesan hanya dengan suara. Teknologi AI memahami pesanan Anda dengan akurat.</p>
+                <div class="bg-white rounded-2xl p-6 text-center hover-scale cursor-pointer shadow-md">
+                    <img src="https://images.unsplash.com/photo-1540420773420-3366772f4999?w=200" alt="Vegetables" class="w-24 h-24 object-cover rounded-full mx-auto mb-4">
+                    <h3 class="font-bold text-lg text-gray-800">Vegetables</h3>
                 </div>
-                
-                <!-- Feature 3: Popular Items -->
-                <div class="bg-white/5 backdrop-blur rounded-2xl p-8 border border-white/10">
-                    <div class="bg-white rounded-xl p-4 mb-6 shadow-xl">
-                        <div class="flex items-center justify-between mb-3">
-                            <span class="text-sm font-bold text-gray-900">Item Populer</span>
-                            <i data-lucide="trending-up" class="w-4 h-4 text-primary"></i>
-                        </div>
-                        <div class="space-y-2">
-                            <div class="flex items-center space-x-2 bg-gray-50 rounded-lg p-2">
-                                <div class="w-10 h-10 bg-primary/20 rounded"></div>
-                                <div class="flex-1">
-                                    <div class="h-2 bg-gray-200 rounded w-2/3 mb-1"></div>
-                                    <div class="h-2 bg-gray-200 rounded w-1/2"></div>
-                                </div>
-                            </div>
-                            <div class="flex items-center space-x-2 bg-gray-50 rounded-lg p-2">
-                                <div class="w-10 h-10 bg-primary/20 rounded"></div>
-                                <div class="flex-1">
-                                    <div class="h-2 bg-gray-200 rounded w-2/3 mb-1"></div>
-                                    <div class="h-2 bg-gray-200 rounded w-1/2"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <h3 class="text-xl font-bold text-white mb-3">Rekomendasi Pintar</h3>
-                    <p class="text-gray-300">Dapatkan rekomendasi produk berdasarkan preferensi dan riwayat belanja Anda.</p>
+                <div class="bg-white rounded-2xl p-6 text-center hover-scale cursor-pointer shadow-md">
+                    <img src="https://images.unsplash.com/photo-1550583724-b2692b85b150?w=200" alt="Dairy" class="w-24 h-24 object-cover rounded-full mx-auto mb-4">
+                    <h3 class="font-bold text-lg text-gray-800">Dairy & Eggs</h3>
+                </div>
+                <div class="bg-white rounded-2xl p-6 text-center hover-scale cursor-pointer shadow-md">
+                    <img src="https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=200" alt="Snacks" class="w-24 h-24 object-cover rounded-full mx-auto mb-4">
+                    <h3 class="font-bold text-lg text-gray-800">Snacks</h3>
+                </div>
+                <div class="bg-white rounded-2xl p-6 text-center hover-scale cursor-pointer shadow-md">
+                    <img src="https://images.unsplash.com/photo-1529006557810-274b9b2fc783?w=200" alt="Beverages" class="w-24 h-24 object-cover rounded-full mx-auto mb-4">
+                    <h3 class="font-bold text-lg text-gray-800">Beverages</h3>
+                </div>
+                <div class="bg-white rounded-2xl p-6 text-center hover-scale cursor-pointer shadow-md">
+                    <img src="https://images.unsplash.com/photo-1607532941433-304659e8198a?w=200" alt="Meat" class="w-24 h-24 object-cover rounded-full mx-auto mb-4">
+                    <h3 class="font-bold text-lg text-gray-800">Meat & Fish</h3>
+                </div>
+                <div class="bg-white rounded-2xl p-6 text-center hover-scale cursor-pointer shadow-md">
+                    <img src="https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=200" alt="Frozen" class="w-24 h-24 object-cover rounded-full mx-auto mb-4">
+                    <h3 class="font-bold text-lg text-gray-800">Frozen Foods</h3>
+                </div>
+                <div class="bg-white rounded-2xl p-6 text-center hover-scale cursor-pointer shadow-md">
+                    <img src="https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=200" alt="Bakery" class="w-24 h-24 object-cover rounded-full mx-auto mb-4">
+                    <h3 class="font-bold text-lg text-gray-800">Bakery</h3>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Driver/Picker Spotlight -->
+    <!-- Business Model -->
     <section class="py-20 bg-white">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid md:grid-cols-2 gap-16 items-center">
+            <div class="grid md:grid-cols-2 gap-12 items-center">
                 <div>
-                    <div class="inline-block bg-primary/10 text-primary px-4 py-2 rounded-full font-semibold text-sm mb-6">
-                        Tim Profesional Kami
-                    </div>
-                    <h2 class="text-4xl font-bold text-gray-900 mb-6">
-                        Dikelola oleh <span class="text-primary">Tenaga Ahli</span>
-                    </h2>
-                    <p class="text-lg text-gray-600 mb-8 leading-relaxed">
-                        Setiap pesanan ditangani oleh picker profesional yang terlatih memilih produk terbaik, dan dikirim oleh pengemudi bersertifikat yang mengutamakan kecepatan dan keamanan.
-                    </p>
-                    
-                    <div class="space-y-6">
-                        <div class="flex items-start space-x-4">
-                            <div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                <i data-lucide="user-check" class="w-6 h-6 text-primary"></i>
-                            </div>
-                            <div>
-                                <h4 class="font-bold text-gray-900 mb-2">Picker Bersertifikat</h4>
-                                <p class="text-gray-600">Terlatih memilih produk segar dengan standar kualitas tinggi</p>
-                            </div>
-                        </div>
-                        
-                        <div class="flex items-start space-x-4">
-                            <div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                <i data-lucide="bike" class="w-6 h-6 text-primary"></i>
-                            </div>
-                            <div>
-                                <h4 class="font-bold text-gray-900 mb-2">Pengemudi Terverifikasi</h4>
-                                <p class="text-gray-600">Pengemudi kami melalui background check dan pelatihan keselamatan</p>
-                            </div>
-                        </div>
-                        
-                        <div class="flex items-start space-x-4">
-                            <div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                <i data-lucide="thermometer-snowflake" class="w-6 h-6 text-primary"></i>
-                            </div>
-                            <div>
-                                <h4 class="font-bold text-gray-900 mb-2">Cold Chain Management</h4>
-                                <p class="text-gray-600">Produk segar dijaga suhunya dari toko hingga rumah Anda</p>
-                            </div>
-                        </div>
-                    </div>
+                    <img src="https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=600" alt="Store" class="rounded-3xl shadow-2xl">
                 </div>
-                
-                <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <h2 class="text-4xl font-bold text-gray-900 mb-6">About Amanship & AmanMart</h2>
+                    <p class="text-lg text-gray-600 mb-6">
+                        Amanship partners with AmanMart, your trusted neighborhood grocery store, to bring you the freshest products in just 10 minutes. We've revolutionized grocery delivery by combining local expertise with cutting-edge logistics.
+                    </p>
                     <div class="space-y-4">
-                        <img src="https://images.unsplash.com/photo-1556740758-90de374c12ad?w=500&q=80" alt="Picker" class="rounded-2xl shadow-xl">
-                        <div class="bg-primary/10 rounded-2xl p-6">
-                            <div class="text-3xl font-bold text-primary mb-1">98%</div>
-                            <div class="text-sm text-gray-700 font-medium">Tingkat Kepuasan</div>
-                        </div>
-                    </div>
-                    <div class="space-y-4 pt-8">
-                        <div class="bg-gray-900 rounded-2xl p-6">
-                            <div class="text-3xl font-bold text-white mb-1">500+</div>
-                            <div class="text-sm text-gray-400 font-medium">Pengemudi Aktif</div>
-                        </div>
-                        <img src="https://images.unsplash.com/photo-1526367790999-0150786686a2?w=500&q=80" alt="Driver" class="rounded-2xl shadow-xl">
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- QR Download Section -->
-    <section id="download" class="py-20 gradient-bg relative overflow-hidden">
-        <div class="absolute inset-0 hero-pattern opacity-50"></div>
-        
-        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 overflow-hidden">
-                <div class="grid md:grid-cols-2 gap-12 items-center p-12">
-                    <div>
-                        <h2 class="text-4xl font-bold text-white mb-6">
-                            Download Sekarang & Nikmati Belanja Super Cepat
-                        </h2>
-                        <p class="text-xl text-gray-300 mb-8">
-                            Tersedia untuk iOS dan Android. Dapatkan promo spesial untuk pengguna baru!
-                        </p>
-                        
-                        <div class="flex flex-col sm:flex-row gap-4 mb-8">
-                            <a href="#" class="flex items-center space-x-3 bg-white text-gray-900 px-6 py-4 rounded-xl font-semibold hover:bg-gray-100 transition shadow-lg">
-                                <i data-lucide="apple" class="w-6 h-6"></i>
-                                <div class="text-left">
-                                    <div class="text-xs">Download di</div>
-                                    <div class="text-sm font-bold">App Store</div>
-                                </div>
-                            </a>
-                            <a href="#" class="flex items-center space-x-3 bg-white text-gray-900 px-6 py-4 rounded-xl font-semibold hover:bg-gray-100 transition shadow-lg">
-                                <i data-lucide="smartphone" class="w-6 h-6"></i>
-                                <div class="text-left">
-                                    <div class="text-xs">Download di</div>
-                                    <div class="text-sm font-bold">Google Play</div>
-                                </div>
-                            </a>
-                        </div>
-                        
-                        <div class="flex items-center space-x-4">
-                            <div class="flex -space-x-3">
-                                <div class="w-10 h-10 bg-primary rounded-full border-2 border-white"></div>
-                                <div class="w-10 h-10 bg-blue-500 rounded-full border-2 border-white"></div>
-                                <div class="w-10 h-10 bg-purple-500 rounded-full border-2 border-white"></div>
-                                <div class="w-10 h-10 bg-yellow-500 rounded-full border-2 border-white"></div>
+                        <div class="flex items-start space-x-4">
+                            <div class="bg-yellow-400 rounded-full p-2 mt-1">
+                                <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                </svg>
                             </div>
                             <div>
-                                <div class="text-white font-semibold">50,000+ Pengguna</div>
-                                <div class="text-gray-400 text-sm">Bergabung bulan ini</div>
+                                <h4 class="font-bold text-gray-900">Hyperlocal Model</h4>
+                                <p class="text-gray-600">We operate dark stores in every neighborhood for fastest delivery</p>
                             </div>
                         </div>
-                    </div>
-                    
-                    <div class="flex justify-center">
-                        <div class="qr-container rounded-3xl p-8 shadow-2xl">
-                            <div class="bg-white rounded-2xl p-8 mb-4">
-                                <div class="w-48 h-48 bg-gray-900 rounded-xl mx-auto flex items-center justify-center">
-                                    <i data-lucide="qr-code" class="w-32 h-32 text-white"></i>
-                                </div>
+                        <div class="flex items-start space-x-4">
+                            <div class="bg-yellow-400 rounded-full p-2 mt-1">
+                                <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                </svg>
                             </div>
-                            <p class="text-white text-center font-semibold">Scan untuk Download</p>
+                            <div>
+                                <h4 class="font-bold text-gray-900">Quality Assured</h4>
+                                <p class="text-gray-600">Every product is quality-checked before delivery</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start space-x-4">
+                            <div class="bg-yellow-400 rounded-full p-2 mt-1">
+                                <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-gray-900">Tech-Powered</h4>
+                                <p class="text-gray-600">Smart routing ensures your order reaches you in minutes</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -451,185 +257,116 @@
         </div>
     </section>
 
-    <!-- Testimonials -->
-    <section class="py-20 bg-gray-50">
+    <!-- Download App -->
+    <section id="download" class="py-20 gradient-bg">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl font-bold text-gray-900 mb-4">Apa Kata Mereka?</h2>
-                <p class="text-xl text-gray-600">Ribuan pelanggan puas di seluruh Indonesia</p>
-            </div>
-            
-            <div class="grid md:grid-cols-3 gap-8">
-                <div class="bg-white rounded-2xl p-8 shadow-lg">
-                    <div class="flex items-center mb-4">
-                        <i data-lucide="star" class="w-5 h-5 text-yellow-400 fill-current"></i>
-                        <i data-lucide="star" class="w-5 h-5 text-yellow-400 fill-current"></i>
-                        <i data-lucide="star" class="w-5 h-5 text-yellow-400 fill-current"></i>
-                        <i data-lucide="star" class="w-5 h-5 text-yellow-400 fill-current"></i>
-                        <i data-lucide="star" class="w-5 h-5 text-yellow-400 fill-current"></i>
-                    </div>
-                    <p class="text-gray-700 mb-6 leading-relaxed">
-                        "Voice order nya keren banget! Tinggal bilang apa yang mau dibeli, langsung masuk keranjang. Cocok buat yang sibuk kayak saya."
+            <div class="grid md:grid-cols-2 gap-12 items-center">
+                <div class="text-white">
+                    <h2 class="text-4xl font-bold mb-6">Download Amanship App Now</h2>
+                    <p class="text-xl mb-8 text-gray-800">
+                        Get exclusive deals and experience the fastest grocery delivery. Scan the QR code or download from your app store.
                     </p>
-                    <div class="flex items-center">
-                        <div class="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center mr-4">
-                            <span class="text-primary font-bold">BP</span>
-                        </div>
-                        <div>
-                            <div class="font-bold text-gray-900">Budi Prasetyo</div>
-                            <div class="text-sm text-gray-500">Tangerang</div>
-                        </div>
+                    <div class="flex space-x-4 mb-8">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Google Play" class="h-14 hover-scale cursor-pointer">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg" alt="App Store" class="h-14 hover-scale cursor-pointer">
+                    </div>
+                    <div class="bg-white p-2 rounded-2xl inline-block">
+                        <svg class="w-48 h-48" viewBox="0 0 200 200">
+                            <rect width="200" height="200" fill="white"/>
+                            <g transform="translate(20,20)">
+                                <rect x="0" y="0" width="20" height="20" fill="black"/>
+                                <rect x="20" y="0" width="20" height="20" fill="black"/>
+                                <rect x="40" y="0" width="20" height="20" fill="black"/>
+                                <rect x="60" y="0" width="20" height="20" fill="black"/>
+                                <rect x="80" y="0" width="20" height="20" fill="black"/>
+                                <rect x="100" y="0" width="20" height="20" fill="black"/>
+                                <rect x="120" y="0" width="20" height="20" fill="black"/>
+                                <rect x="0" y="20" width="20" height="20" fill="black"/>
+                                <rect x="120" y="20" width="20" height="20" fill="black"/>
+                                <rect x="0" y="40" width="20" height="20" fill="black"/>
+                                <rect x="40" y="40" width="20" height="20" fill="black"/>
+                                <rect x="60" y="40" width="20" height="20" fill="black"/>
+                                <rect x="80" y="40" width="20" height="20" fill="black"/>
+                                <rect x="120" y="40" width="20" height="20" fill="black"/>
+                                <rect x="0" y="60" width="20" height="20" fill="black"/>
+                                <rect x="40" y="60" width="20" height="20" fill="black"/>
+                                <rect x="60" y="60" width="20" height="20" fill="black"/>
+                                <rect x="80" y="60" width="20" height="20" fill="black"/>
+                                <rect x="120" y="60" width="20" height="20" fill="black"/>
+                                <rect x="0" y="80" width="20" height="20" fill="black"/>
+                                <rect x="40" y="80" width="20" height="20" fill="black"/>
+                                <rect x="60" y="80" width="20" height="20" fill="black"/>
+                                <rect x="80" y="80" width="20" height="20" fill="black"/>
+                                <rect x="120" y="80" width="20" height="20" fill="black"/>
+                                <rect x="0" y="100" width="20" height="20" fill="black"/>
+                                <rect x="120" y="100" width="20" height="20" fill="black"/>
+                                <rect x="0" y="120" width="20" height="20" fill="black"/>
+                                <rect x="20" y="120" width="20" height="20" fill="black"/>
+                                <rect x="40" y="120" width="20" height="20" fill="black"/>
+                                <rect x="60" y="120" width="20" height="20" fill="black"/>
+                                <rect x="80" y="120" width="20" height="20" fill="black"/>
+                                <rect x="100" y="120" width="20" height="20" fill="black"/>
+                                <rect x="120" y="120" width="20" height="20" fill="black"/>
+                                <rect x="40" y="140" width="20" height="20" fill="black"/>
+                                <rect x="100" y="140" width="20" height="20" fill="black"/>
+                            </g>
+                        </svg>
+                        <p class="text-center text-gray-800 font-semibold mt-2">Scan to Download</p>
                     </div>
                 </div>
-                
-                <div class="bg-white rounded-2xl p-8 shadow-lg">
-                    <div class="flex items-center mb-4">
-                        <i data-lucide="star" class="w-5 h-5 text-yellow-400 fill-current"></i>
-                        <i data-lucide="star" class="w-5 h-5 text-yellow-400 fill-current"></i>
-                        <i data-lucide="star" class="w-5 h-5 text-yellow-400 fill-current"></i>
-                        <i data-lucide="star" class="w-5 h-5 text-yellow-400 fill-current"></i>
-                        <i data-lucide="star" class="w-5 h-5 text-yellow-400 fill-current"></i>
-                    </div>
-                    <p class="text-gray-700 mb-6 leading-relaxed">
-                        "Harga kompetitif dan produknya lengkap. Dari sayur, buah, sampai bumbu dapur semua ada. Ga perlu ke pasar lagi deh!"
-                    </p>
-                    <div class="flex items-center">
-                        <div class="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center mr-4">
-                            <span class="text-primary font-bold">RA</span>
-                        </div>
-                        <div>
-                            <div class="font-bold text-gray-900">Ratna Asih</div>
-                            <div class="text-sm text-gray-500">Bekasi</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- CTA Section -->
-    <section class="py-20 gradient-bg relative overflow-hidden">
-        <div class="absolute inset-0 hero-pattern"></div>
-        <div class="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <div class="inline-flex items-center space-x-2 bg-primary/20 border border-primary px-4 py-2 rounded-full mb-6">
-                <i data-lucide="gift" class="w-4 h-4 text-primary pulse-green"></i>
-                <span class="text-primary font-semibold text-sm">Promo Spesial</span>
-            </div>
-            
-            <h2 class="text-4xl md:text-5xl font-bold text-white mb-6">
-                Siap Mencoba Belanja<br>10 Menit Pertama Anda?
-            </h2>
-            
-            <p class="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-                Download sekarang dan dapatkan diskon 50% untuk pesanan pertama Anda. Promo terbatas!
-            </p>
-            
-            <div class="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-                <button class="bg-primary text-white px-10 py-5 rounded-xl font-bold text-lg hover:bg-green-600 transition shadow-2xl flex items-center justify-center space-x-3">
-                    <i data-lucide="smartphone" class="w-6 h-6"></i>
-                    <span>Download Gratis</span>
-                </button>
-                <button class="bg-white text-gray-900 px-10 py-5 rounded-xl font-bold text-lg hover:bg-gray-100 transition shadow-2xl flex items-center justify-center space-x-3">
-                    <i data-lucide="mail" class="w-6 h-6"></i>
-                    <span>Hubungi Kami</span>
-                </button>
-            </div>
-            
-            <div class="flex flex-wrap items-center justify-center gap-6 text-white">
-                <div class="flex items-center space-x-2">
-                    <i data-lucide="check-circle" class="w-5 h-5 text-primary"></i>
-                    <span>Tanpa Biaya Langganan</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                    <i data-lucide="check-circle" class="w-5 h-5 text-primary"></i>
-                    <span>Gratis Ongkir</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                    <i data-lucide="check-circle" class="w-5 h-5 text-primary"></i>
-                    <span>Garansi Uang Kembali</span>
+                <div class="relative">
+                    <img src="https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=500" alt="App Screenshot" class="rounded-3xl shadow-2xl floating">
                 </div>
             </div>
         </div>
     </section>
 
     <!-- Footer -->
-    <footer id="kontak" class="bg-gray-900 text-white py-16">
+    <footer class="bg-gray-900 text-white py-12">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid md:grid-cols-4 gap-12 mb-12">
+            <div class="grid md:grid-cols-4 gap-8">
                 <div>
-                    <div class="flex items-center space-x-2 mb-6">
-                        <div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-                            <i data-lucide="zap" class="w-6 h-6 text-white"></i>
+                    <div class="flex items-center space-x-2 mb-4">
+                        <div class="bg-yellow-400 rounded-lg p-2">
+                            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>
+                            </svg>
                         </div>
-                        <span class="text-white text-xl font-bold">Amanship</span>
+                        <span class="text-2xl font-bold">Amanship</span>
                     </div>
-                    <p class="text-gray-400 mb-6">
-                        Belanja kebutuhan harian dengan pengiriman super cepat. 10 menit sampai di rumah Anda.
-                    </p>
-                    <div class="flex space-x-4">
-                        <a href="#" class="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-primary transition">
-                            <i data-lucide="facebook" class="w-5 h-5"></i>
-                        </a>
-                        <a href="#" class="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-primary transition">
-                            <i data-lucide="instagram" class="w-5 h-5"></i>
-                        </a>
-                        <a href="#" class="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-primary transition">
-                            <i data-lucide="twitter" class="w-5 h-5"></i>
-                        </a>
-                        <a href="#" class="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-primary transition">
-                            <i data-lucide="linkedin" class="w-5 h-5"></i>
-                        </a>
-                    </div>
+                    <p class="text-gray-400">Delivering groceries in 10 minutes from AmanMart to your doorstep.</p>
                 </div>
-                
                 <div>
-                    <h4 class="font-bold text-lg mb-6">Perusahaan</h4>
-                    <ul class="space-y-3">
-                        <li><a href="#" class="text-gray-400 hover:text-primary transition">Tentang Kami</a></li>
-                        <li><a href="#" class="text-gray-400 hover:text-primary transition">Karir</a></li>
-                        <li><a href="#" class="text-gray-400 hover:text-primary transition">Blog</a></li>
-                        <li><a href="#" class="text-gray-400 hover:text-primary transition">Press Kit</a></li>
+                    <h4 class="font-bold mb-4">Company</h4>
+                    <ul class="space-y-2 text-gray-400">
+                        <li><a href="#" class="hover:text-yellow-400">About Us</a></li>
+                        <li><a href="#" class="hover:text-yellow-400">Careers</a></li>
+                        <li><a href="#" class="hover:text-yellow-400">Partner With Us</a></li>
+                        <li><a href="#" class="hover:text-yellow-400">Blog</a></li>
                     </ul>
                 </div>
-                
                 <div>
-                    <h4 class="font-bold text-lg mb-6">Bantuan</h4>
-                    <ul class="space-y-3">
-                        <li><a href="#" class="text-gray-400 hover:text-primary transition">Pusat Bantuan</a></li>
-                        <li><a href="#" class="text-gray-400 hover:text-primary transition">Kebijakan Privasi</a></li>
-                        <li><a href="#" class="text-gray-400 hover:text-primary transition">Syarat & Ketentuan</a></li>
-                        <li><a href="#" class="text-gray-400 hover:text-primary transition">FAQ</a></li>
+                    <h4 class="font-bold mb-4">Support</h4>
+                    <ul class="space-y-2 text-gray-400">
+                        <li><a href="#" class="hover:text-yellow-400">Help Center</a></li>
+                        <li><a href="#" class="hover:text-yellow-400">Track Order</a></li>
+                        <li><a href="#" class="hover:text-yellow-400">Contact Us</a></li>
+                        <li><a href="#" class="hover:text-yellow-400">FAQs</a></li>
                     </ul>
                 </div>
-                
                 <div>
-                    <h4 class="font-bold text-lg mb-6">Bergabung</h4>
-                    <ul class="space-y-3">
-                        <li><a href="#" class="text-gray-400 hover:text-primary transition">Jadi Mitra Toko</a></li>
-                        <li><a href="#" class="text-gray-400 hover:text-primary transition">Jadi Pengemudi</a></li>
-                        <li><a href="#" class="text-gray-400 hover:text-primary transition">Jadi Picker</a></li>
-                        <li><a href="#" class="text-gray-400 hover:text-primary transition">Affiliate Program</a></li>
+                    <h4 class="font-bold mb-4">Legal</h4>
+                    <ul class="space-y-2 text-gray-400">
+                        <li><a href="#" class="hover:text-yellow-400">Privacy Policy</a></li>
+                        <li><a href="#" class="hover:text-yellow-400">Terms of Service</a></li>
+                        <li><a href="#" class="hover:text-yellow-400">Refund Policy</a></li>
                     </ul>
                 </div>
             </div>
-            
-            <div class="border-t border-gray-800 pt-8">
-                <div class="flex flex-col md:flex-row justify-between items-center">
-                    <p class="text-gray-400 text-sm mb-4 md:mb-0">
-                        © 2025 Amanship. All rights reserved.
-                    </p>
-                    <div class="flex items-center space-x-6">
-                        <a href="#" class="text-gray-400 hover:text-primary text-sm transition">Kebijakan Privasi</a>
-                        <a href="#" class="text-gray-400 hover:text-primary text-sm transition">Syarat Layanan</a>
-                        <a href="#" class="text-gray-400 hover:text-primary text-sm transition">Cookie Policy</a>
-                    </div>
-                </div>
+            <div class="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
+                <p>&copy; 2026 Amanship. All rights reserved. Powered by AmanMart.</p>
             </div>
         </div>
     </footer>
-
-    <!-- Initialize Lucide Icons -->
-    <script>
-        lucide.createIcons();
-    </script>
 </body>
+</html>
