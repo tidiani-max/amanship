@@ -62,14 +62,9 @@
                     <a href="#categories" class="text-gray-700 hover:text-yellow-500 font-medium">Categories</a>
                     <a href="#download" class="text-gray-700 hover:text-yellow-500 font-medium">Download App</a>
                 </div>
-                <a id="order-now-btn" 
-   href="http://j1vzzpk-dioti-8081.exp.direct" 
-   target="_blank" 
-   class="bg-yellow-400 text-white px-6 py-2 rounded-full font-semibold hover:bg-yellow-500 transition inline-block text-center shadow-md">
-    Order Now
-</a>
-
-
+                <button href="#download" class="bg-yellow-400 text-white px-6 py-2 rounded-full font-semibold hover:bg-yellow-500 transition">
+                    Order Now
+                </button>
             </div>
         </div>
     </nav>
@@ -86,7 +81,7 @@
                         Fresh groceries from AmanMart delivered to your doorstep faster than ever. Experience the future of grocery shopping.
                     </p>
                     <div class="flex space-x-4">
-                        <button class="bg-white text-yellow-600 px-8 py-4 rounded-full font-bold text-lg hover-scale shadow-lg">
+                        <button  href="#download" class="bg-white text-yellow-600 px-8 py-4 rounded-full font-bold text-lg hover-scale shadow-lg">
                             Download App
                         </button>
                         <button class="bg-gray-900 text-white px-8 py-4 rounded-full font-bold text-lg hover-scale shadow-lg">
@@ -353,27 +348,6 @@
     
     // This updates the image automatically
     qrElement.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(myTerminalLink)}`;
-</script>
-<script>
-    (function() {
-        // --- CONFIGURATION ---
-        // Your tunnel links from the terminal
-        const WEB_URL = "http://j1vzzpk-dioti-8081.exp.direct"; 
-        const EXPO_GO_URL = "exp://j1vzzpk-dioti-8081.exp.direct";
-
-        const btn = document.getElementById('order-now-btn');
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-        if (isMobile) {
-            // If the user is on a phone, try to launch the actual app
-            btn.href = EXPO_GO_URL;
-            btn.innerText = "Buka di App";
-        } else {
-            // If the user is on a laptop, open the Web Home Page
-            btn.href = WEB_URL;
-            btn.innerText = "Pesan Sekarang";
-        }
-    })();
 </script>
 </body>
 </html>
