@@ -1,34 +1,206 @@
 <!DOCTYPE html>
-<html>
+<html lang="id" class="scroll-smooth">
 <head>
-    <title>Amanship - Download Our App</title>
-    <style>
-        body { font-family: sans-serif; text-align: center; padding: 50px; }
-        .download-btn { padding: 15px 30px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; font-size: 20px; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Amanship — Kebutuhan Harian, 10 Menit Sampai</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  />
+
+  <style>
+    * {
+      font-family: "Inter", sans-serif;
+    }
+
+    /* Colors */
+    .bg-primary { background-color: #2ecc71; }
+    .text-primary { color: #2ecc71; }
+    .border-primary { border-color: #2ecc71; }
+
+    /* Backgrounds */
+    .gradient-bg {
+      background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+    }
+
+    .hero-pattern {
+      background-image: radial-gradient(
+        circle at 1px 1px,
+        rgba(46, 204, 113, 0.12) 1px,
+        transparent 0
+      );
+      background-size: 40px 40px;
+    }
+
+    /* Animations */
+    .card-hover {
+      transition: all 0.3s ease;
+    }
+
+    .card-hover:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 20px 40px rgba(46, 204, 113, 0.25);
+    }
+
+    .pulse-green {
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .float {
+      animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-16px); }
+    }
+
+    .fade-in {
+      animation: fadeIn 0.8s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
 </head>
-<body>
-    <h1>Welcome to Amanship</h1>
-    <p>Scan the QR code or click below to get the app.</p>
-    
-    <div id="download-container">
-        <a href="#" id="app-link" class="download-btn">Download App</a>
+
+<body class="bg-gray-50">
+
+<!-- ================= NAVBAR ================= -->
+<nav class="fixed top-0 w-full gradient-bg border-b border-gray-800 z-50">
+  <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+        <i data-lucide="zap" class="text-white"></i>
+      </div>
+      <span class="text-white font-bold text-xl">Amanship</span>
     </div>
 
-    <script>
-        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-        const link = document.getElementById('app-link');
+    <div class="hidden md:flex gap-8 text-gray-300">
+      <a href="#layanan" class="hover:text-primary">Layanan</a>
+      <a href="#fitur" class="hover:text-primary">Fitur</a>
+      <a href="#download" class="hover:text-primary">Download</a>
+      <a href="#kontak" class="hover:text-primary">Kontak</a>
+    </div>
 
-        if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) {
-            link.href = "https://apps.apple.com/app/your-app-id"; // Your App Store Link
-            link.innerText = "Download on App Store";
-        } else if (/android/i.test(userAgent)) {
-            link.href = "https://play.google.com/store/apps/details?id=your.package.name"; // Your Play Store Link
-            link.innerText = "Get it on Google Play";
-        } else {
-            link.href = "#"; 
-            link.innerText = "Open on Mobile to Download";
-        }
-    </script>
+    <button class="bg-primary text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-600">
+      Unduh Sekarang
+    </button>
+  </div>
+</nav>
+
+<!-- ================= HERO ================= -->
+<section class="relative gradient-bg hero-pattern pt-28 pb-20 text-white overflow-hidden">
+  <div class="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-12 items-center">
+    
+    <!-- Text -->
+    <div class="fade-in">
+      <span class="inline-flex items-center gap-2 bg-primary/20 border border-primary px-4 py-2 rounded-full text-primary font-semibold mb-6">
+        <i data-lucide="zap" class="pulse-green"></i>
+        10 Menit Pengiriman
+      </span>
+
+      <h1 class="text-5xl md:text-6xl font-extrabold leading-tight mb-6">
+        Kebutuhan Harian,<br />
+        <span class="text-primary">10 Menit Sampai</span>
+      </h1>
+
+      <p class="text-xl text-gray-300 mb-8">
+        Belanja kebutuhan sehari-hari jadi super cepat dan mudah.
+        Produk segar langsung ke rumah Anda.
+      </p>
+
+      <div class="flex flex-col sm:flex-row gap-4">
+        <button class="bg-primary px-8 py-4 rounded-lg font-semibold flex items-center gap-2 hover:bg-green-600">
+          <i data-lucide="smartphone"></i> Download Aplikasi
+        </button>
+
+        <button class="border border-white/30 px-8 py-4 rounded-lg flex items-center gap-2 hover:bg-white/10">
+          <i data-lucide="play-circle"></i> Lihat Demo
+        </button>
+      </div>
+    </div>
+
+    <!-- Image -->
+    <div class="float relative">
+      <img
+        src="https://images.unsplash.com/photo-1607082349566-187342175e2f?w=900&q=80"
+        alt="Delivery"
+        class="rounded-3xl shadow-2xl"
+      />
+    </div>
+
+  </div>
+</section>
+
+<!-- ================= LAYANAN ================= -->
+<section id="layanan" class="py-20 bg-white">
+  <div class="max-w-7xl mx-auto px-6 text-center">
+    <h2 class="text-4xl font-bold mb-4">Kenapa Pilih AmanMart?</h2>
+    <p class="text-xl text-gray-600 mb-16">
+      Pengalaman belanja cepat, aman, dan terpercaya
+    </p>
+
+    <div class="grid md:grid-cols-3 gap-8">
+      <!-- Card -->
+      <div class="card-hover border rounded-2xl p-8 text-left">
+        <i data-lucide="zap" class="w-10 h-10 text-primary mb-4"></i>
+        <h3 class="text-xl font-bold mb-2">Sangat Cepat</h3>
+        <p class="text-gray-600">
+          Pengiriman 10 menit dari toko terdekat.
+        </p>
+      </div>
+
+      <div class="card-hover border rounded-2xl p-8 text-left">
+        <i data-lucide="shield-check" class="w-10 h-10 text-primary mb-4"></i>
+        <h3 class="text-xl font-bold mb-2">Aman & Terpercaya</h3>
+        <p class="text-gray-600">
+          Pembayaran aman dan pengemudi terverifikasi.
+        </p>
+      </div>
+
+      <div class="card-hover border rounded-2xl p-8 text-left">
+        <i data-lucide="shopping-bag" class="w-10 h-10 text-primary mb-4"></i>
+        <h3 class="text-xl font-bold mb-2">Produk Lengkap</h3>
+        <p class="text-gray-600">
+          5000+ produk segar dan kebutuhan rumah tangga.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer id="kontak" class="bg-gray-900 text-white py-16">
+  <div class="max-w-7xl mx-auto px-6 text-center">
+    <p class="text-gray-400">
+      © 2025 Amanship. All rights reserved.
+    </p>
+  </div>
+</footer>
+
+<!-- Init Lucide -->
+<script>
+  lucide.createIcons();
+</script>
+
 </body>
 </html>
