@@ -2090,12 +2090,12 @@ app.post("/api/seed", async (_req: Request, res: Response) => {
 
 // 🌐 SERVE THE WEBSITE PAGE
 // Put this AFTER all app.post and app.get("/api/...") routes
-app.use(express.static(path.join(process.cwd(), 'public')));
+// app.use(express.static(path.join(process.cwd(), 'public')));
 
 // Fallback: If they go to a route that doesn't exist, show the website
-app.get('*', (req, res) => {
-  res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
-});
+// app.get('*', (req, res) => {
+//   res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
+// });
   
   const httpServer = createServer(app);
   return httpServer;
