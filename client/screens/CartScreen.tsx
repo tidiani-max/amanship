@@ -39,8 +39,7 @@ export default function CartScreen() {
     updateQuantity(productId, newQuantity);
   };
 
-  const deliveryFee = 10000;
-  const total = subtotal + deliveryFee;
+
 
   const renderCartItem = ({ item }: { item: CartItemWithId }) => (
     <Card style={styles.cartItemCard}>
@@ -142,25 +141,30 @@ export default function CartScreen() {
           ]}
         >
           <View style={styles.priceBreakdown}>
-            <View style={styles.priceRow}>
-              <ThemedText type="body" style={{ color: theme.textSecondary }}>
-                {t.checkout.subtotal}
-              </ThemedText>
-              <ThemedText type="body">{formatPrice(subtotal)}</ThemedText>
-            </View>
-            <View style={styles.priceRow}>
-              <ThemedText type="body" style={{ color: theme.textSecondary }}>
-                {t.checkout.deliveryFee}
-              </ThemedText>
-              <ThemedText type="body">{formatPrice(deliveryFee)}</ThemedText>
-            </View>
-            <View style={[styles.priceRow, styles.totalRow]}>
-              <ThemedText type="h3">{t.checkout.total}</ThemedText>
-              <ThemedText type="h3" style={{ color: theme.primary }}>
-                {formatPrice(total)}
-              </ThemedText>
-            </View>
-          </View>
+  <View style={styles.priceRow}>
+    <ThemedText type="body" style={{ color: theme.textSecondary }}>
+      {t.checkout.subtotal}
+    </ThemedText>
+    <ThemedText type="body">{formatPrice(subtotal)}</ThemedText>
+  </View>
+
+  <View style={styles.priceRow}>
+    <ThemedText type="body" style={{ color: theme.textSecondary }}>
+      {t.checkout.deliveryFee}
+    </ThemedText>
+    <ThemedText type="body">
+      Calculated at checkout
+    </ThemedText>
+  </View>
+
+  <View style={[styles.priceRow, styles.totalRow]}>
+    <ThemedText type="h3">{t.checkout.subtotal}</ThemedText>
+    <ThemedText type="h3" style={{ color: theme.primary }}>
+      {formatPrice(subtotal)}
+    </ThemedText>
+  </View>
+</View>
+
           <Button onPress={() => navigation.navigate("Checkout")}>
             {t.cart.checkout}
           </Button>
