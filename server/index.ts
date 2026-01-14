@@ -15,11 +15,12 @@ const isProd = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_EN
 
 function setupCors(app: express.Application) {
   app.use(cors({
-    origin: ["http://localhost:8081", "https://amanship-production.up.railway.app"],
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
-  }));
+  origin: ["http://localhost:8081", "https://amanship-production.up.railway.app"],
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
+}));
+
 
   // This is the "Magic Fix" for Railway/Web CORS
   app.options('*', (req, res) => {
