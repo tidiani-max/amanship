@@ -1009,6 +1009,7 @@ const total = itemsTotal + deliveryFee;
           storeId,
           addressId,
           total,
+          deliveryFee,
           status: "pending",
           orderNumber: `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`,
           items: storeItems,
