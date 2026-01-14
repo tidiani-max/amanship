@@ -321,12 +321,7 @@ app.get("/api/picker/dashboard", async (req, res) => {
     const pending = await db
       .select()
       .from(orders)
-      .where(
-        and(
-          eq(orders.storeId, storeId),
-          eq(orders.status, "pending")
-        )
-      );
+      .where(and(eq(orders.storeId, storeId), eq(orders.status, "pending")));
 
     const active = await db
       .select()
@@ -350,16 +345,48 @@ app.get("/api/picker/dashboard", async (req, res) => {
         )
       );
 
+    const attachItems = async (ordersList: any[]) => {
+      return Promise.all(
+        ordersList.map(async (order) => {
+          const items = await db
+            .select({
+              productId: products.id,
+              name: products.name,
+              image: products.image,
+              quantity: orderItems.quantity,
+              location: storeInventory.location,
+            })
+            .from(orderItems)
+            .leftJoin(products, eq(orderItems.productId, products.id))
+            .leftJoin(
+              storeInventory,
+              and(
+                eq(storeInventory.productId, products.id),
+                eq(storeInventory.storeId, storeId)
+              )
+            )
+            .where(eq(orderItems.orderId, order.id));
+
+          return { ...order, items };
+        })
+      );
+    };
+
     res.json({
       user: { id: userId, role: "picker" },
       store: staff.storeId,
-      orders: { pending, active, packed },
+      orders: {
+        pending: await attachItems(pending),
+        active: await attachItems(active),
+        packed: await attachItems(packed),
+      },
     });
   } catch (error) {
     console.error("❌ Picker dashboard error:", error);
     res.status(500).json({ error: "Failed to fetch dashboard" });
   }
 });
+
 
   app.get("/api/picker/inventory", async (req, res) => {
     try {

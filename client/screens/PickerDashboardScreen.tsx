@@ -78,6 +78,29 @@ function OrderCard({ order, onUpdateStatus }: { order: any; onUpdateStatus: (id:
         </View>
         <ThemedText style={styles.orderPrice}>Rp {total}</ThemedText>
       </View>
+
+      {Array.isArray(order.items) && order.items.length > 0 && (
+  <View style={{ marginTop: 10 }}>
+    {order.items.map((item: any, idx: number) => (
+      <View
+        key={idx}
+        style={{ flexDirection: "row", marginBottom: 8, alignItems: "center" }}
+      >
+        <Image
+          source={{ uri: getImageUrl(item.image) }}
+          style={{ width: 40, height: 40, borderRadius: 6, marginRight: 10 }}
+        />
+        <View style={{ flex: 1 }}>
+          <ThemedText type="body">{item.name}</ThemedText>
+          <ThemedText type="caption">
+            Qty: {item.quantity} · 📍 {item.location || "N/A"}
+          </ThemedText>
+        </View>
+      </View>
+    ))}
+  </View>
+)}
+
       
       {nextStatus !== "" && (
         <TouchableOpacity 
@@ -322,7 +345,9 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
     return;
   }
 
-  queryClient.invalidateQueries({ queryKey: ["/api/picker/dashboard"] });
+  queryClient.invalidateQueries({
+  queryKey: ["/api/picker/dashboard", user?.id],
+});
 };
 
 
