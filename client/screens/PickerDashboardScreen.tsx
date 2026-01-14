@@ -17,7 +17,7 @@ import { getImageUrl } from "@/lib/image-url";
 import { Spacing } from "@/constants/theme";
 
 // --- CONFIGURATION ---
-const BASE_URL = "process.env.EXPO_PUBLIC_DOMAIN";
+const BASE_URL = process.env.EXPO_PUBLIC_DOMAIN!;
 
 // --- INTERFACES ---
 interface Category {
