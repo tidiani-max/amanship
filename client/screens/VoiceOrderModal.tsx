@@ -29,7 +29,7 @@ export default function VoiceOrderModal() {
   const { data: products = [], isLoading } = useQuery<Product[]>({
     queryKey: ["products"],
     queryFn: async () => {
-      const response = await fetch('http://localhost:5000/api/products'); 
+      const response = await fetch('${process.env.EXPO_PUBLIC_DOMAIN}/api/products'); 
       if (!response.ok) throw new Error("Check backend route!");
       return response.json();
     }
