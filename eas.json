@@ -1,0 +1,22 @@
+{
+  "cli": {
+    "version": ">= 14.0.0"
+  },
+  "build": {
+    "preview": {
+      "android": {
+        "buildType": "apk",
+        "env": {
+          "EAS_NO_ARTIFACTORY": "1",
+          "GRADLE_OPTS": "-Dorg.gradle.caching=false -Dorg.gradle.daemon=false"
+        }
+      }
+    },
+    "production": {
+      "env": {
+        "EAS_NO_ARTIFACTORY": "1",
+        "GRADLE_OPTS": "-Dorg.gradle.caching=false -Dorg.gradle.daemon=false"
+      }
+    }
+  }
+}
