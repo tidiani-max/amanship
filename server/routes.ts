@@ -991,10 +991,16 @@ app.post("/api/orders", async (req, res) => {
     for (const storeId of Object.keys(itemsByStore)) {
       const storeItems = itemsByStore[storeId];
 
-      const total = storeItems.reduce(
-        (sum, i) => sum + Number(i.price) * Number(i.quantity),
-        0
-      );
+      const DELIVERY_FEE_PER_STORE = 10000;
+
+const itemsTotal = storeItems.reduce(
+  (sum, i) => sum + Number(i.price) * Number(i.quantity),
+  0
+);
+
+const deliveryFee = DELIVERY_FEE_PER_STORE;
+const total = itemsTotal + deliveryFee;
+
 
       const [order] = await db
         .insert(orders)

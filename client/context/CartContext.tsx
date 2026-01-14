@@ -22,6 +22,7 @@ interface CartItemFromAPI {
   userId: string;
   productId: string;
   quantity: number;
+  storeId: string; // ✅ ADD THIS
   product: {
     id: string;
     name: string;
@@ -37,6 +38,7 @@ interface CartItemFromAPI {
   };
 }
 
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -51,7 +53,7 @@ const { data: cartData = [], isLoading } = useQuery<CartItemFromAPI[]>({
     enabled: !!user?.id, // Only fetch if user is logged in
   });
 
-  const items: CartItemType[] = cartData.map((item) => ({
+const items: CartItemType[] = cartData.map((item) => ({
   product: {
     id: item.product.id,
     name: item.product.name,
@@ -62,10 +64,12 @@ const { data: cartData = [], isLoading } = useQuery<CartItemFromAPI[]>({
     category: item.product.categoryId,
     description: item.product.description || "",
     nutrition: item.product.nutrition,
+    storeId: item.storeId, // ✅ ADD THIS
   },
   quantity: item.quantity,
   cartItemId: item.id,
 }));
+
 
 
 const addMutation = useMutation({

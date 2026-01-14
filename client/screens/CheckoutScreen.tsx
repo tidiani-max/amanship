@@ -78,8 +78,37 @@ export default function CheckoutScreen() {
 
   const selectedAddress = addresses[0] ?? null;
 
-  const deliveryFee = 10000;
-  const total = subtotal + deliveryFee;
+const DELIVERY_FEE_PER_STORE = 10000;
+
+// 1️⃣ Group items by store
+const itemsByStore = items.reduce((acc: any, item) => {
+  const storeId = (item.product as any).storeId;
+  if (!acc[storeId]) acc[storeId] = [];
+  acc[storeId].push(item);
+  return acc;
+}, {});
+
+// 2️⃣ Calculate totals per store
+const storeTotals = Object.entries(itemsByStore).map(
+  ([storeId, storeItems]: any) => {
+    const subtotal = storeItems.reduce(
+      (sum: number, i: any) =>
+        sum + i.product.price * i.quantity,
+      0
+    );
+
+    return {
+      storeId,
+      subtotal,
+      deliveryFee: DELIVERY_FEE_PER_STORE,
+      total: subtotal + DELIVERY_FEE_PER_STORE,
+    };
+  }
+);
+
+// 3️⃣ Final total (ALL stores)
+const total = storeTotals.reduce((sum, s) => sum + s.total, 0);
+
 
   const availablePayments = codAllowed
     ? [...PAYMENT_METHODS, COD_OPTION]
@@ -120,16 +149,17 @@ export default function CheckoutScreen() {
         quantity: i.quantity,
       }));
 
-      const res = await apiRequest("POST", "/api/orders", {
-        customerLat: location.latitude.toString(),
-        customerLng: location.longitude.toString(),
-        paymentMethod: selectedPayment.type === "cod" ? "cod" : "midtrans",
-        items: itemsPayload,
-        total,
-        deliveryFee,
-        addressId,
-        userId: user.id,
-      });
+
+     const res = await apiRequest("POST", "/api/orders", {
+      customerLat: location.latitude.toString(),
+      customerLng: location.longitude.toString(),
+      paymentMethod: selectedPayment.type === "cod" ? "cod" : "midtrans",
+      items: itemsPayload,
+      total,
+      addressId,
+      userId: user.id,
+    });
+
 
       if (!res.ok) throw new Error("Order failed");
       return res.json();
@@ -213,6 +243,30 @@ export default function CheckoutScreen() {
             </View>
           </View>
         </View>
+        <View style={styles.section}>
+  <ThemedText type="h3">Delivery Summary</ThemedText>
+
+  {storeTotals.map((s) => (
+    <Card key={s.storeId} style={{ marginBottom: 12 }}>
+      <ThemedText type="body" style={{ fontWeight: "600" }}>
+        Store {s.storeId}
+      </ThemedText>
+
+      <ThemedText type="caption">
+        Products: Rp {s.subtotal.toLocaleString("id-ID")}
+      </ThemedText>
+
+      <ThemedText type="caption">
+        Delivery: Rp {s.deliveryFee.toLocaleString("id-ID")}
+      </ThemedText>
+
+      <ThemedText type="body" style={{ marginTop: 6 }}>
+        Total: Rp {s.total.toLocaleString("id-ID")}
+      </ThemedText>
+    </Card>
+  ))}
+</View>
+
 
         {/* Payment */}
         <View style={styles.paymentMethods}>
