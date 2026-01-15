@@ -616,6 +616,7 @@ app.put("/api/driver/orders/:id/status", async (req, res) => {
 });
 
 
+
   // ==================== 6. CATEGORIES ====================
   console.log("📂 Registering category routes...");
   
@@ -1142,54 +1143,7 @@ app.patch("/api/orders/:id/pack", async (req, res) => {
 
 
 
-app.put("/api/driver/orders/:id/status", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status, userId } = req.body;
 
-    // Driver tries to pick order
-    if (status === "delivering") {
-      const [updated] = await db
-        .update(orders)
-        .set({
-          status: "delivering",
-          driverId: userId
-        })
-        .where(
-          and(
-            eq(orders.id, id),
-            isNull(orders.driverId) // 🔒 HARD LOCK
-          )
-        )
-        .returning();
-
-      if (!updated) {
-        return res.status(409).json({
-          error: "Order already taken by another driver"
-        });
-      }
-
-      return res.json(updated);
-    }
-
-    // Completing delivery
-    const [completed] = await db
-      .update(orders)
-      .set({ status })
-      .where(
-        and(
-          eq(orders.id, id),
-          eq(orders.driverId, userId)
-        )
-      )
-      .returning();
-
-    res.json(completed);
-  } catch (error) {
-    console.error("❌ Driver order update error:", error);
-    res.status(500).json({ error: "Update failed" });
-  }
-});
 
 app.get("/api/orders", async (req, res) => {
   try {
