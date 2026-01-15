@@ -324,10 +324,9 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
   if (!user?.id) return;
 
   const url =
-  nextStatus === "picking"
-    ? `${BASE_URL}/api/picker/orders/${orderId}/take`
-    : `${BASE_URL}/api/picker/orders/${orderId}/pack`;
-
+    nextStatus === "picking"
+      ? `${BASE_URL}/api/orders/${orderId}/take`
+      : `${BASE_URL}/api/orders/${orderId}/pack`;
 
   const body =
     nextStatus === "picking"
