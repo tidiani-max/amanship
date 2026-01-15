@@ -305,7 +305,7 @@ app.post("/api/auth/otp/verify", async (req, res) => {
 });
 
   // ==================== 4. PICKER ROUTES (BEFORE /api/orders) ====================
-  console.log("📦 Registering picker routes...");
+console.log("📦 Registering picker routes...");
 
 
 
@@ -494,59 +494,6 @@ app.get("/api/picker/dashboard", async (req, res) => {
     }
   });
 
-// ==================== ORDER ACTIONS (PICKER) ====================
-
-app.patch("/api/orders/:orderId/take", async (req, res) => {
-  try {
-    const { orderId } = req.params;
-    const { userId, role } = req.body;
-
-    if (!userId || role !== "picker") {
-      return res.status(403).json({ error: "Picker only" });
-    }
-
-    await db
-      .update(orders)
-      .set({
-        status: "picking",
-        pickerId: userId,
-      })
-      .where(eq(orders.id, orderId));
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error("❌ Take order error:", err);
-    res.status(500).json({ error: "Failed to take order" });
-  }
-});
-
-app.patch("/api/orders/:orderId/pack", async (req, res) => {
-  try {
-    const { orderId } = req.params;
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: "userId required" });
-    }
-
-    await db
-      .update(orders)
-      .set({ status: "packed" })
-      .where(
-        and(
-          eq(orders.id, orderId),
-          eq(orders.pickerId, userId)
-        )
-      );
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error("❌ Pack order error:", err);
-    res.status(500).json({ error: "Failed to pack order" });
-  }
-});
-
-
   // ==================== 5. DRIVER ROUTES ====================
 console.log("🚗 Registering driver routes...");
 
@@ -702,9 +649,6 @@ app.put("/api/driver/orders/:id/status", async (req, res) => {
     res.status(500).json({ error: "Update failed" });
   }
 });
-
-
-
 
   // ==================== 6. CATEGORIES ====================
   console.log("📂 Registering category routes...");
