@@ -43,15 +43,17 @@ function configureStaticFiles(app: express.Application) {
 }
 
 (async () => {
-  // 1. Setup CORS before any routes or other middleware
+  // 1. Setup CORS first
   setupCors(app);
-  
-  // 2. Setup parsing and static files
-  setupBodyParsing(app);
+
+  // 2. Setup static files (uploads, assets, build)
   configureStaticFiles(app);
 
-  // 3. Register routes (IMPORTANT: Ensure routes.ts has NO internal CORS logic now)
+  // 3. Register routes (multer must run BEFORE body parsing)
   const server = await registerRoutes(app);
+
+  // 4. Setup body parsing AFTER routes
+  setupBodyParsing(app);
 
   const port = parseInt(process.env.PORT || "5000", 10);
 
@@ -61,17 +63,17 @@ function configureStaticFiles(app: express.Application) {
     fs.mkdirSync(chatDir, { recursive: true });
   }
 
-  // Start server on 0.0.0.0
+  // Start server
   server.listen(port, "0.0.0.0", () => {
     const mode = isProd ? "PRODUCTION 🚀" : "DEVELOPMENT 🛠️";
     log(`-----------------------------------------`);
     log(`STATUS: ${mode}`);
     log(`PORT:   ${port}`);
-    if (!isProd) {
-      log(`LOCAL:  http://localhost:${port}`);
-    } else {
-      log(`CLOUD:  https://amanship-production.up.railway.app`);
-    }
+    log(
+      isProd
+        ? "CLOUD:  https://amanship-production.up.railway.app"
+        : `LOCAL:  http://localhost:${port}`
+    );
     log(`-----------------------------------------`);
   });
 })();

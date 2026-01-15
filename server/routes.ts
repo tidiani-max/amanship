@@ -1205,7 +1205,11 @@ app.get("/api/orders/:id", async (req, res) => {
     }
   });
 
-  app.post("/api/messages", uploadChat.single("file"), async (req, res) => {
+  app.post(
+  "/api/messages",
+  uploadChat.single("file"),
+  async (req, res) => {
+
   try {
     const { orderId, senderId, type } = req.body;
     let content = req.body.content;
