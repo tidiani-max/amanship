@@ -973,9 +973,7 @@ app.get("/api/category/products", async (req, res) => {
   });
 
   // ==================== 10. ORDERS ====================
-  console.log("📦 Registering order routes...");
-  
-
+console.log("📦 Registering order routes...");
 app.post("/api/orders", async (req, res) => {
   try {
     const {
@@ -1080,58 +1078,6 @@ const total = itemsTotal + deliveryFee;
     res.status(500).json({ error: "Failed to create order" });
   }
 });
-
-
-
-app.patch("/api/orders/:id/take", async (req, res) => {
-  try {
-    const { userId, role } = req.body;
-
-    // 1️⃣ Find staff membership
-    const [staff] = await db
-      .select()
-      .from(storeStaff)
-      .where(eq(storeStaff.userId, userId));
-
-    if (!staff) {
-      return res.status(403).json({ error: "Not store staff" });
-    }
-
-    // 2️⃣ Ensure order belongs to same store
-    const [order] = await db
-      .select()
-      .from(orders)
-      .where(eq(orders.id, req.params.id));
-
-    if (!order || order.storeId !== staff.storeId) {
-      return res.status(403).json({ error: "Order not from your store" });
-    }
-
-    // 3️⃣ Update order safely
-    const updateData: any = {};
-    if (role === "picker") {
-      updateData.pickerId = userId;
-      updateData.status = "picking";
-    } else if (role === "driver") {
-      updateData.driverId = userId;
-      updateData.status = "delivering";
-    }
-
-    const [updated] = await db
-      .update(orders)
-      .set(updateData)
-      .where(eq(orders.id, req.params.id))
-      .returning();
-
-    res.json(updated);
-  } catch (error) {
-    console.error("❌ Take order error:", error);
-    res.status(500).json({ error: "Failed to assign" });
-  }
-});
-
-
-
 app.patch("/api/orders/:id/pack", async (req, res) => {
   try {
     const { userId } = req.body;
@@ -1166,11 +1112,6 @@ app.patch("/api/orders/:id/pack", async (req, res) => {
     res.status(500).json({ error: "Failed to pack order" });
   }
 });
-
-
-
-
-
 app.get("/api/orders", async (req, res) => {
   try {
     const { userId, role } = req.query;
@@ -1231,9 +1172,6 @@ app.get("/api/orders", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch orders" });
   }
 });
-
-
-
 app.get("/api/orders/:id", async (req, res) => {
     try {
       const [orderData] = await db.select().from(orders).where(eq(orders.id, req.params.id)).limit(1);
