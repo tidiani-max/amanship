@@ -71,7 +71,7 @@ function OrderCard({ order, onUpdateStatus }: { order: any; onUpdateStatus: (id:
     <Card style={styles.orderCard}>
       <View style={styles.orderHeader}>
         <View>
-          <ThemedText type="h3">Order #{orderId}</ThemedText>
+          <ThemedText type="h3">Order #{order.id}</ThemedText>
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>
             Status: <ThemedText type="caption" style={{ color: theme.primary, fontWeight: 'bold' }}>{status.toUpperCase()}</ThemedText>
           </ThemedText>
