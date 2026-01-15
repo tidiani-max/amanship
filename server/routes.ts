@@ -497,7 +497,8 @@ app.get("/api/picker/dashboard", async (req, res) => {
 app.patch("/api/orders/:id/take", async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId } = req.body;
+    const userId = req.body?.userId;
+
 
     if (!userId) {
       return res.status(400).json({ error: "userId required" });
