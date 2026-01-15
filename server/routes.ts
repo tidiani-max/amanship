@@ -1213,8 +1213,9 @@ app.get("/api/orders/:id", async (req, res) => {
     // ✅ FIX: Use template literals ${} to insert the actual domain variable
     // We also handle the slash to ensure the URL is formed correctly
     if (req.file) {
-      const baseUrl = process.env.EXPO_PUBLIC_DOMAIN || "";
+      const baseUrl = process.env.EXPO_PUBLIC_DOMAIN!.replace(/\/$/, "");
       content = `${baseUrl}/uploads/chat/${req.file.filename}`;
+
     }
 
     if (!orderId || !senderId || !content) {

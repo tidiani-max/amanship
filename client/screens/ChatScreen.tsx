@@ -78,10 +78,12 @@ export default function ChatScreen() {
     }
     return res.json();
   },
-  onSuccess: () => {
-    setMessage("");
-    queryClient.invalidateQueries({ queryKey: ["messages", orderId] });
-  },
+  onSuccess: async () => {
+  setMessage("");
+  await queryClient.invalidateQueries({ queryKey: ["messages", orderId] });
+  flatListRef.current?.scrollToEnd({ animated: true });
+},
+
   onError: (error) => {
     console.error("Upload failed:", error);
     Alert.alert("Upload Error", "Server rejected the request. check terminal.");
@@ -148,8 +150,13 @@ const handleCamera = async () => {
           const isMe = item.senderId === user?.id;
           return (
             <View style={[styles.bubble, isMe ? [styles.myBubble, {backgroundColor: theme.primary}] : styles.theirBubble]}>
-              {item.type === "image" ? (
-                <Image source={{ uri: item.content }} style={styles.imageMsg} />
+              {item.type === "image" && item.content ? (
+               <Image
+  source={{ uri: item.content }}
+  style={styles.imageMsg}
+  resizeMode="cover"
+/>
+
               ) : (
                 <ThemedText style={{ color: isMe ? "white" : theme.text }}>{item.content}</ThemedText>
               )}
@@ -189,7 +196,14 @@ const styles = StyleSheet.create({
     // FIX: Using non-deprecated shadow styles
     elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 
   },
-  bubble: { maxWidth: '80%', padding: 12, borderRadius: 18, marginBottom: 10 },
+  bubble: {
+  maxWidth: '80%',
+  padding: 12,
+  borderRadius: 18,
+  marginBottom: 10,
+  minHeight: 40
+},
+
   myBubble: { alignSelf: 'flex-end', borderBottomRightRadius: 2 },
   theirBubble: { alignSelf: 'flex-start', backgroundColor: '#E9E9EB', borderBottomLeftRadius: 2 },
   imageMsg: { width: 200, height: 200, borderRadius: 10 },
