@@ -541,12 +541,13 @@ app.patch("/api/orders/:id/take", async (req, res) => {
       .returning();
 
     if (!taken) {
-      return res.status(409).json({
-        error: "Order already taken or not available",
-      });
-    }
+  return res.status(409).json({
+    error: "Order already taken, already picked, or not pending",
+  });
+}
 
-    res.json(taken);
+return res.status(200).json(taken);
+
   } catch (err) {
     console.error("❌ PICKER TAKE ERROR:", err);
     res.status(500).json({ error: "Internal error" });
