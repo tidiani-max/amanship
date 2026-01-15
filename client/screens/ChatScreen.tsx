@@ -151,11 +151,15 @@ const handleCamera = async () => {
           return (
             <View style={[styles.bubble, isMe ? [styles.myBubble, {backgroundColor: theme.primary}] : styles.theirBubble]}>
               {item.type === "image" && item.content ? (
-               <Image
-  source={{ uri: item.content }}
+             <Image
+  source={{ uri: item.content.startsWith("http")
+    ? item.content
+    : `${process.env.EXPO_PUBLIC_DOMAIN}${item.content}` }}
   style={styles.imageMsg}
+
   resizeMode="cover"
 />
+
 
               ) : (
                 <ThemedText style={{ color: isMe ? "white" : theme.text }}>{item.content}</ThemedText>

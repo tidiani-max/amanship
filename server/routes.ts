@@ -10,9 +10,13 @@ import {
 } from "../shared/schema";
 import { findNearestAvailableStore, getStoresWithAvailability, estimateDeliveryTime } from "./storeAvailability";
 import express, { Express } from 'express';
+import fs from "fs";
 import path from 'path';
 import { Expo } from 'expo-server-sdk';
 import multer from "multer";
+
+
+
 
 
 // ==================== CONFIGURATION ====================
@@ -21,8 +25,14 @@ const DEMO_USER_ID = "demo-user";
 // Multer storage configuration
 const UPLOADS_PATH = path.resolve(process.cwd(), "uploads");
 
+const chatDir = path.join(process.cwd(), "uploads", "chat");
+if (!fs.existsSync(chatDir)) {
+  fs.mkdirSync(chatDir, { recursive: true });
+}
+
 const chatStorage = multer.diskStorage({
-  destination: "./uploads/chat",
+  destination: chatDir,
+
   filename: (_req, file, cb) => {
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     cb(null, `chat-${uniqueSuffix}${path.extname(file.originalname)}`);
@@ -1217,8 +1227,9 @@ app.get("/api/orders/:id", async (req, res) => {
     // ✅ FIX: Use template literals ${} to insert the actual domain variable
     // We also handle the slash to ensure the URL is formed correctly
     if (req.file) {
-      const baseUrl = process.env.EXPO_PUBLIC_DOMAIN!.replace(/\/$/, "");
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
       content = `${baseUrl}/uploads/chat/${req.file.filename}`;
+
 
     }
 
