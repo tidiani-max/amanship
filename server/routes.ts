@@ -485,16 +485,20 @@ app.get("/api/picker/dashboard", async (req, res) => {
   });
 
   // ==================== 5. DRIVER ROUTES ====================
-  console.log("🚗 Registering driver routes...");
-  
 console.log("🚗 Registering driver routes...");
 
+/**
+ * DRIVER DASHBOARD
+ * - Driver can ALWAYS see packed (ready) orders
+ * - Driver can only PICK ONE order at a time
+ * - Store isolation is enforced everywhere
+ */
 app.get("/api/driver/dashboard", async (req, res) => {
   try {
     const { userId } = req.query;
     if (!userId) return res.status(400).json({ error: "Missing userId" });
 
-    // 1️⃣ Get driver staff record (same pattern as picker)
+    // 1️⃣ Get driver staff record
     const [staff] = await db
       .select()
       .from(storeStaff)
@@ -504,11 +508,11 @@ app.get("/api/driver/dashboard", async (req, res) => {
       return res.json({
         user: { id: userId, role: "driver" },
         store: null,
-        orders: { ready: [], active: [], completed: [] }
+        orders: { ready: [], active: [], completed: [] },
       });
     }
 
-    // 2️⃣ Check if driver already has an active delivery (LOCK MODE)
+    // 2️⃣ Active delivery (LOCK = only one)
     const activeOrders = await db
       .select()
       .from(orders)
@@ -516,24 +520,11 @@ app.get("/api/driver/dashboard", async (req, res) => {
         and(
           eq(orders.driverId, userId as string),
           eq(orders.status, "delivering"),
-          eq(orders.storeId, staff.storeId) // 🔒 store isolation
+          eq(orders.storeId, staff.storeId)
         )
       );
 
-    if (activeOrders.length > 0) {
-      return res.json({
-        user: { id: userId, role: "driver" },
-        store: staff.storeId,
-        staffRecord: { status: "online" },
-        orders: {
-          ready: [],
-          active: activeOrders,
-          completed: []
-        }
-      });
-    }
-
-    // 3️⃣ Ready orders → ONLY packed orders from this store
+    // 3️⃣ Ready orders (packed, unassigned)
     const readyOrders = await db
       .select()
       .from(orders)
@@ -541,11 +532,11 @@ app.get("/api/driver/dashboard", async (req, res) => {
         and(
           eq(orders.status, "packed"),
           isNull(orders.driverId),
-          eq(orders.storeId, staff.storeId) // 🔒 critical fix
+          eq(orders.storeId, staff.storeId)
         )
       );
 
-    // 4️⃣ Completed orders → same store
+    // 4️⃣ Completed orders (delivered)
     const completedOrders = await db
       .select()
       .from(orders)
@@ -563,23 +554,32 @@ app.get("/api/driver/dashboard", async (req, res) => {
       staffRecord: { status: "online" },
       orders: {
         ready: readyOrders,
-        active: [],
-        completed: completedOrders
-      }
+        active: activeOrders,
+        completed: completedOrders,
+      },
     });
-
   } catch (error) {
     console.error("❌ Driver dashboard error:", error);
-    res.status(500).json({ error: "Failed" });
+    res.status(500).json({ error: "Failed to load dashboard" });
   }
 });
 
+/**
+ * DRIVER ORDER STATUS UPDATE
+ * - HARD store lock
+ * - HARD driver lock
+ * - SAFE concurrency
+ */
 app.put("/api/driver/orders/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
     const { status, userId } = req.body;
 
-    // 1️⃣ Get driver store
+    if (!status || !userId) {
+      return res.status(400).json({ error: "Missing status or userId" });
+    }
+
+    // 1️⃣ Get driver staff record
     const [staff] = await db
       .select()
       .from(storeStaff)
@@ -589,31 +589,57 @@ app.put("/api/driver/orders/:id/status", async (req, res) => {
       return res.status(403).json({ error: "Driver not assigned to store" });
     }
 
-    const updateData: any = { status };
-    if (status === "delivering") updateData.driverId = userId;
+    // 2️⃣ PICK UP ORDER (packed → delivering)
+    if (status === "delivering") {
+      const [picked] = await db
+        .update(orders)
+        .set({
+          status: "delivering",
+          driverId: userId,
+        })
+        .where(
+          and(
+            eq(orders.id, id),
+            eq(orders.storeId, staff.storeId),
+            eq(orders.status, "packed"),
+            isNull(orders.driverId) // 🔒 HARD LOCK
+          )
+        )
+        .returning();
 
-    // 2️⃣ HARD STORE LOCK
-    const [updatedOrder] = await db
+      if (!picked) {
+        return res.status(409).json({
+          error: "Order already taken or not available",
+        });
+      }
+
+      return res.json(picked);
+    }
+
+    // 3️⃣ COMPLETE DELIVERY (delivering → delivered)
+    const [completed] = await db
       .update(orders)
-      .set(updateData)
+      .set({ status })
       .where(
         and(
           eq(orders.id, id),
+          eq(orders.driverId, userId),
           eq(orders.storeId, staff.storeId)
         )
       )
       .returning();
 
-    if (!updatedOrder) {
+    if (!completed) {
       return res.status(403).json({ error: "Order not accessible" });
     }
 
-    res.json(updatedOrder);
+    res.json(completed);
   } catch (error) {
-    console.error("❌ Driver update error:", error);
+    console.error("❌ Driver order update error:", error);
     res.status(500).json({ error: "Update failed" });
   }
 });
+
 
 
 
