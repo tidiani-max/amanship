@@ -15,22 +15,16 @@ const isProd = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_EN
 
 function setupCors(app: express.Application) {
   app.use(cors({
-  origin: ["http://localhost:8081", "https://amanship-production.up.railway.app"],
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
-}));
-
-
-  // This is the "Magic Fix" for Railway/Web CORS
-  app.options('*', (req, res) => {
-    res.header('Access-Control-Allow-Origin', req.headers.origin || "*");
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.sendStatus(200);
-  });
+    origin: [
+      "http://localhost:8081",
+      "https://amanship-production.up.railway.app"
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }));
 }
+
 
 function setupBodyParsing(app: express.Application) {
   app.use(express.json({
