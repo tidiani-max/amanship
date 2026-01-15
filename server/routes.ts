@@ -494,6 +494,61 @@ app.get("/api/picker/dashboard", async (req, res) => {
     }
   });
 
+  app.patch("/api/orders/:id/take", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // 1️⃣ Ensure user is a picker
+    const user = await storage.getUser(userId);
+    if (!user || user.role !== "picker") {
+      return res.status(403).json({ error: "Pickers only" });
+    }
+
+    // 2️⃣ Ensure picker is assigned to a store
+    const [staff] = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.userId, userId));
+
+    if (!staff) {
+      return res.status(403).json({ error: "Picker not assigned to store" });
+    }
+
+    // 3️⃣ Take order (HARD LOCK)
+    const [taken] = await db
+      .update(orders)
+      .set({
+        status: "picking",
+        pickerId: userId,
+      })
+      .where(
+        and(
+          eq(orders.id, id),
+          eq(orders.storeId, staff.storeId),
+          eq(orders.status, "pending"),
+          isNull(orders.pickerId) // 🔒 prevents race condition
+        )
+      )
+      .returning();
+
+    if (!taken) {
+      return res.status(409).json({
+        error: "Order already taken or not available",
+      });
+    }
+
+    res.json(taken);
+  } catch (error) {
+    console.error("❌ Picker take order error:", error);
+    res.status(500).json({ error: "Failed to take order" });
+  }
+});
+
   // ==================== 5. DRIVER ROUTES ====================
 console.log("🚗 Registering driver routes...");
 
