@@ -156,10 +156,7 @@ export default function OrderTrackingScreen() {
             <ThemedText type="caption" style={{ color: theme.primary, fontWeight: "600" }}>{getTimeEstimate()}</ThemedText>
           </View>
           <ThemedText type="h3">{getStatusText()}</ThemedText>
-          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-  Order #{orderId.slice(0, 8).toUpperCase()}
-</ThemedText>
-
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>Order #{orderId.split('-')[0]}</ThemedText>
         </View>
 
         <Card style={styles.riderCard}>
