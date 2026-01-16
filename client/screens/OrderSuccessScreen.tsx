@@ -30,8 +30,6 @@ export default function OrderSuccessScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<OrderSuccessRouteProp>();
   const { orderId } = route.params;
-  const displayOrderId = orderId.slice(0, 8).toUpperCase();
-
 
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
@@ -91,12 +89,11 @@ export default function OrderSuccessScreen() {
           </ThemedText>
           
           <View style={[styles.orderIdContainer, { backgroundColor: theme.backgroundDefault }]}>
-  <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-    {t.orderSuccess.orderId}
-  </ThemedText>
-  <ThemedText type="h3">#{displayOrderId}</ThemedText>
-</View>
-
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+              {t.orderSuccess.orderId}
+            </ThemedText>
+            <ThemedText type="h3">{orderId}</ThemedText>
+          </View>
           
           <View style={styles.estimateContainer}>
             <Feather name="clock" size={20} color={theme.primary} />
