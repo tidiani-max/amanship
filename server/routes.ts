@@ -67,6 +67,10 @@ async function sendPushNotification(userId: string, title: string, body: string,
 
 export async function registerRoutes(app: Express): Promise<Server> {
 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+
 // 🟢 HEALTH CHECK & DEBUG ROUTE
   app.get("/api/health", (req, res) => {
     res.json({ 
