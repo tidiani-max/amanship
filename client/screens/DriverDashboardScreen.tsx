@@ -112,7 +112,7 @@ const openMaps = () => {
     <Card style={styles.orderCard}>
       <View style={styles.orderHeader}>
         <View>
-          <ThemedText type="h3">#{order.id}</ThemedText>
+          <ThemedText type="h3">Order #{order.id.slice(0, 8).toUpperCase()}</ThemedText>
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>
             {isAtStore ? "📍 Waiting at Store" : "🚚 In Transit"}
           </ThemedText>

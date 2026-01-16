@@ -53,6 +53,7 @@ export default function OrdersScreen() {
   );
 
   const orders = activeTab === "active" ? activeOrders : completedOrders;
+  
 
   // Formatters
   const formatPrice = (price: any) => {

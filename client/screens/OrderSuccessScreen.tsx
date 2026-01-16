@@ -33,6 +33,8 @@ export default function OrderSuccessScreen() {
 
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
+  const displayOrderId = orderId.slice(0, 8).toUpperCase();
+
 
   useEffect(() => {
     scale.value = withSequence(
@@ -51,8 +53,11 @@ export default function OrderSuccessScreen() {
   }));
 
   const handleTrackOrder = () => {
-    navigation.replace("OrderTracking", { orderId });
-  };
+  navigation.replace("OrderTracking", {
+    orderId, // ✅ FULL UUID
+  });
+};
+
 
   const handleGoHome = () => {
     navigation.reset({
@@ -88,13 +93,12 @@ export default function OrderSuccessScreen() {
             {t.orderSuccess.orderConfirmed}
           </ThemedText>
           
-          <View style={[styles.orderIdContainer, { backgroundColor: theme.backgroundDefault }]}>
-            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-              {t.orderSuccess.orderId}
-            </ThemedText>
-            <ThemedText type="h3">{orderId}</ThemedText>
-          </View>
-          
+           <View style={[styles.orderIdContainer, { backgroundColor: theme.backgroundDefault }]}>
+              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                {t.orderSuccess.orderId}
+              </ThemedText>
+              <ThemedText type="h3">#{displayOrderId}</ThemedText>
+            </View>
           <View style={styles.estimateContainer}>
             <Feather name="clock" size={20} color={theme.primary} />
             <View style={styles.estimateText}>
