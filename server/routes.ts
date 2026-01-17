@@ -907,6 +907,53 @@ app.get("/api/category/products", async (req, res) => {
       res.status(500).json({ error: "Failed to fetch product" });
     }
   });
+
+
+  // ADD THIS RIGHT AFTER app.get("/api/products/:id", ...)
+app.get("/api/products/:id/store", async (req, res) => {
+  try {
+    const productId = req.params.id;
+    
+    console.log(`🔍 Getting store for product: ${productId}`);
+    
+    // Get store from inventory using raw query for better debugging
+    const result = await db
+      .select({
+        storeId: storeInventory.storeId,
+        storeName: stores.name,
+        storeAddress: stores.address,
+      })
+      .from(storeInventory)
+      .leftJoin(stores, eq(storeInventory.storeId, stores.id))
+      .where(eq(storeInventory.productId, productId))
+      .limit(1);
+    
+    if (!result.length || !result[0]) {
+      console.log(`❌ Product ${productId} not found in any store inventory`);
+      return res.status(404).json({ 
+        error: "Product not found in any store",
+        productId 
+      });
+    }
+    
+    const storeInfo = result[0];
+    console.log(`✅ Product ${productId} found in store: ${storeInfo.storeName} (${storeInfo.storeId})`);
+    
+    res.json({
+      storeId: storeInfo.storeId,
+      storeName: storeInfo.storeName || "Unknown Store",
+      storeAddress: storeInfo.storeAddress,
+    });
+  } catch (error) {
+    console.error("❌ Get product store error:", error);
+    res.status(500).json({ 
+      error: "Failed to fetch product store",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
+
+
   // ==================== 8. CART ====================
   console.log("🛒 Registering cart routes...");
   
