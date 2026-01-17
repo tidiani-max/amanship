@@ -280,6 +280,40 @@ const availableCategories = useMemo(() => {
             <Feather name="mic" size={20} color={theme.buttonText} />
           </Pressable>
         </View>
+        {/* --- LOCATION SELECTOR BANNER --- */}
+<View style={[styles.locationSelector, { backgroundColor: theme.cardBackground }]}>
+  <Pressable 
+    style={styles.locationSelectorButton}
+    onPress={() => navigation.navigate("EditAddress")}
+  >
+    <View style={[styles.locationIcon, { backgroundColor: theme.primary + "20" }]}>
+      <Feather 
+        name="map-pin"
+        size={16} 
+        color={theme.primary} 
+      />
+    </View>
+    <View style={{ flex: 1 }}>
+      <ThemedText type="caption" style={{ color: theme.textSecondary, fontSize: 11 }}>
+        Delivering to
+      </ThemedText>
+      <ThemedText type="body" numberOfLines={1} style={{ fontWeight: "600" }}>
+        {store?.name || "Detecting location..."}
+      </ThemedText>
+    </View>
+    <Feather name="edit-3" size={18} color={theme.primary} />
+  </Pressable>
+  
+  {!storeAvailable && location && (
+    <View style={[styles.noStoreWarning, { backgroundColor: theme.warning + "20" }]}>
+      <Feather name="alert-circle" size={14} color={theme.warning} />
+      <ThemedText type="caption" style={{ color: theme.warning, flex: 1 }}>
+        No stores available in this area
+      </ThemedText>
+    </View>
+  )}
+</View>
+        
 
         {/* --- LOCATION / STORE STATUS --- */}
         {locationStatus === "denied" ? (
@@ -424,5 +458,40 @@ const styles = StyleSheet.create({
   adTitle: { color: 'white', fontSize: 24, fontWeight: 'bold' },
   adSubtitle: { color: 'white', fontSize: 14, marginTop: 4, opacity: 0.9 },
   adBadge: { alignSelf: 'flex-start', backgroundColor: 'white', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginTop: 12 },
-  adBadgeText: { fontSize: 12, fontWeight: 'bold', color: 'black' }
+  adBadgeText: { fontSize: 12, fontWeight: 'bold', color: 'black' },
+  locationSelector: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  locationSelectorButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  locationIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  noStoreWarning: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
 });
+
+// yes here

@@ -10,7 +10,13 @@ interface StoreInfo {
   address: string;
   distanceKm: number;
   codAllowed: boolean;
-  
+}
+
+interface ManualLocation {
+  latitude: number;
+  longitude: number;
+  address: string;
+  isManual: true;
 }
 
 interface LocationContextType {
@@ -22,8 +28,13 @@ interface LocationContextType {
   estimatedDeliveryMinutes: number | null;
   isCheckingAvailability: boolean;
   errorMessage: string | null;
+  isManualLocation: boolean;
+  manualAddress: string | null;
   requestLocationPermission: () => Promise<boolean>;
   refreshStoreAvailability: () => void;
+  setManualLocation: (location: ManualLocation) => void;
+  clearManualLocation: () => void;
+  useCurrentLocation: () => Promise<void>;
 }
 
 const LocationContext = createContext<LocationContextType | undefined>(undefined);
@@ -32,6 +43,8 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationStatus, setLocationStatus] = useState<"loading" | "granted" | "denied" | "unavailable">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isManualLocation, setIsManualLocation] = useState(false);
+  const [manualAddress, setManualAddress] = useState<string | null>(null);
 
   const {
     data: availabilityData,
@@ -67,6 +80,8 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
           longitude: position.coords.longitude,
         });
         setLocationStatus("granted");
+        setIsManualLocation(false);
+        setManualAddress(null);
         return true;
       }
 
@@ -86,6 +101,8 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         longitude: currentLocation.coords.longitude,
       });
       setLocationStatus("granted");
+      setIsManualLocation(false);
+      setManualAddress(null);
       return true;
     } catch (error) {
       console.error("Location error:", error);
@@ -94,6 +111,30 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
   }, []);
+
+  // New function to set manual location
+  const setManualLocationFunc = useCallback((manualLoc: ManualLocation) => {
+    setLocation({
+      latitude: manualLoc.latitude,
+      longitude: manualLoc.longitude,
+    });
+    setIsManualLocation(true);
+    setManualAddress(manualLoc.address);
+    setLocationStatus("granted");
+    setErrorMessage(null);
+  }, []);
+
+  // Clear manual location and return to GPS
+  const clearManualLocation = useCallback(() => {
+    setIsManualLocation(false);
+    setManualAddress(null);
+    // This will trigger useCurrentLocation
+  }, []);
+
+  // Use current GPS location
+  const useCurrentLocation = useCallback(async () => {
+    await requestLocationPermission();
+  }, [requestLocationPermission]);
 
   useEffect(() => {
     const checkInitialPermission = async () => {
@@ -140,8 +181,11 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    checkInitialPermission();
-  }, []);
+    // Only auto-load GPS if not using manual location
+    if (!isManualLocation) {
+      checkInitialPermission();
+    }
+  }, [isManualLocation]);
 
   const store: StoreInfo | null = availabilityData?.available
     ? {
@@ -168,8 +212,13 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         estimatedDeliveryMinutes,
         isCheckingAvailability,
         errorMessage,
+        isManualLocation,
+        manualAddress,
         requestLocationPermission,
         refreshStoreAvailability,
+        setManualLocation: setManualLocationFunc,
+        clearManualLocation,
+        useCurrentLocation,
       }}
     >
       {children}

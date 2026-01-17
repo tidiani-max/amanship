@@ -62,7 +62,13 @@ export default function CheckoutScreen() {
   const { theme } = useTheme();
 
   const { items, subtotal } = useCart();
-  const { location, codAllowed, estimatedDeliveryMinutes } = useLocation();
+  const { 
+  location, 
+  codAllowed, 
+  estimatedDeliveryMinutes,
+  isManualLocation,
+  manualAddress 
+} = useLocation();
   const { user } = useAuth();
   const { t } = useLanguage();
 
@@ -283,31 +289,46 @@ export default function CheckoutScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Address Section */}
-        <View style={styles.section}>
-          <ThemedText type="h3" style={{ marginBottom: Spacing.md }}>
-            {t.checkout.deliveryAddress}
-          </ThemedText>
-          <Card>
-            <View style={styles.addressRow}>
-              <View
-                style={[
-                  styles.addressIcon,
-                  { backgroundColor: theme.primary + "20" },
-                ]}
-              >
-                <Feather name="map-pin" size={20} color={theme.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <ThemedText type="body" style={{ fontWeight: "600" }}>
-                  Current Location
-                </ThemedText>
-                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  Location detected automatically from GPS
-                </ThemedText>
-              </View>
-            </View>
-          </Card>
-        </View>
+        {/* Address Section */}
+<View style={styles.section}>
+  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.md }}>
+    <ThemedText type="h3">
+      {t.checkout.deliveryAddress}
+    </ThemedText>
+    <Pressable onPress={() => navigation.navigate("EditAddress")}>
+      <ThemedText type="caption" style={{ color: theme.primary, fontWeight: "600" }}>
+        Change
+      </ThemedText>
+    </Pressable>
+  </View>
+  
+  <Card>
+    <View style={styles.addressRow}>
+      <View
+        style={[
+          styles.addressIcon,
+          { backgroundColor: theme.primary + "20" },
+        ]}
+      >
+        <Feather 
+          name={isManualLocation ? "map-pin" : "navigation"} 
+          size={20} 
+          color={theme.primary} 
+        />
+      </View>
+      <View style={{ flex: 1 }}>
+        <ThemedText type="body" style={{ fontWeight: "600" }}>
+          {isManualLocation ? "Delivery Address" : "Current GPS Location"}
+        </ThemedText>
+        <ThemedText type="caption" style={{ color: theme.textSecondary }} numberOfLines={2}>
+          {isManualLocation && manualAddress
+            ? manualAddress
+            : "Location detected automatically from GPS"}
+        </ThemedText>
+      </View>
+    </View>
+  </Card>
+</View>
 
         {/* Per-Store Order Breakdown */}
         <View style={styles.section}>
@@ -625,5 +646,14 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
     borderTopWidth: 1,
     borderTopColor: "#E0E0E0",
+  },
+  changeLocationButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
   },
 });

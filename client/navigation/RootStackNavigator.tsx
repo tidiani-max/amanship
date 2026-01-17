@@ -43,7 +43,7 @@ export type RootStackParamList = {
   OrderDetail: { order: Order };
   VoiceOrderModal: undefined;
   VoiceConfirm: { items: CartItem[] };
-  EditAddress: { address?: Address };
+  EditAddress: undefined;
   HelpCenter: undefined;
   Vouchers: undefined;
   AdminDashboard: undefined;
