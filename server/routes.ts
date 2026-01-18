@@ -852,6 +852,7 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
   }
 });
 
+
 app.get("/api/category/products", async (req, res) => {
   try {
     const lat = Number(req.query.lat);
