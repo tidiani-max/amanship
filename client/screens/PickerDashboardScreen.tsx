@@ -150,6 +150,42 @@ function OrderCard({
     </Card>
   );
 }
+// Add this component above your main component
+function CustomAlertModal({ 
+  visible, 
+  title, 
+  message, 
+  onClose 
+}: { 
+  visible: boolean; 
+  title: string; 
+  message: string; 
+  onClose: () => void;
+}) {
+  if (!visible) return null;
+  
+  return (
+    <Modal transparent visible={visible} animationType="fade">
+      <Pressable 
+        style={styles.alertOverlay}
+        onPress={onClose}
+      >
+        <View style={styles.alertContainer}>
+          <ThemedText type="h3" style={styles.alertTitle}>{title}</ThemedText>
+          <ThemedText style={styles.alertMessage}>{message}</ThemedText>
+          <TouchableOpacity 
+            style={styles.alertButton}
+            onPress={onClose}
+          >
+            <ThemedText style={styles.alertButtonText}>Close</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+
 
 export default function PickerDashboardScreen() {
   const insets = useSafeAreaInsets();
@@ -173,6 +209,7 @@ export default function PickerDashboardScreen() {
   const [formLocation, setFormLocation] = useState("");
   const [formCategoryId, setFormCategoryId] = useState<string | null>(null);
   const [formImage, setFormImage] = useState<string | null>(null);
+  const [imageChanged, setImageChanged] = useState(false);
 
   // --- QUERIES ---
 const { data: categories = [] } = useQuery<Category[]>({
@@ -190,6 +227,16 @@ const { data: categories = [] } = useQuery<Category[]>({
     return [];
   }
 });
+
+const [alertVisible, setAlertVisible] = useState(false);
+const [alertTitle, setAlertTitle] = useState("");
+const [alertMessage, setAlertMessage] = useState("");
+
+const showAlert = (title: string, message: string) => {
+  setAlertTitle(title);
+  setAlertMessage(message);
+  setAlertVisible(true);
+};
 
 
   const { data: inventory, isLoading: invLoading, refetch: refetchInv } = useQuery<InventoryItem[]>({
@@ -233,78 +280,65 @@ const { data: categories = [] } = useQuery<Category[]>({
 
 const pickImage = async () => {
   let result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images'], // ✅ New syntax (requires expo-image-picker v15+)
+    mediaTypes: ['images'],
     allowsEditing: true,
     aspect: [1, 1],
-    quality: 0.5,
+    quality: 0.7, // Increased from 0.5
   });
-  if (!result.canceled) {
+  
+  if (!result.canceled && result.assets[0]) {
+    console.log("✅ Image picked:", result.assets[0].uri);
     setFormImage(result.assets[0].uri);
+    setImageChanged(true); // Mark that image was changed
   }
 };
 
-  const openEditModal = (item?: InventoryItem) => {
-    if (item) {
-      setIsEditing(true);
-      setSelectedInventoryId(item.id);
-      setFormName(item.product.name);
-      setFormBrand(item.product.brand || "");
-      setFormDescription(item.product.description || "");
-      setFormOriginalPrice(item.product.originalPrice?.toString() || "");
-      setFormPrice(item.product.price.toString());
-      setFormStock(item.stockCount.toString());
-      setFormLocation(item.location ?? "");
-      setFormCategoryId(item.categoryId || (item as any).product?.categoryId || null);
-      setFormImage(item.product.image ?? null);
-    } else {
-      setIsEditing(false);
-      setSelectedInventoryId(null);
-      setFormName("");
-      setFormBrand("");
-      setFormDescription("");
-      setFormOriginalPrice("");
-      setFormPrice("");
-      setFormStock("");
-      setFormLocation("");
-      setFormCategoryId(null);
-      setFormImage(null);
-    }
-    setModalVisible(true);
-  };
+const openEditModal = (item?: InventoryItem) => {
+  if (item) {
+    // ... existing code ...
+    setFormImage(item.product.image ?? null);
+    setImageChanged(false); // Reset when opening edit modal
+  } else {
+    // ... existing code ...
+    setFormImage(null);
+    setImageChanged(false); // Reset when creating new
+  }
+  setModalVisible(true);
+};
 
 const handleSaveProduct = async () => {
   if (!user || !user.id) {
-    Alert.alert("Error", "You must be logged in to save products.");
+    showAlert("Error", "You must be logged in to save products.");
     return;
   }
 
   if (!formCategoryId) {
-  Alert.alert("Category Required", "Please select a category for this product.");
+  showAlert("Category Required", "Please select a category for this product.");
   return;
 }
 
 if (!formName.trim()) {
-  Alert.alert("Name Required", "Please enter a product name.");
+  showAlert("Name Required", "Please enter a product name.");
   return;
 }
 
 if (!formPrice.trim() || isNaN(Number(formPrice)) || Number(formPrice) <= 0) {
-  Alert.alert("Invalid Price", "Please enter a valid price greater than 0.");
+  showAlert("Invalid Price", "Please enter a valid price greater than 0.");
   return;
 }
 
 if (!formStock.trim() || isNaN(Number(formStock)) || Number(formStock) < 0) {
-  Alert.alert("Invalid Stock", "Please enter a valid stock quantity (0 or more).");
+  showAlert("Invalid Stock", "Please enter a valid stock quantity (0 or more).");
   return;
 }
 
 if (formOriginalPrice.trim() && (isNaN(Number(formOriginalPrice)) || Number(formOriginalPrice) <= 0)) {
-  Alert.alert("Invalid Original Price", "Original price must be a valid number greater than 0.");
+  showAlert("Invalid Original Price", "Original price must be a valid number greater than 0.");
   return;
 }
 
 if (formOriginalPrice.trim() && Number(formOriginalPrice) <= Number(formPrice)) {
-  Alert.alert("Price Error", "Original price should be higher than the current price.");
+  showAlert("Price Error", "Original price should be higher than the current price.");
   return;
 }
 
@@ -323,16 +357,24 @@ if (formOriginalPrice.trim() && Number(formOriginalPrice) <= Number(formPrice)) 
     formData.append("inventoryId", selectedInventoryId);
   }
 
-  if (formImage && formImage.startsWith('file://')) {
-  const filename = formImage.split('/').pop() || 'photo.jpg';
-  const match = /\.(\w+)$/.exec(filename);
-  const type = match ? `image/${match[1]}` : 'image/jpeg';
+if (formImage) {
+  // Check if it's a new local image OR if image was changed
+  const isNewImage = formImage.startsWith('file://');
+  const shouldUploadImage = isNewImage || (isEditing && imageChanged);
   
-  formData.append("image", {
-    uri: formImage,
-    name: filename,
-    type: type,
-  } as any);
+  if (shouldUploadImage && isNewImage) {
+    const filename = formImage.split('/').pop() || 'photo.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : 'image/jpeg';
+    
+    console.log("📤 Uploading new image:", filename);
+    
+    formData.append("image", {
+      uri: formImage,
+      name: filename,
+      type: type,
+    } as any);
+  }
 }
 
   try {
@@ -348,13 +390,13 @@ if (formOriginalPrice.trim() && Number(formOriginalPrice) <= Number(formPrice)) 
     if (response.ok) {
       setModalVisible(false);
       queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
-      Alert.alert("Success", isEditing ? "Product Updated" : "Product Added");
+      showAlert("Success", isEditing ? "Product Updated" : "Product Added");
     } else {
       const result = await response.json();
-      Alert.alert("Error", result.error || "Save failed");
+      showAlert("Error", result.error || "Save failed");
     }
   } catch (err) {
-    Alert.alert("Error", "Server connection failed");
+    showAlert("Error", "Server connection failed");
   }
 };
 
@@ -576,8 +618,17 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
           </ScrollView>
         </ThemedView>
       </Modal>
+      <CustomAlertModal
+      visible={alertVisible}
+      title={alertTitle}
+      message={alertMessage}
+      onClose={() => setAlertVisible(false)}
+    />
     </ThemedView>
-  );
+
+    
+  
+);
 }
 
 function InventoryItemRow({ item, onEdit, onDelete }: { item: InventoryItem; onEdit: (item: InventoryItem) => void; onDelete: (id: string) => void; }) {
@@ -638,5 +689,48 @@ const styles = StyleSheet.create({
   orderHeader: { flexDirection: 'row', justifyContent: 'space-between' },
   orderPrice: { fontWeight: 'bold', fontSize: 16 },
   actionBtn: { flexDirection: 'row', padding: 12, borderRadius: 8, marginTop: 15, justifyContent: 'center', alignItems: 'center' },
-  actionBtnText: { color: 'white', fontWeight: 'bold', marginLeft: 8 }
+  actionBtnText: { color: 'white', fontWeight: 'bold', marginLeft: 8 },
+   alertOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  alertContainer: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    width: '90%',
+    maxWidth: 320,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  alertTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  alertMessage: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  alertButton: {
+    backgroundColor: '#007AFF',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  alertButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
 });

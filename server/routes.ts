@@ -120,9 +120,14 @@ app.use(express.urlencoded({ extended: true }));
 
  app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async (req: Request, res: Response) => {
   try {
-    const { inventoryId, userId, stock, price, name, brand, description, categoryId, originalPrice } = req.body; // ✅ Add originalPrice
+    const { inventoryId, userId, stock, price, name, brand, description, categoryId, originalPrice } = req.body;
 
-    if (!inventoryId || !userId) return res.status(400).json({ error: "Missing required fields" });
+    console.log("📦 Update request:", { inventoryId, userId, hasImage: !!req.file });
+    console.log("📸 Image file:", req.file); // Add this
+
+    if (!inventoryId || !userId) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
 
     // 1. Update Inventory stock
     await storage.updateStoreInventory(inventoryId, parseInt(stock) || 0, true);
