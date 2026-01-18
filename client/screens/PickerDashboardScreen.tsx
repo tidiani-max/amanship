@@ -537,7 +537,7 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
           <ScrollView showsVerticalScrollIndicator={false}>
             <ThemedText style={styles.label}>Category</ThemedText>
             <ThemedText style={styles.label}>
-  Category {!formCategoryId && <ThemedText style={{ color: '#e74c3c' }}>*</ThemedText>}
+   {!formCategoryId && <ThemedText style={{ color: '#e74c3c' }}>*</ThemedText>}
 </ThemedText>
 {!formCategoryId && (
   <ThemedText style={{ color: '#e74c3c', fontSize: 11, marginBottom: 5 }}>
