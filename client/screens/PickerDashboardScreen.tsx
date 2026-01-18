@@ -51,12 +51,12 @@ function OrderCard({
   order, 
   onUpdateStatus,
   storeName,
-  userId // Add this to get user ID
+  userId
 }: { 
   order: any; 
   onUpdateStatus: (id: string, nextStatus: string) => void;
   storeName: string;
-  userId: string; // Add this
+  userId: string;
 }) {
   const { theme } = useTheme();
   
@@ -78,11 +78,11 @@ function OrderCard({
     icon = "truck";
   }
 
-  // Get customer info from order (not from current user)
+  // ✅ Get customer info from order object (coming from backend now)
   const customerInfo = {
-    name: order.userName || "Customer",
-    phone: order.userPhone || undefined,
-    email: order.userEmail || undefined,
+    name: order.customerName || "Customer",
+    phone: order.customerPhone || undefined,
+    email: order.customerEmail || undefined,
   };
 
   return (
@@ -131,8 +131,8 @@ function OrderCard({
           createdAt: order.createdAt || new Date().toISOString(),
           items: order.items || [],
         }}
-        customer={customerInfo}
-        storeName={storeName}
+        customer={customerInfo} // ✅ Pass actual customer info
+        storeName={storeName} // ✅ Pass actual store name
       />
       
       {nextStatus !== "" && (
@@ -231,15 +231,17 @@ const { data: categories = [] } = useQuery<Category[]>({
     await Promise.all([refetchInv(), refetchDash()]);
   };
 
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-    });
-    if (!result.canceled) setFormImage(result.assets[0].uri);
-  };
+const pickImage = async () => {
+  let result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'], // ✅ New syntax (requires expo-image-picker v15+)
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 0.5,
+  });
+  if (!result.canceled) {
+    setFormImage(result.assets[0].uri);
+  }
+};
 
   const openEditModal = (item?: InventoryItem) => {
     if (item) {
@@ -329,23 +331,36 @@ const handleSaveProduct = async () => {
 };
 
   const handleDeleteProduct = async (id: string) => {
-    Alert.alert("Delete Item", "Remove this from your store inventory?", [
-      { text: "Cancel", style: "cancel" },
-      { 
-        text: "Delete", 
-        style: "destructive", 
-        onPress: async () => {
-          try {
-            const res = await fetch(`${BASE_URL}/api/picker/inventory/${id}?userId=${user?.id}`, { method: 'DELETE' });
-            if (res.ok) {
-              queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
-              Alert.alert("Deleted", "Item removed.");
-            }
-          } catch (err) { Alert.alert("Error", "Action failed."); }
+  Alert.alert("Delete Item", "Remove this from your store inventory?", [
+    { text: "Cancel", style: "cancel" },
+    { 
+      text: "Delete", 
+      style: "destructive", 
+      onPress: async () => {
+        try {
+          console.log(`🗑️ Deleting inventory item: ${id}`); // ✅ Add logging
+          const res = await fetch(`${BASE_URL}/api/picker/inventory/${id}?userId=${user?.id}`, { 
+            method: 'DELETE' 
+          });
+          
+          if (res.ok) {
+            // ✅ Invalidate BOTH queries
+            await queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
+            await queryClient.refetchQueries({ queryKey: ["/api/picker/inventory", user?.id] });
+            Alert.alert("Success", "Item removed from inventory");
+          } else {
+            const error = await res.json();
+            console.error("Delete failed:", error);
+            Alert.alert("Error", error.error || "Delete failed");
+          }
+        } catch (err) { 
+          console.error("Delete error:", err);
+          Alert.alert("Error", "Network error. Please try again."); 
         }
       }
-    ]);
-  };
+    }
+  ]);
+};
 
 const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
   if (!user?.id) return;
@@ -441,14 +456,14 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
       <ActivityIndicator size="large" color={theme.primary} />
     ) : ordersToDisplay.length > 0 ? (
       ordersToDisplay.map((order: any) => (
-        <OrderCard 
-          key={order.id} 
-          order={order} 
-          onUpdateStatus={handleUpdateOrderStatus}
-          storeName={dashboard?.store?.name || "Store"}
-          userId={user?.id || ""} // Add this
-        />
-      ))
+      <OrderCard 
+        key={order.id} 
+        order={order} 
+        onUpdateStatus={handleUpdateOrderStatus}
+        storeName={dashboard?.store?.name || "Store"} // ✅ Use store.name
+        userId={user?.id || ""}
+      />
+    ))
     ) : (
       <View style={styles.centeredContent}>
         <Feather name="package" size={50} color="#ccc" />

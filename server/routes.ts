@@ -318,7 +318,7 @@ console.log("📦 Registering picker routes...");
 
 
 
-app.get("/api/picker/dashboard", async (req, res) => {
+  app.get("/api/picker/dashboard", async (req, res) => {
   try {
     const { userId } = req.query;
     if (!userId) return res.status(400).json({ error: "userId required" });
@@ -336,6 +336,9 @@ app.get("/api/picker/dashboard", async (req, res) => {
     }
 
     const storeId = staff.storeId;
+    
+    // ✅ Get store name
+    const [storeInfo] = await db.select().from(stores).where(eq(stores.id, storeId));
 
     const pending = await db
       .select()
@@ -364,9 +367,11 @@ app.get("/api/picker/dashboard", async (req, res) => {
         )
       );
 
+    // ✅ Attach items AND customer info
     const attachItems = async (ordersList: any[]) => {
       return Promise.all(
         ordersList.map(async (order) => {
+          // Get order items
           const items = await db
             .select({
               productId: products.id,
@@ -386,14 +391,35 @@ app.get("/api/picker/dashboard", async (req, res) => {
             )
             .where(eq(orderItems.orderId, order.id));
 
-          return { ...order, items };
+          // ✅ Get customer info
+          const [customer] = await db
+            .select({
+              name: users.name,
+              username: users.username,
+              phone: users.phone,
+              email: users.email,
+            })
+            .from(users)
+            .where(eq(users.id, order.userId));
+
+          return { 
+            ...order, 
+            items,
+            // ✅ Add customer info to order
+            customerName: customer?.name || customer?.username || "Customer",
+            customerPhone: customer?.phone,
+            customerEmail: customer?.email,
+          };
         })
       );
     };
 
     res.json({
       user: { id: userId, role: "picker" },
-      store: staff.storeId,
+      store: {
+        id: staff.storeId,
+        name: storeInfo?.name || "Store", // ✅ Include store name
+      },
       orders: {
         pending: await attachItems(pending),
         active: await attachItems(active),
@@ -405,49 +431,6 @@ app.get("/api/picker/dashboard", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch dashboard" });
   }
 });
-
-
-  app.get("/api/picker/inventory", async (req, res) => {
-    try {
-      console.log("🔍 Picker inventory - userId:", req.query.userId);
-      const { userId } = req.query;
-      if (!userId) return res.status(400).json({ error: "userId required" });
-      
-      const user = await storage.getUser(userId as string);
-      if (!user || user.role !== "picker") return res.status(403).json({ error: "Pickers only" });
-      
-      const staffRecord = await storage.getStoreStaffByUserId(userId as string);
-      if (!staffRecord) return res.status(404).json({ error: "Not assigned to store" });
-      
-      const inventory = await storage.getStoreInventoryWithProducts(staffRecord.storeId);
-      console.log(`📦 ${inventory.length} items`);
-      res.json(inventory);
-    } catch (error) {
-      console.error("❌ Picker inventory error:", error);
-      res.status(500).json({ error: "Failed to fetch inventory" });
-    }
-  });
-
-  app.put("/api/picker/inventory/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { userId, stockCount, isAvailable } = req.body;
-      console.log(`🔄 Update inventory ${id} - user: ${userId}, stock: ${stockCount}`);
-      
-      if (!userId) return res.status(400).json({ error: "userId required" });
-      const user = await storage.getUser(userId);
-      if (!user || user.role !== "picker") return res.status(403).json({ error: "Pickers only" });
-      
-      const updated = await storage.updateStoreInventory(id, stockCount ?? 0, isAvailable ?? true);
-      if (!updated) return res.status(404).json({ error: "Item not found" });
-      
-      console.log("✅ Updated");
-      res.json(updated);
-    } catch (error) {
-      console.error("❌ Update error:", error);
-      res.status(500).json({ error: "Update failed" });
-    }
-  });
 
  app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, res) => {
   try {
