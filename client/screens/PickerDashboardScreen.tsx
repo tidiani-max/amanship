@@ -279,157 +279,231 @@ const showAlert = (title: string, message: string) => {
   };
 
 const pickImage = async () => {
+  console.log("📷 Opening image picker...");
+  
   let result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     allowsEditing: true,
     aspect: [1, 1],
-    quality: 0.7, // Increased from 0.5
+    quality: 0.7,
   });
   
   if (!result.canceled && result.assets[0]) {
-    console.log("✅ Image picked:", result.assets[0].uri);
+    console.log("✅ Image selected:", {
+      uri: result.assets[0].uri,
+      width: result.assets[0].width,
+      height: result.assets[0].height,
+      fileSize: result.assets[0].fileSize
+    });
+    
     setFormImage(result.assets[0].uri);
-    setImageChanged(true); // Mark that image was changed
+    setImageChanged(true);
+  } else {
+    console.log("❌ Image picker cancelled");
   }
 };
 
 const openEditModal = (item?: InventoryItem) => {
   if (item) {
-    // ... existing code ...
+    setIsEditing(true);
+    setSelectedInventoryId(item.id);
+    setFormName(item.product.name);
+    setFormBrand(item.product.brand || "");
+    setFormDescription(item.product.description || "");
+    setFormOriginalPrice(item.product.originalPrice?.toString() || "");
+    setFormPrice(item.product.price.toString());
+    setFormStock(item.stockCount.toString());
+    setFormLocation(item.location ?? "");
+    setFormCategoryId(item.categoryId || (item as any).product?.categoryId || null);
     setFormImage(item.product.image ?? null);
-    setImageChanged(false); // Reset when opening edit modal
+    setImageChanged(false); // ✅ Image hasn't changed yet
+    
+    console.log("📝 Editing item:", item.id, "Image:", item.product.image);
   } else {
-    // ... existing code ...
+    setIsEditing(false);
+    setSelectedInventoryId(null);
+    setFormName("");
+    setFormBrand("");
+    setFormDescription("");
+    setFormOriginalPrice("");
+    setFormPrice("");
+    setFormStock("");
+    setFormLocation("");
+    setFormCategoryId(null);
     setFormImage(null);
-    setImageChanged(false); // Reset when creating new
+    setImageChanged(false);
+    
+    console.log("➕ Creating new item");
   }
   setModalVisible(true);
 };
 
 const handleSaveProduct = async () => {
+  console.log("💾 Save product called", { isEditing, selectedInventoryId, imageChanged, formImage });
+  
   if (!user || !user.id) {
     showAlert("Error", "You must be logged in to save products.");
     return;
   }
 
+  // Validation (keep your existing validation code)
   if (!formCategoryId) {
-  showAlert("Category Required", "Please select a category for this product.");
-  return;
-}
+    showAlert("Category Required", "Please select a category for this product.");
+    return;
+  }
 
-if (!formName.trim()) {
-  showAlert("Name Required", "Please enter a product name.");
-  return;
-}
+  if (!formName.trim()) {
+    showAlert("Name Required", "Please enter a product name.");
+    return;
+  }
 
-if (!formPrice.trim() || isNaN(Number(formPrice)) || Number(formPrice) <= 0) {
-  showAlert("Invalid Price", "Please enter a valid price greater than 0.");
-  return;
-}
+  if (!formPrice.trim() || isNaN(Number(formPrice)) || Number(formPrice) <= 0) {
+    showAlert("Invalid Price", "Please enter a valid price greater than 0.");
+    return;
+  }
 
-if (!formStock.trim() || isNaN(Number(formStock)) || Number(formStock) < 0) {
-  showAlert("Invalid Stock", "Please enter a valid stock quantity (0 or more).");
-  return;
-}
+  if (!formStock.trim() || isNaN(Number(formStock)) || Number(formStock) < 0) {
+    showAlert("Invalid Stock", "Please enter a valid stock quantity (0 or more).");
+    return;
+  }
 
-if (formOriginalPrice.trim() && (isNaN(Number(formOriginalPrice)) || Number(formOriginalPrice) <= 0)) {
-  showAlert("Invalid Original Price", "Original price must be a valid number greater than 0.");
-  return;
-}
+  if (formOriginalPrice.trim() && (isNaN(Number(formOriginalPrice)) || Number(formOriginalPrice) <= 0)) {
+    showAlert("Invalid Original Price", "Original price must be a valid number greater than 0.");
+    return;
+  }
 
-if (formOriginalPrice.trim() && Number(formOriginalPrice) <= Number(formPrice)) {
-  showAlert("Price Error", "Original price should be higher than the current price.");
-  return;
-}
+  if (formOriginalPrice.trim() && Number(formOriginalPrice) <= Number(formPrice)) {
+    showAlert("Price Error", "Original price should be higher than the current price.");
+    return;
+  }
+
+  console.log("✅ Validation passed, building FormData");
 
   const formData = new FormData();
   formData.append("userId", user.id); 
-  formData.append("name", formName);
-  formData.append("brand", formBrand || "Generic");
-  formData.append("description", formDescription || "");
-  formData.append("price", formPrice);
-  formData.append("originalPrice", formOriginalPrice || ""); // ✅ Add this
-  formData.append("stock", formStock);
-  formData.append("location", formLocation || "");
-  formData.append("categoryId", formCategoryId ?? "");
+  formData.append("name", formName.trim());
+  formData.append("brand", formBrand.trim() || "Generic");
+  formData.append("description", formDescription.trim() || "");
+  formData.append("price", formPrice.trim());
+  formData.append("stock", formStock.trim());
+  formData.append("location", formLocation.trim() || "");
+  formData.append("categoryId", formCategoryId!);
+
+  if (formOriginalPrice.trim()) {
+    formData.append("originalPrice", formOriginalPrice.trim());
+  }
 
   if (isEditing && selectedInventoryId) {
     formData.append("inventoryId", selectedInventoryId);
   }
 
-if (formImage) {
-  // Check if it's a new local image OR if image was changed
-  const isNewImage = formImage.startsWith('file://');
-  const shouldUploadImage = isNewImage || (isEditing && imageChanged);
-  
-  if (shouldUploadImage && isNewImage) {
+  // ✅ FIXED IMAGE LOGIC
+  if (formImage && formImage.startsWith('file://')) {
+    // This is a new local image - always upload it
     const filename = formImage.split('/').pop() || 'photo.jpg';
     const match = /\.(\w+)$/.exec(filename);
     const type = match ? `image/${match[1]}` : 'image/jpeg';
     
-    console.log("📤 Uploading new image:", filename);
+    console.log("📤 Uploading image:", { filename, type, uri: formImage.substring(0, 50) });
     
     formData.append("image", {
       uri: formImage,
       name: filename,
       type: type,
     } as any);
+  } else if (!formImage && !isEditing) {
+    console.log("⚠️ No image selected for new product");
+  } else if (formImage && !formImage.startsWith('file://')) {
+    console.log("ℹ️ Using existing image URL:", formImage);
   }
-}
 
   try {
     const url = isEditing 
       ? `${BASE_URL}/api/picker/inventory/update` 
       : `${BASE_URL}/api/picker/inventory`;
 
+    console.log(`📡 Sending ${isEditing ? 'UPDATE' : 'CREATE'} request to:`, url);
+
     const response = await fetch(url, {
       method: "POST",
       body: formData,
+      // Don't set Content-Type - let the browser set it with boundary
     });
+
+    const result = await response.json();
+    console.log("📥 Response:", { ok: response.ok, status: response.status, result });
 
     if (response.ok) {
       setModalVisible(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
-      showAlert("Success", isEditing ? "Product Updated" : "Product Added");
+      await queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/picker/inventory", user?.id] });
+      showAlert("Success", isEditing ? "Product Updated!" : "Product Added!");
+      
+      // Reset form
+      setFormName("");
+      setFormBrand("");
+      setFormDescription("");
+      setFormPrice("");
+      setFormOriginalPrice("");
+      setFormStock("");
+      setFormLocation("");
+      setFormCategoryId(null);
+      setFormImage(null);
+      setImageChanged(false);
     } else {
-      const result = await response.json();
       showAlert("Error", result.error || "Save failed");
     }
   } catch (err) {
+    console.error("❌ Network error:", err);
     showAlert("Error", "Server connection failed");
   }
 };
 
-  const handleDeleteProduct = async (id: string) => {
-  Alert.alert("Delete Item", "Remove this from your store inventory?", [
-    { text: "Cancel", style: "cancel" },
-    { 
-      text: "Delete", 
-      style: "destructive", 
-      onPress: async () => {
-        try {
-          console.log(`🗑️ Deleting inventory item: ${id}`); // ✅ Add logging
-          const res = await fetch(`${BASE_URL}/api/picker/inventory/${id}?userId=${user?.id}`, { 
-            method: 'DELETE' 
-          });
-          
-          if (res.ok) {
-            // ✅ Invalidate BOTH queries
-            await queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
-            await queryClient.refetchQueries({ queryKey: ["/api/picker/inventory", user?.id] });
-            Alert.alert("Success", "Item removed from inventory");
-          } else {
-            const error = await res.json();
-            console.error("Delete failed:", error);
-            Alert.alert("Error", error.error || "Delete failed");
+const handleDeleteProduct = async (id: string) => {
+  console.log("🗑️ Delete initiated for inventory ID:", id);
+  
+  Alert.alert(
+    "Delete Item", 
+    "Remove this from your store inventory?", 
+    [
+      { text: "Cancel", style: "cancel", onPress: () => console.log("Delete cancelled") },
+      { 
+        text: "Delete", 
+        style: "destructive", 
+        onPress: async () => {
+          try {
+            const url = `${BASE_URL}/api/picker/inventory/${id}?userId=${user?.id}`;
+            console.log("📡 DELETE request to:", url);
+            
+            const res = await fetch(url, { 
+              method: 'DELETE' 
+            });
+            
+            const responseText = await res.text();
+            console.log("📥 DELETE response:", {
+              ok: res.ok,
+              status: res.status,
+              body: responseText
+            });
+            
+            if (res.ok) {
+              await queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
+              await queryClient.refetchQueries({ queryKey: ["/api/picker/inventory", user?.id] });
+              console.log("✅ Item deleted successfully");
+              Alert.alert("Success", "Item removed from inventory");
+            } else {
+              const error = responseText ? JSON.parse(responseText) : { error: "Unknown error" };
+              console.error("❌ Delete failed:", error);
+              Alert.alert("Error", error.error || "Delete failed");
+            }
+          } catch (err) { 
+            console.error("❌ Delete error:", err);
+            Alert.alert("Error", "Network error. Please try again."); 
           }
-        } catch (err) { 
-          console.error("Delete error:", err);
-          Alert.alert("Error", "Network error. Please try again."); 
         }
       }
-    }
-  ]);
+    ]
+  );
 };
 
 const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
@@ -643,7 +717,10 @@ function InventoryItemRow({ item, onEdit, onDelete }: { item: InventoryItem; onE
          </ThemedText>
          <ThemedText type="caption">Stock: {item.stockCount} | Rp {item.product.price}</ThemedText>
        </View>
-       <TouchableOpacity style={styles.iconBtn} onPress={() => onDelete(item.id)}>
+       <TouchableOpacity style={styles.iconBtn} onPress={() => {
+  console.log("🗑️ Delete button pressed for:", item.id);
+  onDelete(item.id);
+}}>
          <Feather name="trash-2" size={18} color="#e74c3c" />
        </TouchableOpacity>
        <TouchableOpacity style={[styles.editBtnSmall, { backgroundColor: theme.primary + "15" }]} onPress={() => onEdit(item)}>
