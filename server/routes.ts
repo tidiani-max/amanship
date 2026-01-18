@@ -118,9 +118,9 @@ app.use(express.urlencoded({ extended: true }));
   // Replace those long ../../../ paths with this:
 
 
-   app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async (req: Request, res: Response) => {
+ app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async (req: Request, res: Response) => {
   try {
-    const { inventoryId, userId, stock, price, name, brand, description, categoryId } = req.body;
+    const { inventoryId, userId, stock, price, name, brand, description, categoryId, originalPrice } = req.body; // ✅ Add originalPrice
 
     if (!inventoryId || !userId) return res.status(400).json({ error: "Missing required fields" });
 
@@ -135,15 +135,20 @@ app.use(express.urlencoded({ extended: true }));
         name,
         brand,
         description,
-        price: parseFloat(price),
+        price: parseInt(price), // ✅ Changed from parseFloat to parseInt to match schema
         categoryId
       };
 
+      // ✅ Add originalPrice if provided
+      if (originalPrice && originalPrice.trim() !== "") {
+        updateData.originalPrice = parseInt(originalPrice);
+      }
+
+      // ✅ Add image if uploaded
       if (req.file) {
         updateData.image = `/uploads/${req.file.filename}`;
       }
 
-      // This call will now work because we added it to storage.ts
       await storage.updateProduct(invRecords[0].productId, updateData);
     }
 
@@ -784,7 +789,7 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "lat & lng required" });
     }
 
-    // Query DB
+    // Query DB - ✅ REMOVED stock_count > 0 filter
     const result = await db.execute(sql<HomeProductRow>`
       SELECT
         p.id,
@@ -812,8 +817,7 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
       JOIN store_inventory si ON si.store_id = s.id
       JOIN products p ON p.id = si.product_id
       WHERE
-        si.stock_count > 0
-        AND (
+        (
           6371 * acos(
             cos(radians(${lat}))
             * cos(radians(s.latitude))
@@ -826,74 +830,10 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
     `);
 
     console.log("✅ home products found:", result.rows.length);
-
-    // Debug all product images
-    
-
     res.json(result.rows);
   } catch (error) {
     console.error("❌ /api/home/products error", error);
     res.status(500).json({ error: "Failed to fetch home products" });
-  }
-});
-
-app.get("/api/category/products", async (req, res) => {
-  try {
-    const lat = Number(req.query.lat);
-    const lng = Number(req.query.lng);
-    const categoryId = String(req.query.categoryId);
-
-    console.log("🟢 HIT /api/category/products", { lat, lng, categoryId });
-
-    if (Number.isNaN(lat) || Number.isNaN(lng) || !categoryId) {
-      return res.status(400).json({ error: "lat, lng, categoryId required" });
-    }
-
-    const result = await db.execute(sql`
-      SELECT
-        p.id,
-        p.name,
-        p.brand,
-        p.price,
-        p.original_price AS "originalPrice",
-        p.image,
-        p.category_id AS "categoryId",
-        p.description,
-        p.nutrition,
-        si.stock_count AS "stockCount",
-        TRUE AS "isAvailable",
-        (
-          6371 * acos(
-            cos(radians(${lat}))
-            * cos(radians(s.latitude))
-            * cos(radians(s.longitude) - radians(${lng}))
-            + sin(radians(${lat}))
-            * sin(radians(s.latitude))
-          )
-        ) AS distance
-      FROM stores s
-      JOIN store_inventory si ON si.store_id = s.id
-      JOIN products p ON p.id = si.product_id
-      WHERE
-        p.category_id = ${categoryId}
-        AND si.stock_count > 0
-        AND (
-          6371 * acos(
-            cos(radians(${lat}))
-            * cos(radians(s.latitude))
-            * cos(radians(s.longitude) - radians(${lng}))
-            + sin(radians(${lat}))
-            * sin(radians(s.latitude))
-          )
-        ) <= 3
-      ORDER BY distance ASC;
-    `);
-
-    console.log("✅ category products found:", result.rows.length);
-    res.json(result.rows);
-  } catch (error) {
-    console.error("❌ /api/category/products error", error);
-    res.status(500).json({ error: "Failed to fetch category products" });
   }
 });
 

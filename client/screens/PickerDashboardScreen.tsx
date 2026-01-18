@@ -15,6 +15,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { getImageUrl } from "@/lib/image-url"; 
 import { Spacing } from "@/constants/theme";
+import { OrderReceipt } from "@/components/OrderReceipt";
 
 // --- CONFIGURATION ---
 const BASE_URL = process.env.EXPO_PUBLIC_DOMAIN!;
@@ -46,7 +47,17 @@ interface InventoryItem {
 /**
  * Clean Order Card Component (Picker Only)
  */
-function OrderCard({ order, onUpdateStatus }: { order: any; onUpdateStatus: (id: string, nextStatus: string) => void }) {
+function OrderCard({ 
+  order, 
+  onUpdateStatus,
+  storeName,
+  userId // Add this to get user ID
+}: { 
+  order: any; 
+  onUpdateStatus: (id: string, nextStatus: string) => void;
+  storeName: string;
+  userId: string; // Add this
+}) {
   const { theme } = useTheme();
   
   const orderId = order?.id ? order.id.slice(0, 8) : "N/A";
@@ -67,14 +78,20 @@ function OrderCard({ order, onUpdateStatus }: { order: any; onUpdateStatus: (id:
     icon = "truck";
   }
 
+  // Get customer info from order (not from current user)
+  const customerInfo = {
+    name: order.userName || "Customer",
+    phone: order.userPhone || undefined,
+    email: order.userEmail || undefined,
+  };
+
   return (
     <Card style={styles.orderCard}>
       <View style={styles.orderHeader}>
         <View>
           <ThemedText type="h3">
-  Order #{order.id.slice(0, 8).toUpperCase()}
-</ThemedText>
-
+            Order #{order.id.slice(0, 8).toUpperCase()}
+          </ThemedText>
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>
             Status: <ThemedText type="caption" style={{ color: theme.primary, fontWeight: 'bold' }}>{status.toUpperCase()}</ThemedText>
           </ThemedText>
@@ -83,27 +100,40 @@ function OrderCard({ order, onUpdateStatus }: { order: any; onUpdateStatus: (id:
       </View>
 
       {Array.isArray(order.items) && order.items.length > 0 && (
-  <View style={{ marginTop: 10 }}>
-    {order.items.map((item: any, idx: number) => (
-      <View
-        key={idx}
-        style={{ flexDirection: "row", marginBottom: 8, alignItems: "center" }}
-      >
-        <Image
-          source={{ uri: getImageUrl(item.image) }}
-          style={{ width: 40, height: 40, borderRadius: 6, marginRight: 10 }}
-        />
-        <View style={{ flex: 1 }}>
-          <ThemedText type="body">{item.name}</ThemedText>
-          <ThemedText type="caption">
-            Qty: {item.quantity} · 📍 {item.location || "N/A"}
-          </ThemedText>
+        <View style={{ marginTop: 10 }}>
+          {order.items.map((item: any, idx: number) => (
+            <View
+              key={idx}
+              style={{ flexDirection: "row", marginBottom: 8, alignItems: "center" }}
+            >
+              <Image
+                source={{ uri: getImageUrl(item.image) }}
+                style={{ width: 40, height: 40, borderRadius: 6, marginRight: 10 }}
+              />
+              <View style={{ flex: 1 }}>
+                <ThemedText type="body">{item.name}</ThemedText>
+                <ThemedText type="caption">
+                  Qty: {item.quantity} · 📍 {item.location || "N/A"}
+                </ThemedText>
+              </View>
+            </View>
+          ))}
         </View>
-      </View>
-    ))}
-  </View>
-)}
+      )}
 
+      {/* Print Receipt Button */}
+      <OrderReceipt
+        order={{
+          id: order.id,
+          orderNumber: order.orderNumber || `ORD-${order.id.slice(0, 8)}`,
+          total: order.total || 0,
+          deliveryFee: order.deliveryFee || 10000,
+          createdAt: order.createdAt || new Date().toISOString(),
+          items: order.items || [],
+        }}
+        customer={customerInfo}
+        storeName={storeName}
+      />
       
       {nextStatus !== "" && (
         <TouchableOpacity 
@@ -240,32 +270,26 @@ const { data: categories = [] } = useQuery<Category[]>({
     setModalVisible(true);
   };
 
-  const handleSaveProduct = async () => {
-  // 1. Check if user is null immediately
+const handleSaveProduct = async () => {
   if (!user || !user.id) {
     Alert.alert("Error", "You must be logged in to save products.");
     return;
   }
 
-  // 2. Local validation for required fields
   if (!formName.trim() || !formPrice.trim() || !formStock.trim() || !formCategoryId) {
     Alert.alert("Missing Fields", "Please fill in all required fields (*) and select a category.");
     return;
   }
 
   const formData = new FormData();
-
-  // We use ?? "" (nullish coalescing) to guarantee a string is passed
   formData.append("userId", user.id); 
   formData.append("name", formName);
   formData.append("brand", formBrand || "Generic");
   formData.append("description", formDescription || "");
   formData.append("price", formPrice);
-  formData.append("originalPrice", formOriginalPrice || "");
+  formData.append("originalPrice", formOriginalPrice || ""); // ✅ Add this
   formData.append("stock", formStock);
   formData.append("location", formLocation || "");
-  
-  // Fixes the 'null is not assignable to string | Blob' error
   formData.append("categoryId", formCategoryId ?? "");
 
   if (isEditing && selectedInventoryId) {
@@ -273,7 +297,7 @@ const { data: categories = [] } = useQuery<Category[]>({
   }
 
   if (formImage && formImage.startsWith('file://')) {
-    // @ts-ignore - React Native FormData requires an object for files
+    // @ts-ignore
     formData.append("image", { 
       uri: formImage, 
       name: "photo.jpg", 
@@ -413,18 +437,24 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
           </>
         ) : (
           <View>
-            {dashLoading ? (
-              <ActivityIndicator size="large" color={theme.primary} />
-            ) : ordersToDisplay.length > 0 ? (
-              ordersToDisplay.map((order: any) => (
-                <OrderCard key={order.id} order={order} onUpdateStatus={handleUpdateOrderStatus} />
-              ))
-            ) : (
-              <View style={styles.centeredContent}>
-                <Feather name="package" size={50} color="#ccc" />
-                <ThemedText style={{ marginTop: 10, color: theme.textSecondary }}>No active orders</ThemedText>
-              </View>
-            )}
+           {dashLoading ? (
+      <ActivityIndicator size="large" color={theme.primary} />
+    ) : ordersToDisplay.length > 0 ? (
+      ordersToDisplay.map((order: any) => (
+        <OrderCard 
+          key={order.id} 
+          order={order} 
+          onUpdateStatus={handleUpdateOrderStatus}
+          storeName={dashboard?.store?.name || "Store"}
+          userId={user?.id || ""} // Add this
+        />
+      ))
+    ) : (
+      <View style={styles.centeredContent}>
+        <Feather name="package" size={50} color="#ccc" />
+        <ThemedText style={{ marginTop: 10, color: theme.textSecondary }}>No active orders</ThemedText>
+      </View>
+    )}
           </View>
         )}
       </ScrollView>
