@@ -278,10 +278,35 @@ const handleSaveProduct = async () => {
     return;
   }
 
-  if (!formName.trim() || !formPrice.trim() || !formStock.trim() || !formCategoryId) {
-    Alert.alert("Missing Fields", "Please fill in all required fields (*) and select a category.");
-    return;
-  }
+  if (!formCategoryId) {
+  Alert.alert("Category Required", "Please select a category for this product.");
+  return;
+}
+
+if (!formName.trim()) {
+  Alert.alert("Name Required", "Please enter a product name.");
+  return;
+}
+
+if (!formPrice.trim() || isNaN(Number(formPrice)) || Number(formPrice) <= 0) {
+  Alert.alert("Invalid Price", "Please enter a valid price greater than 0.");
+  return;
+}
+
+if (!formStock.trim() || isNaN(Number(formStock)) || Number(formStock) < 0) {
+  Alert.alert("Invalid Stock", "Please enter a valid stock quantity (0 or more).");
+  return;
+}
+
+if (formOriginalPrice.trim() && (isNaN(Number(formOriginalPrice)) || Number(formOriginalPrice) <= 0)) {
+  Alert.alert("Invalid Original Price", "Original price must be a valid number greater than 0.");
+  return;
+}
+
+if (formOriginalPrice.trim() && Number(formOriginalPrice) <= Number(formPrice)) {
+  Alert.alert("Price Error", "Original price should be higher than the current price.");
+  return;
+}
 
   const formData = new FormData();
   formData.append("userId", user.id); 
@@ -299,13 +324,16 @@ const handleSaveProduct = async () => {
   }
 
   if (formImage && formImage.startsWith('file://')) {
-    // @ts-ignore
-    formData.append("image", { 
-      uri: formImage, 
-      name: "photo.jpg", 
-      type: "image/jpeg" 
-    });
-  }
+  const filename = formImage.split('/').pop() || 'photo.jpg';
+  const match = /\.(\w+)$/.exec(filename);
+  const type = match ? `image/${match[1]}` : 'image/jpeg';
+  
+  formData.append("image", {
+    uri: formImage,
+    name: filename,
+    type: type,
+  } as any);
+}
 
   try {
     const url = isEditing 
@@ -330,36 +358,60 @@ const handleSaveProduct = async () => {
   }
 };
 
-  const handleDeleteProduct = async (id: string) => {
-  Alert.alert("Delete Item", "Remove this from your store inventory?", [
-    { text: "Cancel", style: "cancel" },
-    { 
-      text: "Delete", 
-      style: "destructive", 
-      onPress: async () => {
-        try {
-          console.log(`🗑️ Deleting inventory item: ${id}`); // ✅ Add logging
-          const res = await fetch(`${BASE_URL}/api/picker/inventory/${id}?userId=${user?.id}`, { 
-            method: 'DELETE' 
-          });
-          
-          if (res.ok) {
-            // ✅ Invalidate BOTH queries
-            await queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
-            await queryClient.refetchQueries({ queryKey: ["/api/picker/inventory", user?.id] });
-            Alert.alert("Success", "Item removed from inventory");
-          } else {
-            const error = await res.json();
-            console.error("Delete failed:", error);
-            Alert.alert("Error", error.error || "Delete failed");
-          }
-        } catch (err) { 
-          console.error("Delete error:", err);
-          Alert.alert("Error", "Network error. Please try again."); 
+const handleDeleteProduct = async (id: string) => {
+  if (!user?.id) {
+    Alert.alert("Error", "You must be logged in to delete products.");
+    return;
+  }
+
+  Alert.alert(
+    "Delete Item", 
+    "Are you sure you want to remove this item from your store inventory? This action cannot be undone.", 
+    [
+      { text: "Cancel", style: "cancel" },
+      { 
+        text: "Delete", 
+        style: "destructive", 
+        onPress: async () => {
+          try {
+            console.log(`🗑️ Attempting to delete inventory item: ${id}`);
+            
+            const res = await fetch(
+              `${BASE_URL}/api/picker/inventory/${id}?userId=${user.id}`, 
+              { 
+                method: 'DELETE',
+                headers: {
+                  'Content-Type': 'application/json',
+                }
+              }
+            );
+            
+            const data = await res.json();
+            
+            if (res.ok) {
+              console.log("✅ Delete successful");
+              
+              // Force refresh inventory
+              await queryClient.invalidateQueries({ 
+                queryKey: ["/api/picker/inventory", user.id],
+                exact: true 
+              });
+              
+              // Trigger immediate refetch
+              await refetchInv();
+              
+              Alert.alert("Success", "Item removed from inventory");
+            } else {
+              console.error("❌ Delete failed:", data);
+              Alert.alert("Error", data.error || "Failed to delete item");
+            }
+          } catch (err) { 
+            console.error("❌ Delete error:", err);
+            Alert.alert("Error", "Network error. Please check your connection and try again."); }
         }
       }
-    }
-  ]);
+    ]
+  );
 };
 
 const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
@@ -484,6 +536,14 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
           </View>
           <ScrollView showsVerticalScrollIndicator={false}>
             <ThemedText style={styles.label}>Category</ThemedText>
+            <ThemedText style={styles.label}>
+  Category {!formCategoryId && <ThemedText style={{ color: '#e74c3c' }}>*</ThemedText>}
+</ThemedText>
+{!formCategoryId && (
+  <ThemedText style={{ color: '#e74c3c', fontSize: 11, marginBottom: 5 }}>
+    ⚠️ Please select a category
+  </ThemedText>
+)}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryArea}>
               {Array.isArray(categories) && categories.map(cat => (
   <TouchableOpacity 

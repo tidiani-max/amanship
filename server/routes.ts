@@ -143,7 +143,17 @@ app.use(express.urlencoded({ extended: true }));
       if (originalPrice && originalPrice.trim() !== "") {
         updateData.originalPrice = parseInt(originalPrice);
       }
+      console.log("📸 Image upload check:", {
+        hasFile: !!req.file,
+        filename: req.file?.filename,
+        mimetype: req.file?.mimetype,
+        size: req.file?.size
+      });
 
+if (req.file) {
+  updateData.image = `/uploads/${req.file.filename}`;
+  console.log("✅ Image will be updated to:", updateData.image);
+}
       // ✅ Add image if uploaded
       if (req.file) {
         updateData.image = `/uploads/${req.file.filename}`;
@@ -510,24 +520,72 @@ app.get("/api/picker/dashboard", async (req, res) => {
   // Add this to registerRoutes in server/routes.ts
 
 
-  app.delete("/api/picker/inventory/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { userId } = req.query;
-      console.log(`🗑️ Delete inventory ${id} - user: ${userId}`);
-      
-      if (!userId) return res.status(400).json({ error: "userId required" });
-      const user = await storage.getUser(userId as string);
-      if (!user || user.role !== "picker") return res.status(403).json({ error: "Pickers only" });
-      
-      await storage.deleteStoreInventory(id);
-      console.log("✅ Deleted");
-      res.json({ success: true });
-    } catch (error) {
-      console.error("❌ Delete error:", error);
-      res.status(500).json({ error: "Delete failed" });
+app.delete("/api/picker/inventory/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.query;
+    
+    console.log(`🗑️ Delete request - Inventory ID: ${id}, User ID: ${userId}`);
+    
+    if (!userId) {
+      console.log("❌ No userId provided");
+      return res.status(400).json({ error: "userId required" });
     }
-  });
+    
+    // Verify user
+    const user = await storage.getUser(userId as string);
+    if (!user) {
+      console.log("❌ User not found");
+      return res.status(404).json({ error: "User not found" });
+    }
+    
+    if (user.role !== "picker") {
+      console.log(`❌ User role is ${user.role}, not picker`);
+      return res.status(403).json({ error: "Only pickers can delete inventory" });
+    }
+    
+    // Verify inventory item exists and belongs to picker's store
+    const [staffRecord] = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.userId, userId as string))
+      .limit(1);
+    
+    if (!staffRecord) {
+      console.log("❌ Staff record not found");
+      return res.status(403).json({ error: "Not assigned to any store" });
+    }
+    
+    const [inventoryItem] = await db
+      .select()
+      .from(storeInventory)
+      .where(eq(storeInventory.id, id))
+      .limit(1);
+    
+    if (!inventoryItem) {
+      console.log("❌ Inventory item not found");
+      return res.status(404).json({ error: "Inventory item not found" });
+    }
+    
+    if (inventoryItem.storeId !== staffRecord.storeId) {
+      console.log("❌ Item belongs to different store");
+      return res.status(403).json({ error: "This item belongs to a different store" });
+    }
+    
+    // Delete the inventory item
+    await db.delete(storeInventory).where(eq(storeInventory.id, id));
+    
+    console.log(`✅ Successfully deleted inventory item: ${id}`);
+    res.json({ success: true, message: "Item deleted successfully" });
+    
+  } catch (error) {
+    console.error("❌ Delete error:", error);
+    res.status(500).json({ 
+      error: "Delete failed", 
+      details: error instanceof Error ? error.message : "Unknown error" 
+    });
+  }
+});
 
 app.patch("/api/orders/:id/take", async (req, res) => {
   try {
@@ -1350,8 +1408,7 @@ app.get("/api/orders/:id", async (req, res) => {
     const { orderId, senderId, type } = req.body;
     let content = req.body.content;
 
-    // ✅ FIX: Use template literals ${} to insert the actual domain variable
-    // We also handle the slash to ensure the URL is formed correctly
+    
     if (req.file) {
       const baseUrl = `${req.protocol}://${req.get("host")}`;
       content = `${baseUrl}/uploads/chat/${req.file.filename}`;
