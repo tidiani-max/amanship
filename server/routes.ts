@@ -144,11 +144,11 @@ app.use(express.urlencoded({ extended: true }));
         updateData.originalPrice = parseInt(originalPrice);
       }
       console.log("📸 Image upload check:", {
-        hasFile: !!req.file,
-        filename: req.file?.filename,
-        mimetype: req.file?.mimetype,
-        size: req.file?.size
-      });
+      hasFile: !!req.file,
+      filename: req.file?.filename,
+      mimetype: req.file?.mimetype,
+      size: req.file?.size
+    });
 
 if (req.file) {
   updateData.image = `/uploads/${req.file.filename}`;
@@ -485,36 +485,77 @@ app.get("/api/picker/dashboard", async (req, res) => {
     }
   });
 
- app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, res) => {
+app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, res) => {
   try {
-    const { userId, name, brand, description, price, stock, categoryId } = req.body;
+    const { userId, name, brand, description, price, originalPrice, stock, categoryId, location } = req.body;
 
-    // 1. Find the store associated with this picker
+    console.log("📦 Creating new product:", { 
+      userId, name, price, stock, categoryId,
+      hasImage: !!req.file,
+      filename: req.file?.filename 
+    });
+
+    // 1. Validate required fields
+    if (!userId || !name || !price || !stock || !categoryId) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // 2. Find the store associated with this picker
     const [staff] = await db.select().from(storeStaff).where(eq(storeStaff.userId, userId));
-    if (!staff) return res.status(404).json({ error: "Store not found for this user" });
+    if (!staff) {
+      console.log("❌ Staff record not found for user:", userId);
+      return res.status(404).json({ error: "Store not found for this user" });
+    }
 
-    // 2. Create the Product entry first
-    const [newProduct] = await db.insert(products).values({
+    console.log("✅ Staff found, store:", staff.storeId);
+
+    // 3. Create the Product entry first
+    const productData: any = {
       name,
       brand: brand || "Generic",
       description: description || "",
-      price: parseFloat(price),
+      price: parseInt(price), // ✅ FIXED - Use parseInt
       categoryId,
       image: req.file ? `/uploads/${req.file.filename}` : null,
-    }).returning();
+    };
 
-    // 3. Create the Inventory entry to link product to store
-    await db.insert(storeInventory).values({
+    // Add originalPrice if provided
+    if (originalPrice && originalPrice.trim() !== "") {
+      productData.originalPrice = parseInt(originalPrice);
+    }
+
+    console.log("💾 Inserting product:", productData);
+
+    const [newProduct] = await db.insert(products).values(productData).returning();
+
+    console.log("✅ Product created:", newProduct.id);
+
+    // 4. Create the Inventory entry to link product to store
+    const inventoryData = {
       storeId: staff.storeId,
       productId: newProduct.id,
       stockCount: parseInt(stock) || 0,
+      location: location || null, // ✅ Add location support
       isAvailable: true
-    });
+    };
 
-    res.json({ success: true, message: "New product created and added to inventory" });
+    console.log("💾 Inserting inventory:", inventoryData);
+
+    await db.insert(storeInventory).values(inventoryData);
+
+    console.log("✅ Inventory created successfully");
+
+    res.json({ 
+      success: true, 
+      message: "New product created and added to inventory",
+      productId: newProduct.id 
+    });
   } catch (error) {
-    console.error("Creation error:", error);
-    res.status(500).json({ error: "Failed to create product" });
+    console.error("❌ Creation error:", error);
+    res.status(500).json({ 
+      error: "Failed to create product",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
   }
 });
   // Add this to registerRoutes in server/routes.ts

@@ -173,6 +173,7 @@ export default function PickerDashboardScreen() {
   const [formLocation, setFormLocation] = useState("");
   const [formCategoryId, setFormCategoryId] = useState<string | null>(null);
   const [formImage, setFormImage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // --- QUERIES ---
 const { data: categories = [] } = useQuery<Category[]>({
@@ -273,6 +274,7 @@ const pickImage = async () => {
   };
 
 const handleSaveProduct = async () => {
+  setIsSaving(true);
   if (!user || !user.id) {
     Alert.alert("Error", "You must be logged in to save products.");
     return;
@@ -346,15 +348,29 @@ if (formOriginalPrice.trim() && Number(formOriginalPrice) <= Number(formPrice)) 
     });
 
     if (response.ok) {
-      setModalVisible(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
-      Alert.alert("Success", isEditing ? "Product Updated" : "Product Added");
-    } else {
-      const result = await response.json();
-      Alert.alert("Error", result.error || "Save failed");
-    }
-  } catch (err) {
+  const result = await response.json();
+  console.log("✅ Save successful:", result);
+  
+  setModalVisible(false);
+  
+  // ✅ Invalidate and refetch to show new product immediately
+  await queryClient.invalidateQueries({ 
+    queryKey: ["/api/picker/inventory", user.id],
+    exact: true 
+  });
+  await refetchInv(); // Force immediate refresh
+  
+  Alert.alert("Success", isEditing ? "Product Updated" : "Product Added");
+} else {
+  const result = await response.json();
+  console.error("❌ Save failed:", result);
+  Alert.alert("Error", result.error || result.details || "Save failed");
+}
+ } catch (err) {
+    console.error("❌ Save error:", err);
     Alert.alert("Error", "Server connection failed");
+  } finally {
+    setIsSaving(false); // ✅ Always reset loading state
   }
 };
 
@@ -485,10 +501,23 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
               />
             </View>
 
-            <TouchableOpacity style={[styles.addBtn, { backgroundColor: theme.primary }]} onPress={() => openEditModal()}>
-              <Feather name="plus" size={18} color="white" />
-              <ThemedText style={styles.addBtnText}>Add Store Item</ThemedText>
-            </TouchableOpacity>
+             <TouchableOpacity 
+  style={[
+    styles.saveBtn, 
+    { backgroundColor: isSaving ? theme.textSecondary : theme.primary },
+    isSaving && { opacity: 0.7 }
+  ]} 
+  onPress={handleSaveProduct}
+  disabled={isSaving}
+>
+  {isSaving ? (
+    <ActivityIndicator color="white" size="small" />
+  ) : (
+    <ThemedText style={styles.saveBtnText}>
+      {isEditing ? "Update Item" : "Save Item"}
+    </ThemedText>
+  )}
+</TouchableOpacity>
 
             {invLoading ? (
               <ActivityIndicator size="large" color={theme.primary} />
@@ -535,9 +564,8 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
             </TouchableOpacity>
           </View>
           <ScrollView showsVerticalScrollIndicator={false}>
-            <ThemedText style={styles.label}>Category</ThemedText>
             <ThemedText style={styles.label}>
-   {!formCategoryId && <ThemedText style={{ color: '#e74c3c' }}>*</ThemedText>}
+  Category <ThemedText style={{ color: '#e74c3c' }}>*</ThemedText>
 </ThemedText>
 {!formCategoryId && (
   <ThemedText style={{ color: '#e74c3c', fontSize: 11, marginBottom: 5 }}>
@@ -572,7 +600,17 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
             </TouchableOpacity>
 
             <ThemedText style={styles.label}>Product Name *</ThemedText>
-            <TextInput style={[styles.input, { color: theme.text }]} value={formName} onChangeText={setFormName} placeholder="Fresh Milk" />
+<TextInput 
+  style={[
+    styles.input, 
+    { color: theme.text },
+    !formName.trim() && formName !== "" && { borderColor: '#e74c3c', borderWidth: 1 }
+  ]} 
+  value={formName} 
+  onChangeText={setFormName} 
+  placeholder="Fresh Milk" 
+  placeholderTextColor={theme.textSecondary}
+/>
 
             <ThemedText style={styles.label}>Brand</ThemedText>
             <TextInput style={[styles.input, { color: theme.text }]} value={formBrand} onChangeText={setFormBrand} placeholder="Brand name" />
@@ -583,7 +621,23 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Price (Rp) *</ThemedText>
-                <TextInput style={[styles.input, { color: theme.text }]} value={formPrice} onChangeText={setFormPrice} keyboardType="numeric" placeholder="0" />
+<TextInput 
+  style={[
+    styles.input, 
+    { color: theme.text },
+    formPrice && (isNaN(Number(formPrice)) || Number(formPrice) <= 0) && { borderColor: '#e74c3c', borderWidth: 1 }
+  ]} 
+  value={formPrice} 
+  onChangeText={setFormPrice} 
+  keyboardType="numeric" 
+  placeholder="0" 
+  placeholderTextColor={theme.textSecondary}
+/>
+{formPrice && (isNaN(Number(formPrice)) || Number(formPrice) <= 0) && (
+  <ThemedText style={{ color: '#e74c3c', fontSize: 11, marginTop: -4 }}>
+    Invalid price
+  </ThemedText>
+)}
               </View>
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <ThemedText style={styles.label}>Old Price</ThemedText>
@@ -594,7 +648,23 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Stock *</ThemedText>
-                <TextInput style={[styles.input, { color: theme.text }]} value={formStock} onChangeText={setFormStock} keyboardType="numeric" placeholder="0" />
+<TextInput 
+  style={[
+    styles.input, 
+    { color: theme.text },
+    formStock && (isNaN(Number(formStock)) || Number(formStock) < 0) && { borderColor: '#e74c3c', borderWidth: 1 }
+  ]} 
+  value={formStock} 
+  onChangeText={setFormStock} 
+  keyboardType="numeric" 
+  placeholder="0" 
+  placeholderTextColor={theme.textSecondary}
+/>
+{formStock && (isNaN(Number(formStock)) || Number(formStock) < 0) && (
+  <ThemedText style={{ color: '#e74c3c', fontSize: 11, marginTop: -4 }}>
+    Invalid stock quantity
+  </ThemedText>
+)}
               </View>
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <ThemedText style={styles.label}>Location</ThemedText>
