@@ -318,7 +318,7 @@ console.log("📦 Registering picker routes...");
 
 
 
-  app.get("/api/picker/dashboard", async (req, res) => {
+app.get("/api/picker/dashboard", async (req, res) => {
   try {
     const { userId } = req.query;
     if (!userId) return res.status(400).json({ error: "userId required" });
@@ -431,6 +431,49 @@ console.log("📦 Registering picker routes...");
     res.status(500).json({ error: "Failed to fetch dashboard" });
   }
 });
+
+
+  app.get("/api/picker/inventory", async (req, res) => {
+    try {
+      console.log("🔍 Picker inventory - userId:", req.query.userId);
+      const { userId } = req.query;
+      if (!userId) return res.status(400).json({ error: "userId required" });
+      
+      const user = await storage.getUser(userId as string);
+      if (!user || user.role !== "picker") return res.status(403).json({ error: "Pickers only" });
+      
+      const staffRecord = await storage.getStoreStaffByUserId(userId as string);
+      if (!staffRecord) return res.status(404).json({ error: "Not assigned to store" });
+      
+      const inventory = await storage.getStoreInventoryWithProducts(staffRecord.storeId);
+      console.log(`📦 ${inventory.length} items`);
+      res.json(inventory);
+    } catch (error) {
+      console.error("❌ Picker inventory error:", error);
+      res.status(500).json({ error: "Failed to fetch inventory" });
+    }
+  });
+
+  app.put("/api/picker/inventory/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { userId, stockCount, isAvailable } = req.body;
+      console.log(`🔄 Update inventory ${id} - user: ${userId}, stock: ${stockCount}`);
+      
+      if (!userId) return res.status(400).json({ error: "userId required" });
+      const user = await storage.getUser(userId);
+      if (!user || user.role !== "picker") return res.status(403).json({ error: "Pickers only" });
+      
+      const updated = await storage.updateStoreInventory(id, stockCount ?? 0, isAvailable ?? true);
+      if (!updated) return res.status(404).json({ error: "Item not found" });
+      
+      console.log("✅ Updated");
+      res.json(updated);
+    } catch (error) {
+      console.error("❌ Update error:", error);
+      res.status(500).json({ error: "Update failed" });
+    }
+  });
 
  app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, res) => {
   try {
@@ -551,12 +594,6 @@ return res.status(200).json(taken);
   // ==================== 5. DRIVER ROUTES ====================
 console.log("🚗 Registering driver routes...");
 
-/**
- * DRIVER DASHBOARD
- * - Driver can ALWAYS see packed (ready) orders
- * - Driver can only PICK ONE order at a time
- * - Store isolation is enforced everywhere
- */
 app.get("/api/driver/dashboard", async (req, res) => {
   try {
     const { userId } = req.query;
@@ -628,12 +665,7 @@ app.get("/api/driver/dashboard", async (req, res) => {
   }
 });
 
-/**
- * DRIVER ORDER STATUS UPDATE
- * - HARD store lock
- * - HARD driver lock
- * - SAFE concurrency
- */
+
 app.put("/api/driver/orders/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
@@ -817,6 +849,66 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("❌ /api/home/products error", error);
     res.status(500).json({ error: "Failed to fetch home products" });
+  }
+});
+
+app.get("/api/category/products", async (req, res) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    const categoryId = String(req.query.categoryId);
+
+    console.log("🟢 HIT /api/category/products", { lat, lng, categoryId });
+
+    if (Number.isNaN(lat) || Number.isNaN(lng) || !categoryId) {
+      return res.status(400).json({ error: "lat, lng, categoryId required" });
+    }
+
+    const result = await db.execute(sql`
+      SELECT
+        p.id,
+        p.name,
+        p.brand,
+        p.price,
+        p.original_price AS "originalPrice",
+        p.image,
+        p.category_id AS "categoryId",
+        p.description,
+        p.nutrition,
+        si.stock_count AS "stockCount",
+        TRUE AS "isAvailable",
+        (
+          6371 * acos(
+            cos(radians(${lat}))
+            * cos(radians(s.latitude))
+            * cos(radians(s.longitude) - radians(${lng}))
+            + sin(radians(${lat}))
+            * sin(radians(s.latitude))
+          )
+        ) AS distance
+      FROM stores s
+      JOIN store_inventory si ON si.store_id = s.id
+      JOIN products p ON p.id = si.product_id
+      WHERE
+        p.category_id = ${categoryId}
+        AND si.stock_count > 0
+        AND (
+          6371 * acos(
+            cos(radians(${lat}))
+            * cos(radians(s.latitude))
+            * cos(radians(s.longitude) - radians(${lng}))
+            + sin(radians(${lat}))
+            * sin(radians(s.latitude))
+          )
+        ) <= 3
+      ORDER BY distance ASC;
+    `);
+
+    console.log("✅ category products found:", result.rows.length);
+    res.json(result.rows);
+  } catch (error) {
+    console.error("❌ /api/category/products error", error);
+    res.status(500).json({ error: "Failed to fetch category products" });
   }
 });
 
