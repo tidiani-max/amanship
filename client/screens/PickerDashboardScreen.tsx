@@ -173,7 +173,6 @@ export default function PickerDashboardScreen() {
   const [formLocation, setFormLocation] = useState("");
   const [formCategoryId, setFormCategoryId] = useState<string | null>(null);
   const [formImage, setFormImage] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
 
   // --- QUERIES ---
 const { data: categories = [] } = useQuery<Category[]>({
@@ -274,7 +273,6 @@ const pickImage = async () => {
   };
 
 const handleSaveProduct = async () => {
-  setIsSaving(true);
   if (!user || !user.id) {
     Alert.alert("Error", "You must be logged in to save products.");
     return;
@@ -348,86 +346,48 @@ if (formOriginalPrice.trim() && Number(formOriginalPrice) <= Number(formPrice)) 
     });
 
     if (response.ok) {
-  const result = await response.json();
-  console.log("✅ Save successful:", result);
-  
-  setModalVisible(false);
-  
-  // ✅ Invalidate and refetch to show new product immediately
-  await queryClient.invalidateQueries({ 
-    queryKey: ["/api/picker/inventory", user.id],
-    exact: true 
-  });
-  await refetchInv(); // Force immediate refresh
-  
-  Alert.alert("Success", isEditing ? "Product Updated" : "Product Added");
-} else {
-  const result = await response.json();
-  console.error("❌ Save failed:", result);
-  Alert.alert("Error", result.error || result.details || "Save failed");
-}
- } catch (err) {
-    console.error("❌ Save error:", err);
+      setModalVisible(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
+      Alert.alert("Success", isEditing ? "Product Updated" : "Product Added");
+    } else {
+      const result = await response.json();
+      Alert.alert("Error", result.error || "Save failed");
+    }
+  } catch (err) {
     Alert.alert("Error", "Server connection failed");
-  } finally {
-    setIsSaving(false); // ✅ Always reset loading state
   }
 };
 
-const handleDeleteProduct = async (id: string) => {
-  if (!user?.id) {
-    Alert.alert("Error", "You must be logged in to delete products.");
-    return;
-  }
-
-  Alert.alert(
-    "Delete Item", 
-    "Are you sure you want to remove this item from your store inventory? This action cannot be undone.", 
-    [
-      { text: "Cancel", style: "cancel" },
-      { 
-        text: "Delete", 
-        style: "destructive", 
-        onPress: async () => {
-          try {
-            console.log(`🗑️ Attempting to delete inventory item: ${id}`);
-            
-            const res = await fetch(
-              `${BASE_URL}/api/picker/inventory/${id}?userId=${user.id}`, 
-              { 
-                method: 'DELETE',
-                headers: {
-                  'Content-Type': 'application/json',
-                }
-              }
-            );
-            
-            const data = await res.json();
-            
-            if (res.ok) {
-              console.log("✅ Delete successful");
-              
-              // Force refresh inventory
-              await queryClient.invalidateQueries({ 
-                queryKey: ["/api/picker/inventory", user.id],
-                exact: true 
-              });
-              
-              // Trigger immediate refetch
-              await refetchInv();
-              
-              Alert.alert("Success", "Item removed from inventory");
-            } else {
-              console.error("❌ Delete failed:", data);
-              Alert.alert("Error", data.error || "Failed to delete item");
-            }
-          } catch (err) { 
-            console.error("❌ Delete error:", err);
-            Alert.alert("Error", "Network error. Please check your connection and try again."); }
+  const handleDeleteProduct = async (id: string) => {
+  Alert.alert("Delete Item", "Remove this from your store inventory?", [
+    { text: "Cancel", style: "cancel" },
+    { 
+      text: "Delete", 
+      style: "destructive", 
+      onPress: async () => {
+        try {
+          console.log(`🗑️ Deleting inventory item: ${id}`); // ✅ Add logging
+          const res = await fetch(`${BASE_URL}/api/picker/inventory/${id}?userId=${user?.id}`, { 
+            method: 'DELETE' 
+          });
+          
+          if (res.ok) {
+            // ✅ Invalidate BOTH queries
+            await queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
+            await queryClient.refetchQueries({ queryKey: ["/api/picker/inventory", user?.id] });
+            Alert.alert("Success", "Item removed from inventory");
+          } else {
+            const error = await res.json();
+            console.error("Delete failed:", error);
+            Alert.alert("Error", error.error || "Delete failed");
+          }
+        } catch (err) { 
+          console.error("Delete error:", err);
+          Alert.alert("Error", "Network error. Please try again."); 
         }
       }
-    ]
-  );
+    }
+  ]);
 };
 
 const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
@@ -501,23 +461,10 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
               />
             </View>
 
-             <TouchableOpacity 
-  style={[
-    styles.saveBtn, 
-    { backgroundColor: isSaving ? theme.textSecondary : theme.primary },
-    isSaving && { opacity: 0.7 }
-  ]} 
-  onPress={handleSaveProduct}
-  disabled={isSaving}
->
-  {isSaving ? (
-    <ActivityIndicator color="white" size="small" />
-  ) : (
-    <ThemedText style={styles.saveBtnText}>
-      {isEditing ? "Update Item" : "Save Item"}
-    </ThemedText>
-  )}
-</TouchableOpacity>
+            <TouchableOpacity style={[styles.addBtn, { backgroundColor: theme.primary }]} onPress={() => openEditModal()}>
+              <Feather name="plus" size={18} color="white" />
+              <ThemedText style={styles.addBtnText}>Add Store Item</ThemedText>
+            </TouchableOpacity>
 
             {invLoading ? (
               <ActivityIndicator size="large" color={theme.primary} />
@@ -564,14 +511,7 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
             </TouchableOpacity>
           </View>
           <ScrollView showsVerticalScrollIndicator={false}>
-            <ThemedText style={styles.label}>
-  Category <ThemedText style={{ color: '#e74c3c' }}>*</ThemedText>
-</ThemedText>
-{!formCategoryId && (
-  <ThemedText style={{ color: '#e74c3c', fontSize: 11, marginBottom: 5 }}>
-    ⚠️ Please select a category
-  </ThemedText>
-)}
+            <ThemedText style={styles.label}>Category</ThemedText>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryArea}>
               {Array.isArray(categories) && categories.map(cat => (
   <TouchableOpacity 
@@ -600,17 +540,7 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
             </TouchableOpacity>
 
             <ThemedText style={styles.label}>Product Name *</ThemedText>
-<TextInput 
-  style={[
-    styles.input, 
-    { color: theme.text },
-    !formName.trim() && formName !== "" && { borderColor: '#e74c3c', borderWidth: 1 }
-  ]} 
-  value={formName} 
-  onChangeText={setFormName} 
-  placeholder="Fresh Milk" 
-  placeholderTextColor={theme.textSecondary}
-/>
+            <TextInput style={[styles.input, { color: theme.text }]} value={formName} onChangeText={setFormName} placeholder="Fresh Milk" />
 
             <ThemedText style={styles.label}>Brand</ThemedText>
             <TextInput style={[styles.input, { color: theme.text }]} value={formBrand} onChangeText={setFormBrand} placeholder="Brand name" />
@@ -621,23 +551,7 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Price (Rp) *</ThemedText>
-<TextInput 
-  style={[
-    styles.input, 
-    { color: theme.text },
-    formPrice && (isNaN(Number(formPrice)) || Number(formPrice) <= 0) && { borderColor: '#e74c3c', borderWidth: 1 }
-  ]} 
-  value={formPrice} 
-  onChangeText={setFormPrice} 
-  keyboardType="numeric" 
-  placeholder="0" 
-  placeholderTextColor={theme.textSecondary}
-/>
-{formPrice && (isNaN(Number(formPrice)) || Number(formPrice) <= 0) && (
-  <ThemedText style={{ color: '#e74c3c', fontSize: 11, marginTop: -4 }}>
-    Invalid price
-  </ThemedText>
-)}
+                <TextInput style={[styles.input, { color: theme.text }]} value={formPrice} onChangeText={setFormPrice} keyboardType="numeric" placeholder="0" />
               </View>
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <ThemedText style={styles.label}>Old Price</ThemedText>
@@ -648,23 +562,7 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Stock *</ThemedText>
-<TextInput 
-  style={[
-    styles.input, 
-    { color: theme.text },
-    formStock && (isNaN(Number(formStock)) || Number(formStock) < 0) && { borderColor: '#e74c3c', borderWidth: 1 }
-  ]} 
-  value={formStock} 
-  onChangeText={setFormStock} 
-  keyboardType="numeric" 
-  placeholder="0" 
-  placeholderTextColor={theme.textSecondary}
-/>
-{formStock && (isNaN(Number(formStock)) || Number(formStock) < 0) && (
-  <ThemedText style={{ color: '#e74c3c', fontSize: 11, marginTop: -4 }}>
-    Invalid stock quantity
-  </ThemedText>
-)}
+                <TextInput style={[styles.input, { color: theme.text }]} value={formStock} onChangeText={setFormStock} keyboardType="numeric" placeholder="0" />
               </View>
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <ThemedText style={styles.label}>Location</ThemedText>
