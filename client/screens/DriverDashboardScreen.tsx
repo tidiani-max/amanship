@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Pressable, Switch, Alert, Linking, Platform, TextInput, Modal } from "react-native";
+import { View, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Pressable, Switch, Alert, Linking, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
@@ -13,108 +13,47 @@ import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { useNavigation } from "@react-navigation/native";
 
-function PINModal({ 
-  visible, 
-  onClose, 
-  onSubmit,
-  isLoading 
-}: { 
-  visible: boolean; 
-  onClose: () => void;
-  onSubmit: (pin: string) => void;
-  isLoading: boolean;
-}) {
-  const { theme } = useTheme();
-  const [pin, setPin] = useState("");
+interface Order {
+  id: string;
+  orderNumber: string;
+  status: string;
+  total: number;
+  items: any[];
+  createdAt: string;
+  customerLat: string;
+  customerLng: string;
+  addressId: string | null;
+  paymentMethod: string;
+}
 
-  const handleSubmit = () => {
-    if (pin.length !== 4) {
-      Alert.alert("Invalid PIN", "Please enter the 4-digit code");
-      return;
-    }
-    onSubmit(pin);
-    setPin("");
+interface DriverDashboardData {
+  user: { id: string; username: string; phone: string | null; role: string };
+  staffRecord: { id: string; userId: string; storeId: string; role: string; status: string };
+  store: { id: string; name: string; address: string };
+  orders: {
+    ready: Order[];
+    active: Order[];
+    completed: Order[];
   };
-
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
-          <ThemedText type="h3" style={{ marginBottom: 12 }}>Enter Delivery PIN</ThemedText>
-          <ThemedText type="body" style={{ color: theme.textSecondary, marginBottom: 20, textAlign: "center" }}>
-            Ask the customer for their 4-digit PIN
-          </ThemedText>
-
-          <TextInput
-            style={[styles.pinInput, { 
-              backgroundColor: theme.backgroundRoot, 
-              color: theme.text,
-              borderColor: theme.border 
-            }]}
-            value={pin}
-            onChangeText={(text) => setPin(text.replace(/[^0-9]/g, "").slice(0, 4))}
-            keyboardType="number-pad"
-            maxLength={4}
-            placeholder="0000"
-            placeholderTextColor={theme.textSecondary}
-            autoFocus
-          />
-
-          <View style={{ flexDirection: "row", gap: 12, marginTop: 20 }}>
-            <Pressable
-              style={[styles.modalButton, { backgroundColor: theme.border }]}
-              onPress={() => {
-                setPin("");
-                onClose();
-              }}
-              disabled={isLoading}
-            >
-              <ThemedText type="button">Cancel</ThemedText>
-            </Pressable>
-
-            <Pressable
-              style={[styles.modalButton, { 
-                backgroundColor: theme.primary,
-                opacity: (pin.length === 4 && !isLoading) ? 1 : 0.5 
-              }]}
-              onPress={handleSubmit}
-              disabled={pin.length !== 4 || isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <ThemedText type="button" style={{ color: "#FFF" }}>Confirm</ThemedText>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
 }
 
 function OrderCard({ 
   order, 
-  onPickup,
-  onComplete,
+  onUpdateStatus,
   isUpdating,
   disabled
 }: { 
-  order: any; 
-  onPickup: (orderId: string) => void;
-  onComplete: (orderId: string) => void;
+  order: Order; 
+  onUpdateStatus: (orderId: string, status: string) => void;
   isUpdating: boolean;
   disabled?: boolean;
 }) {
+
   const { theme } = useTheme();
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<any>(); // Add this hook
   
-  const isAtStore = order.status === "packed";
+  // Logic to determine the current phase of delivery
+  const isAtStore = order.status === "packed" || order.status === "ready";
   const isOnWay = order.status === "delivering";
 
   const getStatusColor = () => {
@@ -123,27 +62,51 @@ function OrderCard({
     return theme.success;
   };
 
-  const openMaps = () => {
-    const lat = order.customer_lat || order.customerLat;
-    const lng = order.customer_lng || order.customerLng;
-    
-    if (!lat || !lng) {
-      Alert.alert("Error", "Location data missing");
-      return;
-    }
-
-    const label = encodeURIComponent("Customer Drop-off");
-
-    if (Platform.OS === 'android') {
-      Linking.openURL(`google.navigation:q=${lat},${lng}`).catch(() => {
-        Linking.openURL(`geo:${lat},${lng}?q=${lat},${lng}(${label})`);
-      });
-    } else {
-      Linking.openURL(`maps://?ll=${lat},${lng}&q=${label}&t=m`).catch(() => {
-        Linking.openURL(`http://maps.google.com/?q=${lat},${lng}`);
-      });
-    }
+  const getButtonConfig = () => {
+    if (isAtStore) return { label: "Pick Up", status: "delivering", icon: "package" as const };
+    if (isOnWay) return { label: "Complete", status: "delivered", icon: "check-circle" as const };
+    return null;
   };
+
+const openMaps = () => {
+  // Use the snake_case keys from your DB results
+  console.log("DRIVER APP SEEING LAT:", (order as any).customer_lat);
+  console.log("DRIVER APP SEEING LNG:", (order as any).customer_lng);
+    // ------------------------------
+  const lat = (order as any).customer_lat || order.customerLat;
+  const lng = (order as any).customer_lng || order.customerLng;
+  
+  if (!lat || !lng) {
+    Alert.alert("Error", "Coordinate data missing for this order.");
+    return;
+  }
+
+  const label = encodeURIComponent("Customer Drop-off (Nowhere Cafe)");
+
+  // PLATFORM SPECIFIC STRATEGY
+  if (Platform.OS === 'android') {
+    /** * google.navigation:q=LAT,LNG 
+     * This is the "Gold Standard" for drivers. 
+     * It forces Google Maps into Turn-by-Turn mode to the EXACT GPS point,
+     * ignoring nearby landmarks like SMA 8.
+     */
+    Linking.openURL(`google.navigation:q=${lat},${lng}`).catch(() => {
+      // Fallback if navigation intent fails
+      Linking.openURL(`geo:${lat},${lng}?q=${lat},${lng}(${label})`);
+    });
+  } else {
+    /**
+     * Apple Maps: ll (Lat/Long) + q (Label)
+     * ll sets the center of the map on the coordinates.
+     * q puts the pin exactly there.
+     */
+    const url = `maps://?ll=${lat},${lng}&q=${label}&t=m`;
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`http://maps.google.com/?q=${lat},${lng}`);
+    });
+  }
+};
+  const config = getButtonConfig();
 
   return (
     <Card style={styles.orderCard}>
@@ -164,6 +127,7 @@ function OrderCard({
       <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
       <View style={styles.orderDetails}>
+        {/* Visual Delivery Progress Bar */}
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 8 }}>
           <Feather name="home" size={14} color={theme.textSecondary} />
           <View style={{ flex: 1, height: 2, backgroundColor: isAtStore ? theme.border : theme.primary }} />
@@ -192,50 +156,69 @@ function OrderCard({
         )}
       </View>
 
+      {/* ACTION BUTTONS */}
       <View style={styles.orderActions}>
-        <Pressable style={[styles.mapButton, { borderColor: theme.border }]} onPress={openMaps}>
+        {/* Map Button */}
+        <Pressable 
+          style={[styles.mapButton, { borderColor: theme.border }]} 
+          onPress={openMaps}
+        >
           <Feather name="navigation" size={18} color={theme.secondary} />
         </Pressable>
 
-        <Pressable style={[styles.mapButton, { borderColor: theme.border }]} onPress={() => navigation.navigate("Chat", { orderId: order.id })}>
+        {/* Chat Button - Primary way to contact customer */}
+        <Pressable 
+          style={[styles.mapButton, { borderColor: theme.border }]} 
+          onPress={() => navigation.navigate("Chat", { orderId: order.id })}
+        >
           <Feather name="message-square" size={18} color={theme.primary} />
         </Pressable>
         
-        {isAtStore && (
+        {/* Main Status Toggle (Pick Up / Complete) */}
+        {config && (
           <Pressable
-            style={[styles.actionButton, { backgroundColor: disabled ? "#999" : theme.primary, flex: 1 }]}
-            onPress={() => onPickup(order.id)}
-            disabled={isUpdating || disabled}
-          >
-            {isUpdating ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Feather name="package" size={16} color="#FFF" />
-                <ThemedText type="button" style={{ color: "#FFF" }}>Pick Up</ThemedText>
-              </View>
-            )}
-          </Pressable>
-        )}
+  style={[
+    styles.actionButton,
+    {
+      backgroundColor: disabled ? "#999" : theme.primary,
+      flex: 1
+    }
+  ]}
+  onPress={() => onUpdateStatus(order.id, config.status)}
+  disabled={isUpdating || disabled}
+>
 
-        {isOnWay && (
-          <Pressable
-            style={[styles.actionButton, { backgroundColor: disabled ? "#999" : theme.success, flex: 1 }]}
-            onPress={() => onComplete(order.id)}
-            disabled={isUpdating || disabled}
-          >
             {isUpdating ? (
               <ActivityIndicator size="small" color="#FFF" />
             ) : (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Feather name="check-circle" size={16} color="#FFF" />
-                <ThemedText type="button" style={{ color: "#FFF" }}>Enter PIN</ThemedText>
+                <Feather name={config.icon} size={16} color="#FFF" />
+                <ThemedText type="button" style={{ color: "#FFF" }}>{config.label}</ThemedText>
               </View>
             )}
           </Pressable>
         )}
       </View>
     </Card>
+  );
+}
+
+function CompletedOrderCard({ order }: { order: Order }) {
+  const { theme } = useTheme();
+  const createdAt = new Date(order.createdAt);
+
+  return (
+    <View style={styles.completedRow}>
+      <View style={styles.completedInfo}>
+        <ThemedText type="body">{order.orderNumber}</ThemedText>
+        <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+          {createdAt.toLocaleDateString()} {createdAt.toLocaleTimeString()}
+        </ThemedText>
+      </View>
+      <ThemedText type="body" style={{ color: theme.success }}>
+        Rp {order.total.toLocaleString()}
+      </ThemedText>
+    </View>
   );
 }
 
@@ -246,10 +229,8 @@ export default function DriverDashboardScreen() {
   const queryClient = useQueryClient();
   const [showCompleted, setShowCompleted] = useState(false);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
-  const [pinModalVisible, setPinModalVisible] = useState(false);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
-  const { data: dashboard, isLoading, refetch, isRefetching } = useQuery({
+ const { data: dashboard, isLoading, refetch, isRefetching } = useQuery<DriverDashboardData>({
     queryKey: ["/api/driver/dashboard", user?.id],
     queryFn: async () => {
       const baseUrl = process.env.EXPO_PUBLIC_DOMAIN!;
@@ -258,67 +239,44 @@ export default function DriverDashboardScreen() {
       return response.json();
     },
     enabled: !!user?.id && user?.role === "driver",
-    refetchInterval: 3000,
-    refetchOnWindowFocus: true,
+    // CHANGE THIS: 3 seconds for instant-feel updates
+    refetchInterval: 3000, 
+    // Keeps syncing even if the driver switches apps briefly
+    refetchOnWindowFocus: true, 
   });
 
-  const pickupMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      setUpdatingOrderId(orderId);
-      const response = await apiRequest("PUT", `/api/driver/orders/${orderId}/status`, { 
-        userId: user?.id, 
-        status: "delivering" 
-      });
+  const toggleStatusMutation = useMutation({
+    mutationFn: async (status: "online" | "offline") => {
+      const response = await apiRequest("POST", "/api/staff/toggle-status", { userId: user?.id, status });
+      if (!response.ok) throw new Error("Failed to toggle status");
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/driver/dashboard"] });
-      setUpdatingOrderId(null);
     },
     onError: (error: Error) => {
       Alert.alert("Error", error.message);
-      setUpdatingOrderId(null);
-    }
+    },
   });
 
-  const completeMutation = useMutation({
-    mutationFn: async ({ orderId, pin }: { orderId: string; pin: string }) => {
+ const updateOrderMutation = useMutation({
+    mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
       setUpdatingOrderId(orderId);
-      const response = await apiRequest("PUT", `/api/driver/orders/${orderId}/complete`, {
-        userId: user?.id,
-        deliveryPin: pin
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to complete delivery");
-      }
-      
+      const response = await apiRequest("PUT", `/api/driver/orders/${orderId}/status`, { userId: user?.id, status });
       return response.json();
+    },
+    // This runs the moment the button is clicked
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/driver/dashboard"] });
+      const previousData = queryClient.getQueryData(["/api/driver/dashboard"]);
+      // (Optional) Manually update cache here for zero-latency UI
+      return { previousData };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/driver/dashboard"] });
-      setPinModalVisible(false);
-      setSelectedOrderId(null);
       setUpdatingOrderId(null);
-      Alert.alert("✅ Success", "Order delivered successfully!");
     },
-    onError: (error: Error) => {
-      Alert.alert("❌ Invalid PIN", error.message);
-      setUpdatingOrderId(null);
-    }
   });
-
-  const handleComplete = (orderId: string) => {
-    setSelectedOrderId(orderId);
-    setPinModalVisible(true);
-  };
-
-  const handlePinSubmit = (pin: string) => {
-    if (selectedOrderId) {
-      completeMutation.mutate({ orderId: selectedOrderId, pin });
-    }
-  };
 
   if (!user || user.role !== "driver") {
     return (
@@ -326,6 +284,9 @@ export default function DriverDashboardScreen() {
         <View style={styles.errorContainer}>
           <Feather name="lock" size={48} color={theme.error} />
           <ThemedText type="h3" style={{ marginTop: Spacing.md }}>Access Denied</ThemedText>
+          <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}>
+            This dashboard is only for drivers.
+          </ThemedText>
         </View>
       </ThemedView>
     );
@@ -335,58 +296,117 @@ export default function DriverDashboardScreen() {
     return (
       <ThemedView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.primary} />
+        <ThemedText type="body" style={{ marginTop: Spacing.md, color: theme.textSecondary }}>
+          Loading dashboard...
+        </ThemedText>
       </ThemedView>
     );
   }
 
+  const isOnline = dashboard?.staffRecord?.status === "online";
   const readyOrders = dashboard?.orders?.ready || [];
-  const activeOrders = dashboard?.orders?.active || [];
-  const completedOrders = dashboard?.orders?.completed || [];
-  const hasActiveDelivery = activeOrders.length > 0;
-  const allActiveOrders = hasActiveDelivery ? activeOrders : readyOrders;
-  const todayEarnings = completedOrders.reduce((sum: number, order: any) => sum + order.total, 0);
+const activeOrders = dashboard?.orders?.active || [];
+const completedOrders = dashboard?.orders?.completed || [];
+
+// 🔒 DRIVER LOCK LOGIC
+const hasActiveDelivery = activeOrders.length > 0;
+
+// ❌ DO NOT merge ready + active
+const allActiveOrders = hasActiveDelivery ? activeOrders : readyOrders;
+
+
+  const todayEarnings = completedOrders.reduce((sum, order) => sum + order.total, 0);
 
   return (
     <ThemedView style={styles.container}>
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing.xl }]}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.primary} />}
       >
-        <ThemedText type="h2" style={{ marginBottom: Spacing.lg }}>Driver Dashboard</ThemedText>
+        <Card style={styles.statusCard}>
+          <View style={styles.statusRow}>
+            <View>
+              <ThemedText type="h3">{dashboard?.user?.username || "Driver"}</ThemedText>
+              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                {dashboard?.store?.name || "No store assigned"}
+              </ThemedText>
+            </View>
+            <View style={styles.toggleContainer}>
+              <ThemedText type="body" style={{ color: isOnline ? theme.success : theme.textSecondary }}>
+                {isOnline ? "Online" : "Offline"}
+              </ThemedText>
+              <Switch
+                value={isOnline}
+                onValueChange={(value) => toggleStatusMutation.mutate(value ? "online" : "offline")}
+                trackColor={{ false: theme.border, true: theme.success + "80" }}
+                thumbColor={isOnline ? theme.success : theme.textSecondary}
+              />
+            </View>
+          </View>
+        </Card>
+
+        <View style={styles.statsRow}>
+          <Card style={styles.statCard}>
+            <Feather name="truck" size={24} color={theme.primary} />
+            <ThemedText type="h2" style={{ marginTop: Spacing.xs }}>
+  {activeOrders.length}
+</ThemedText>
+<ThemedText type="caption">Active</ThemedText>
+
+          </Card>
+          <Card style={styles.statCard}>
+            <Feather name="check-circle" size={24} color={theme.success} />
+            <ThemedText type="h2" style={{ marginTop: Spacing.xs }}>{completedOrders.length}</ThemedText>
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>Delivered</ThemedText>
+          </Card>
+          <Card style={styles.statCardWide}>
+            <Feather name="dollar-sign" size={24} color={theme.warning} />
+            <ThemedText type="h3" style={{ marginTop: Spacing.xs }}>Rp {(todayEarnings * 0.1).toLocaleString()}</ThemedText>
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>Est. Earnings</ThemedText>
+          </Card>
+        </View>
 
         <ThemedText type="h3" style={styles.sectionTitle}>
           Active Deliveries ({allActiveOrders.length})
         </ThemedText>
 
         {allActiveOrders.length > 0 ? (
-          allActiveOrders.map((order: any) => (
+          allActiveOrders.map(order => (
             <OrderCard 
               key={order.id} 
               order={order} 
-              onPickup={(orderId) => pickupMutation.mutate(orderId)}
-              onComplete={handleComplete}
+              onUpdateStatus={(orderId, status) => updateOrderMutation.mutate({ orderId, status })}
               isUpdating={updatingOrderId === order.id}
-              disabled={hasActiveDelivery && order.status === "packed"}
             />
           ))
         ) : (
           <Card style={styles.emptyCard}>
             <Feather name="inbox" size={48} color={theme.textSecondary} />
             <ThemedText type="h3" style={{ marginTop: Spacing.md }}>No Deliveries</ThemedText>
+            <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}>
+              {isOnline ? "Waiting for orders to be packed..." : "Go online to start receiving deliveries."}
+            </ThemedText>
           </Card>
         )}
-      </ScrollView>
 
-      <PINModal
-        visible={pinModalVisible}
-        onClose={() => {
-          setPinModalVisible(false);
-          setSelectedOrderId(null);
-        }}
-        onSubmit={handlePinSubmit}
-        isLoading={completeMutation.isPending}
-      />
+        {completedOrders.length > 0 ? (
+          <>
+            <Pressable style={styles.completedHeader} onPress={() => setShowCompleted(!showCompleted)}>
+              <ThemedText type="h3">Completed Today ({completedOrders.length})</ThemedText>
+              <Feather name={showCompleted ? "chevron-up" : "chevron-down"} size={20} color={theme.text} />
+            </Pressable>
+            
+            {showCompleted ? (
+              <Card style={styles.completedCard}>
+                {completedOrders.map(order => (
+                  <CompletedOrderCard key={order.id} order={order} />
+                ))}
+              </Card>
+            ) : null}
+          </>
+        ) : null}
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -394,22 +414,28 @@ export default function DriverDashboardScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 16 },
-  sectionTitle: { marginBottom: 12 },
-  orderCard: { marginBottom: 12, padding: 16 },
+  errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: Spacing.xl },
+  scrollContent: { paddingHorizontal: Spacing.lg },
+  statusCard: { marginBottom: Spacing.md, padding: Spacing.md },
+  statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  toggleContainer: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
+  statsRow: { flexDirection: "row", gap: Spacing.sm, marginBottom: Spacing.lg },
+  statCard: { flex: 1, alignItems: "center", padding: Spacing.md },
+  statCardWide: { flex: 1.5, alignItems: "center", padding: Spacing.md },
+  sectionTitle: { marginBottom: Spacing.md },
+  orderCard: { marginBottom: Spacing.md, padding: Spacing.md },
   orderHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
-  divider: { height: 1, marginVertical: 12 },
-  orderDetails: { marginBottom: 12 },
-  detailRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
-  codBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginTop: 8 },
-  orderActions: { flexDirection: "row", gap: 8 },
-  mapButton: { padding: 10, borderWidth: 1, borderRadius: 8, justifyContent: "center", alignItems: "center" },
-  actionButton: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, alignItems: "center" },
-  emptyCard: { alignItems: "center", padding: 40 },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
-  modalContent: { width: "80%", padding: 24, borderRadius: 16, alignItems: "center" },
-  pinInput: { fontSize: 32, fontWeight: "bold", letterSpacing: 12, textAlign: "center", paddingVertical: 16, paddingHorizontal: 24, borderRadius: 12, borderWidth: 2, width: "100%" },
-  modalButton: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center" }
+  statusBadge: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: BorderRadius.xs },
+  divider: { height: 1, marginVertical: Spacing.md },
+  orderDetails: { marginBottom: Spacing.md },
+  detailRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, marginBottom: Spacing.xs },
+  codBadge: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.sm, marginTop: Spacing.sm },
+  orderActions: { flexDirection: "row", gap: Spacing.sm },
+  mapButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: Spacing.xs, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderWidth: 1, borderRadius: BorderRadius.sm },
+  actionButton: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.sm, alignItems: "center" },
+  emptyCard: { alignItems: "center", padding: Spacing.xxl },
+  completedHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: Spacing.lg, marginBottom: Spacing.md },
+  completedCard: { padding: Spacing.md },
+  completedRow: { flexDirection: "row", alignItems: "center", paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: "#eee" },
+  completedInfo: { flex: 1 },
 });
