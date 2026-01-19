@@ -153,6 +153,7 @@ export const orders = pgTable("orders", {
   paymentMethod: text("payment_method").default("midtrans"),
   paymentStatus: text("payment_status").default("pending"),
   codCollected: boolean("cod_collected").default(false),
+  deliveryPin: text("delivery_pin").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   pickedAt: timestamp("picked_at"),
   packedAt: timestamp("packed_at"),

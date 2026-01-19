@@ -80,6 +80,31 @@ export default function OrderDetailScreen() {
       ]}
       showsVerticalScrollIndicator={false}
     >
+    {order.status === "delivering" && order.deliveryPin && (
+  <View style={styles.section}>
+    <ThemedText type="h3" style={styles.sectionTitle}>Delivery PIN</ThemedText>
+    <Card style={{ backgroundColor: theme.primary + "10" }}>
+      <View style={{ alignItems: "center", padding: Spacing.lg }}>
+        <Feather name="shield" size={32} color={theme.primary} />
+        <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: Spacing.sm }}>
+          Show this code to your driver
+        </ThemedText>
+        <ThemedText style={{ 
+          fontSize: 48, 
+          fontWeight: "bold", 
+          letterSpacing: 8, 
+          color: theme.primary,
+          marginVertical: Spacing.md 
+        }}>
+          {order.deliveryPin}
+        </ThemedText>
+        <ThemedText type="caption" style={{ color: theme.textSecondary, textAlign: "center" }}>
+          Your order will be completed once the driver enters this code
+        </ThemedText>
+      </View>
+    </Card>
+  </View>
+)}
       {/* HEADER SECTION: Order ID, Call, and Chat */}
       <View style={styles.header}>
         <ThemedText type="caption" style={{ color: theme.textSecondary }}>ORDER ID</ThemedText>

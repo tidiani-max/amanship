@@ -1214,6 +1214,7 @@ app.get("/api/products/:id/store", async (req, res) => {
 
   // ==================== 10. ORDERS ====================
 console.log("📦 Registering order routes...");
+
 app.post("/api/orders", async (req, res) => {
   try {
     const {
@@ -1258,14 +1259,16 @@ app.post("/api/orders", async (req, res) => {
 
       const DELIVERY_FEE_PER_STORE = 10000;
 
-const itemsTotal = storeItems.reduce(
-  (sum, i) => sum + Number(i.price) * Number(i.quantity),
-  0
-);
+      const itemsTotal = storeItems.reduce(
+        (sum, i) => sum + Number(i.price) * Number(i.quantity),
+        0
+      );
 
-const deliveryFee = DELIVERY_FEE_PER_STORE;
-const total = itemsTotal + deliveryFee;
+      const deliveryFee = DELIVERY_FEE_PER_STORE;
+      const total = itemsTotal + deliveryFee;
 
+      // ✅ Generate random 4-digit PIN
+      const deliveryPin = Math.floor(1000 + Math.random() * 9000).toString();
 
       const [order] = await db
         .insert(orders)
@@ -1280,6 +1283,7 @@ const total = itemsTotal + deliveryFee;
           items: storeItems,
           customerLat: String(customerLat),
           customerLng: String(customerLng),
+          deliveryPin, // ✅ Store the PIN
         })
         .returning();
 
@@ -1431,6 +1435,76 @@ app.get("/api/orders/:id", async (req, res) => {
       res.status(500).json({ error: "Failed to fetch order" });
     }
   });
+
+// Add this NEW endpoint to your routes.ts
+
+app.put("/api/driver/orders/:id/complete", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, deliveryPin } = req.body;
+
+    if (!userId || !deliveryPin) {
+      return res.status(400).json({ error: "Driver ID and PIN required" });
+    }
+
+    // 1️⃣ Get driver staff record
+    const [staff] = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.userId, userId));
+
+    if (!staff) {
+      return res.status(403).json({ error: "Driver not assigned to store" });
+    }
+
+    // 2️⃣ Get the order
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, id));
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // 3️⃣ Verify driver owns this order
+    if (order.driverId !== userId) {
+      return res.status(403).json({ error: "Not your delivery" });
+    }
+
+    if (order.status !== "delivering") {
+      return res.status(400).json({ error: "Order must be in delivering status" });
+    }
+
+    // 4️⃣ Verify PIN matches
+    if (order.deliveryPin !== deliveryPin.toString()) {
+      return res.status(401).json({ error: "Invalid PIN" });
+    }
+
+    // 5️⃣ Complete the order
+    const [completed] = await db
+      .update(orders)
+      .set({ 
+        status: "delivered",
+        deliveredAt: new Date()
+      })
+      .where(eq(orders.id, id))
+      .returning();
+
+    // 6️⃣ Notify customer
+    await sendPushNotification(
+      order.userId,
+      "✅ Order Delivered",
+      `Your order has been delivered successfully`,
+      { orderId: order.id }
+    );
+
+    res.json(completed);
+  } catch (error) {
+    console.error("❌ Complete delivery error:", error);
+    res.status(500).json({ error: "Failed to complete delivery" });
+  }
+});
 
   // ==================== 11. MESSAGES ====================
   console.log("💬 Registering message routes...");

@@ -12,7 +12,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useLanguage } from "@/context/LanguageContext";
-import { useAuth } from "@/context/AuthContext"; // Ensure this path is correct
+import { useAuth } from "@/context/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
@@ -22,14 +22,13 @@ export default function OrdersScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { t } = useLanguage();
-  const { user } = useAuth(); // Get the logged-in user dynamically
+  const { user } = useAuth();
   const navigation = useNavigation<NavigationProp>();
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
 
   const userId = user?.id;
 
   const { data: allOrders = [], isLoading, refetch } = useQuery({
-    // The queryKey now depends on userId; it will refresh when user changes
     queryKey: ["orders", userId], 
     queryFn: async () => {
       if (!userId) return [];
@@ -40,22 +39,19 @@ export default function OrdersScreen() {
       if (!response.ok) throw new Error("Network response was not ok");
       return response.json();
     },
-    enabled: !!userId, // Only fetch if userId exists
+    enabled: !!userId,
   });
 
-  // Filtering Logic
- const activeOrders = allOrders.filter((o: any) => 
-  ["pending", "picking", "packed", "delivering", "created", "confirmed"].includes(o.status?.toLowerCase())
-);
+  const activeOrders = allOrders.filter((o: any) => 
+    ["pending", "picking", "packed", "delivering", "created", "confirmed"].includes(o.status?.toLowerCase())
+  );
   
   const completedOrders = allOrders.filter((o: any) => 
     o.status === "delivered"
   );
 
   const orders = activeTab === "active" ? activeOrders : completedOrders;
-  
 
-  // Formatters
   const formatPrice = (price: any) => {
     const num = Number(price) || 0;
     return `Rp ${num.toLocaleString("id-ID")}`;
@@ -91,7 +87,6 @@ export default function OrdersScreen() {
   };
 
   const renderOrder = ({ item }: { item: any }) => {
-    console.log("Order Data:", item.id, "Status:", item.status, "Items count:", item.items?.length);
     const firstItem = item.items?.[0];
 
     return (
@@ -121,6 +116,22 @@ export default function OrdersScreen() {
             <ThemedText type="caption" style={{ color: theme.textSecondary }}>
               {formatDate(item.createdAt)}
             </ThemedText>
+            
+            {/* ✅ DELIVERY PIN BADGE - Only show when delivering */}
+            {item.status === "delivering" && item.deliveryPin && (
+              <View style={{ 
+                backgroundColor: theme.primary + "15", 
+                paddingHorizontal: 8, 
+                paddingVertical: 4, 
+                borderRadius: 4,
+                marginTop: 6,
+                alignSelf: 'flex-start'
+              }}>
+                <ThemedText type="small" style={{ color: theme.primary, fontWeight: "bold" }}>
+                  PIN: {item.deliveryPin}
+                </ThemedText>
+              </View>
+            )}
             
             <ThemedText style={{ fontWeight: "700", marginTop: 4 }}>
               {formatPrice(item.total)}
