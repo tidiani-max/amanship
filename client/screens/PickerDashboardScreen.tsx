@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { 
   View, StyleSheet, ScrollView, RefreshControl, 
-  Pressable, Switch, Alert, TextInput, Modal, Image, TouchableOpacity, ActivityIndicator 
+  Pressable, Switch, TextInput, Modal, Image, TouchableOpacity, ActivityIndicator 
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,10 +17,8 @@ import { getImageUrl } from "@/lib/image-url";
 import { Spacing } from "@/constants/theme";
 import { OrderReceipt } from "@/components/OrderReceipt";
 
-// --- CONFIGURATION ---
 const BASE_URL = process.env.EXPO_PUBLIC_DOMAIN!;
 
-// --- INTERFACES ---
 interface Category {
   id: string;
   name: string;
@@ -44,9 +42,6 @@ interface InventoryItem {
   };
 }
 
-/**
- * Clean Order Card Component (Picker Only)
- */
 function OrderCard({ 
   order, 
   onUpdateStatus,
@@ -60,7 +55,6 @@ function OrderCard({
 }) {
   const { theme } = useTheme();
   
-  const orderId = order?.id ? order.id.slice(0, 8) : "N/A";
   const status = order?.status || "pending";
   const total = order?.total ? Number(order.total).toLocaleString() : "0";
 
@@ -78,7 +72,6 @@ function OrderCard({
     icon = "truck";
   }
 
-  // ✅ Get customer info from order object (coming from backend now)
   const customerInfo = {
     name: order.customerName || "Customer",
     phone: order.customerPhone || undefined,
@@ -102,26 +95,17 @@ function OrderCard({
       {Array.isArray(order.items) && order.items.length > 0 && (
         <View style={{ marginTop: 10 }}>
           {order.items.map((item: any, idx: number) => (
-            <View
-              key={idx}
-              style={{ flexDirection: "row", marginBottom: 8, alignItems: "center" }}
-            >
-              <Image
-                source={{ uri: getImageUrl(item.image) }}
-                style={{ width: 40, height: 40, borderRadius: 6, marginRight: 10 }}
-              />
+            <View key={idx} style={{ flexDirection: "row", marginBottom: 8, alignItems: "center" }}>
+              <Image source={{ uri: getImageUrl(item.image) }} style={{ width: 40, height: 40, borderRadius: 6, marginRight: 10 }} />
               <View style={{ flex: 1 }}>
                 <ThemedText type="body">{item.name}</ThemedText>
-                <ThemedText type="caption">
-                  Qty: {item.quantity} · 📍 {item.location || "N/A"}
-                </ThemedText>
+                <ThemedText type="caption">Qty: {item.quantity} · 📍 {item.location || "N/A"}</ThemedText>
               </View>
             </View>
           ))}
         </View>
       )}
 
-      {/* Print Receipt Button */}
       <OrderReceipt
         order={{
           id: order.id,
@@ -131,16 +115,13 @@ function OrderCard({
           createdAt: order.createdAt || new Date().toISOString(),
           items: order.items || [],
         }}
-        customer={customerInfo} // ✅ Pass actual customer info
-        storeName={storeName} // ✅ Pass actual store name
+        customer={customerInfo}
+        storeName={storeName}
       />
       
       {nextStatus !== "" && (
         <TouchableOpacity 
-          style={[
-            styles.actionBtn, 
-            { backgroundColor: status === "picking" ? "#2ecc71" : theme.primary }
-          ]}
+          style={[styles.actionBtn, { backgroundColor: status === "picking" ? "#2ecc71" : theme.primary }]}
           onPress={() => onUpdateStatus(order.id, nextStatus)}
         >
           <Feather name={icon} size={16} color="white" />
@@ -150,7 +131,7 @@ function OrderCard({
     </Card>
   );
 }
-// Add this component above your main component
+
 function CustomAlertModal({ 
   visible, 
   title, 
@@ -166,17 +147,11 @@ function CustomAlertModal({
   
   return (
     <Modal transparent visible={visible} animationType="fade">
-      <Pressable 
-        style={styles.alertOverlay}
-        onPress={onClose}
-      >
+      <Pressable style={styles.alertOverlay} onPress={onClose}>
         <View style={styles.alertContainer}>
           <ThemedText type="h3" style={styles.alertTitle}>{title}</ThemedText>
           <ThemedText style={styles.alertMessage}>{message}</ThemedText>
-          <TouchableOpacity 
-            style={styles.alertButton}
-            onPress={onClose}
-          >
+          <TouchableOpacity style={styles.alertButton} onPress={onClose}>
             <ThemedText style={styles.alertButtonText}>Close</ThemedText>
           </TouchableOpacity>
         </View>
@@ -185,15 +160,12 @@ function CustomAlertModal({
   );
 }
 
-
-
 export default function PickerDashboardScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // --- STATE ---
   const [activeTab, setActiveTab] = useState<"orders" | "inventory">("orders");
   const [searchQuery, setSearchQuery] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
@@ -211,33 +183,31 @@ export default function PickerDashboardScreen() {
   const [formImage, setFormImage] = useState<string | null>(null);
   const [imageChanged, setImageChanged] = useState(false);
 
-  // --- QUERIES ---
-const { data: categories = [] } = useQuery<Category[]>({
-  queryKey: ["/api/categories"],
-  queryFn: async () => {
-    const res = await fetch(`${BASE_URL}/api/categories`);
-    const json = await res.json();
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
 
-    // ✅ normalize backend response
-    if (Array.isArray(json)) return json;
-    if (Array.isArray(json.categories)) return json.categories;
-    if (Array.isArray(json.data)) return json.data;
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
 
-    console.warn("⚠️ Unexpected categories response:", json);
-    return [];
-  }
-});
+  const showAlert = (title: string, message: string) => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertVisible(true);
+  };
 
-const [alertVisible, setAlertVisible] = useState(false);
-const [alertTitle, setAlertTitle] = useState("");
-const [alertMessage, setAlertMessage] = useState("");
-
-const showAlert = (title: string, message: string) => {
-  setAlertTitle(title);
-  setAlertMessage(message);
-  setAlertVisible(true);
-};
-
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/categories`);
+      const json = await res.json();
+      if (Array.isArray(json)) return json;
+      if (Array.isArray(json.categories)) return json.categories;
+      if (Array.isArray(json.data)) return json.data;
+      console.warn("⚠️ Unexpected categories response:", json);
+      return [];
+    }
+  });
 
   const { data: inventory, isLoading: invLoading, refetch: refetchInv } = useQuery<InventoryItem[]>({
     queryKey: ["/api/picker/inventory", user?.id],
@@ -255,16 +225,14 @@ const showAlert = (title: string, message: string) => {
     }
   });
 
-  // --- MEMOS ---
   const ordersToDisplay = useMemo(() => {
-  if (!dashboard?.orders) return [];
-  return [
-    ...(dashboard.orders.pending || []),
-    ...(dashboard.orders.active || []),
-    ...(dashboard.orders.packed || []), // ✅ REQUIRED
-  ];
-}, [dashboard]);
-
+    if (!dashboard?.orders) return [];
+    return [
+      ...(dashboard.orders.pending || []),
+      ...(dashboard.orders.active || []),
+      ...(dashboard.orders.packed || []),
+    ];
+  }, [dashboard]);
 
   const filteredInventory = useMemo(() => {
     if (!inventory) return [];
@@ -273,270 +241,273 @@ const showAlert = (title: string, message: string) => {
     );
   }, [inventory, searchQuery]);
 
-  // --- HANDLERS ---
   const onRefresh = async () => {
     await Promise.all([refetchInv(), refetchDash()]);
   };
 
-const pickImage = async () => {
-  console.log("📷 Opening image picker...");
-  
-  let result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images'],
-    allowsEditing: true,
-    aspect: [1, 1],
-    quality: 0.7,
-  });
-  
-  if (!result.canceled && result.assets[0]) {
-    console.log("✅ Image selected:", {
-      uri: result.assets[0].uri,
-      width: result.assets[0].width,
-      height: result.assets[0].height,
-      fileSize: result.assets[0].fileSize
+  const pickImage = async () => {
+    console.log("📷 Opening image picker...");
+    
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
     });
     
-    setFormImage(result.assets[0].uri);
-    setImageChanged(true);
-  } else {
-    console.log("❌ Image picker cancelled");
-  }
-};
-
-const openEditModal = (item?: InventoryItem) => {
-  if (item) {
-    setIsEditing(true);
-    setSelectedInventoryId(item.id);
-    setFormName(item.product.name);
-    setFormBrand(item.product.brand || "");
-    setFormDescription(item.product.description || "");
-    setFormOriginalPrice(item.product.originalPrice?.toString() || "");
-    setFormPrice(item.product.price.toString());
-    setFormStock(item.stockCount.toString());
-    setFormLocation(item.location ?? "");
-    setFormCategoryId(item.categoryId || (item as any).product?.categoryId || null);
-    setFormImage(item.product.image ?? null);
-    setImageChanged(false); // ✅ Image hasn't changed yet
-    
-    console.log("📝 Editing item:", item.id, "Image:", item.product.image);
-  } else {
-    setIsEditing(false);
-    setSelectedInventoryId(null);
-    setFormName("");
-    setFormBrand("");
-    setFormDescription("");
-    setFormOriginalPrice("");
-    setFormPrice("");
-    setFormStock("");
-    setFormLocation("");
-    setFormCategoryId(null);
-    setFormImage(null);
-    setImageChanged(false);
-    
-    console.log("➕ Creating new item");
-  }
-  setModalVisible(true);
-};
-
-const handleSaveProduct = async () => {
-  console.log("💾 Save product called", { isEditing, selectedInventoryId, imageChanged, formImage });
-  
-  if (!user || !user.id) {
-    showAlert("Error", "You must be logged in to save products.");
-    return;
-  }
-
-  // Validation (keep your existing validation code)
-  if (!formCategoryId) {
-    showAlert("Category Required", "Please select a category for this product.");
-    return;
-  }
-
-  if (!formName.trim()) {
-    showAlert("Name Required", "Please enter a product name.");
-    return;
-  }
-
-  if (!formPrice.trim() || isNaN(Number(formPrice)) || Number(formPrice) <= 0) {
-    showAlert("Invalid Price", "Please enter a valid price greater than 0.");
-    return;
-  }
-
-  if (!formStock.trim() || isNaN(Number(formStock)) || Number(formStock) < 0) {
-    showAlert("Invalid Stock", "Please enter a valid stock quantity (0 or more).");
-    return;
-  }
-
-  if (formOriginalPrice.trim() && (isNaN(Number(formOriginalPrice)) || Number(formOriginalPrice) <= 0)) {
-    showAlert("Invalid Original Price", "Original price must be a valid number greater than 0.");
-    return;
-  }
-
-  if (formOriginalPrice.trim() && Number(formOriginalPrice) <= Number(formPrice)) {
-    showAlert("Price Error", "Original price should be higher than the current price.");
-    return;
-  }
-
-  console.log("✅ Validation passed, building FormData");
-
-  const formData = new FormData();
-  formData.append("userId", user.id); 
-  formData.append("name", formName.trim());
-  formData.append("brand", formBrand.trim() || "Generic");
-  formData.append("description", formDescription.trim() || "");
-  formData.append("price", formPrice.trim());
-  formData.append("stock", formStock.trim());
-  formData.append("location", formLocation.trim() || "");
-  formData.append("categoryId", formCategoryId!);
-
-  if (formOriginalPrice.trim()) {
-    formData.append("originalPrice", formOriginalPrice.trim());
-  }
-
-  if (isEditing && selectedInventoryId) {
-    formData.append("inventoryId", selectedInventoryId);
-  }
-
-  // ✅ FIXED IMAGE LOGIC
-  if (formImage && formImage.startsWith('file://')) {
-    // This is a new local image - always upload it
-    const filename = formImage.split('/').pop() || 'photo.jpg';
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : 'image/jpeg';
-    
-    console.log("📤 Uploading image:", { filename, type, uri: formImage.substring(0, 50) });
-    
-    formData.append("image", {
-      uri: formImage,
-      name: filename,
-      type: type,
-    } as any);
-  } else if (!formImage && !isEditing) {
-    console.log("⚠️ No image selected for new product");
-  } else if (formImage && !formImage.startsWith('file://')) {
-    console.log("ℹ️ Using existing image URL:", formImage);
-  }
-
-  try {
-    const url = isEditing 
-      ? `${BASE_URL}/api/picker/inventory/update` 
-      : `${BASE_URL}/api/picker/inventory`;
-
-    console.log(`📡 Sending ${isEditing ? 'UPDATE' : 'CREATE'} request to:`, url);
-
-    const response = await fetch(url, {
-      method: "POST",
-      body: formData,
-      // Don't set Content-Type - let the browser set it with boundary
-    });
-
-    const result = await response.json();
-    console.log("📥 Response:", { ok: response.ok, status: response.status, result });
-
-    if (response.ok) {
-      setModalVisible(false);
-      await queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
-      await queryClient.refetchQueries({ queryKey: ["/api/picker/inventory", user?.id] });
-      showAlert("Success", isEditing ? "Product Updated!" : "Product Added!");
+    if (!result.canceled && result.assets[0]) {
+      console.log("✅ Image selected:", {
+        uri: result.assets[0].uri,
+        width: result.assets[0].width,
+        height: result.assets[0].height,
+      });
       
-      // Reset form
+      setFormImage(result.assets[0].uri);
+      setImageChanged(true);
+    } else {
+      console.log("❌ Image picker cancelled");
+    }
+  };
+
+  const openEditModal = (item?: InventoryItem) => {
+    if (item) {
+      setIsEditing(true);
+      setSelectedInventoryId(item.id);
+      setFormName(item.product.name);
+      setFormBrand(item.product.brand || "");
+      setFormDescription(item.product.description || "");
+      setFormOriginalPrice(item.product.originalPrice?.toString() || "");
+      setFormPrice(item.product.price.toString());
+      setFormStock(item.stockCount.toString());
+      setFormLocation(item.location ?? "");
+      setFormCategoryId(item.categoryId || (item as any).product?.categoryId || null);
+      setFormImage(item.product.image ?? null);
+      setImageChanged(false);
+      console.log("📝 Editing item:", item.id, "Image:", item.product.image);
+    } else {
+      setIsEditing(false);
+      setSelectedInventoryId(null);
       setFormName("");
       setFormBrand("");
       setFormDescription("");
-      setFormPrice("");
       setFormOriginalPrice("");
+      setFormPrice("");
       setFormStock("");
       setFormLocation("");
       setFormCategoryId(null);
       setFormImage(null);
       setImageChanged(false);
-    } else {
-      showAlert("Error", result.error || "Save failed");
+      console.log("➕ Creating new item");
     }
-  } catch (err) {
-    console.error("❌ Network error:", err);
-    showAlert("Error", "Server connection failed");
-  }
-};
+    setModalVisible(true);
+  };
 
-const handleDeleteProduct = async (id: string) => {
-  console.log("🗑️ Delete initiated for inventory ID:", id);
-  
-  Alert.alert(
-    "Delete Item", 
-    "Remove this from your store inventory?", 
-    [
-      { text: "Cancel", style: "cancel", onPress: () => console.log("Delete cancelled") },
-      { 
-        text: "Delete", 
-        style: "destructive", 
-        onPress: async () => {
-          try {
-            const url = `${BASE_URL}/api/picker/inventory/${id}?userId=${user?.id}`;
-            console.log("📡 DELETE request to:", url);
-            
-            const res = await fetch(url, { 
-              method: 'DELETE' 
-            });
-            
-            const responseText = await res.text();
-            console.log("📥 DELETE response:", {
-              ok: res.ok,
-              status: res.status,
-              body: responseText
-            });
-            
-            if (res.ok) {
-              await queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
-              await queryClient.refetchQueries({ queryKey: ["/api/picker/inventory", user?.id] });
-              console.log("✅ Item deleted successfully");
-              Alert.alert("Success", "Item removed from inventory");
-            } else {
-              const error = responseText ? JSON.parse(responseText) : { error: "Unknown error" };
-              console.error("❌ Delete failed:", error);
-              Alert.alert("Error", error.error || "Delete failed");
-            }
-          } catch (err) { 
-            console.error("❌ Delete error:", err);
-            Alert.alert("Error", "Network error. Please try again."); 
+  const handleSaveProduct = async () => {
+    console.log("💾 Save product called", { 
+      isEditing, 
+      selectedInventoryId, 
+      imageChanged, 
+      formImage: formImage?.substring(0, 50) 
+    });
+    
+    if (!user || !user.id) {
+      showAlert("Error", "You must be logged in to save products.");
+      return;
+    }
+
+    if (!formCategoryId) {
+      showAlert("Category Required", "Please select a category for this product.");
+      return;
+    }
+
+    if (!formName.trim()) {
+      showAlert("Name Required", "Please enter a product name.");
+      return;
+    }
+
+    if (!formPrice.trim() || isNaN(Number(formPrice)) || Number(formPrice) <= 0) {
+      showAlert("Invalid Price", "Please enter a valid price greater than 0.");
+      return;
+    }
+
+    if (!formStock.trim() || isNaN(Number(formStock)) || Number(formStock) < 0) {
+      showAlert("Invalid Stock", "Please enter a valid stock quantity (0 or more).");
+      return;
+    }
+
+    if (formOriginalPrice.trim() && (isNaN(Number(formOriginalPrice)) || Number(formOriginalPrice) <= 0)) {
+      showAlert("Invalid Original Price", "Original price must be a valid number greater than 0.");
+      return;
+    }
+
+    if (formOriginalPrice.trim() && Number(formOriginalPrice) <= Number(formPrice)) {
+      showAlert("Price Error", "Original price should be higher than the current price.");
+      return;
+    }
+
+    console.log("✅ Validation passed, building FormData");
+
+    const formData = new FormData();
+    formData.append("userId", user.id); 
+    formData.append("name", formName.trim());
+    formData.append("brand", formBrand.trim() || "Generic");
+    formData.append("description", formDescription.trim() || "");
+    formData.append("price", formPrice.trim());
+    formData.append("stock", formStock.trim());
+    formData.append("location", formLocation.trim() || "");
+    formData.append("categoryId", formCategoryId!);
+
+    if (formOriginalPrice.trim()) {
+      formData.append("originalPrice", formOriginalPrice.trim());
+    }
+
+    if (isEditing && selectedInventoryId) {
+      formData.append("inventoryId", selectedInventoryId);
+    }
+
+    // ✅ Handle both blob: (web) and file:// (mobile) URLs
+    if (formImage && imageChanged) {
+      const isNewImage = formImage.startsWith('file://') || formImage.startsWith('blob:');
+      
+      if (isNewImage) {
+        console.log("📤 Preparing to upload NEW image:", formImage.substring(0, 50));
+        
+        try {
+          if (formImage.startsWith('blob:')) {
+            console.log("🌐 Converting blob to file...");
+            const response = await fetch(formImage);
+            const blob = await response.blob();
+            const filename = `image-${Date.now()}.jpg`;
+            const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
+            formData.append("image", file as any);
+            console.log("✅ Blob converted and added to FormData");
+          } else {
+            const filename = formImage.split('/').pop() || 'photo.jpg';
+            const match = /\.(\w+)$/.exec(filename);
+            const type = match ? `image/${match[1]}` : 'image/jpeg';
+            formData.append("image", {
+              uri: formImage,
+              name: filename,
+              type: type,
+            } as any);
+            console.log("✅ Mobile image added to FormData");
           }
+        } catch (error) {
+          console.error("❌ Error processing image:", error);
+          showAlert("Error", "Failed to process image");
+          return;
         }
       }
-    ]
-  );
-};
+    } else {
+      console.log("ℹ️ No new image to upload", { formImage, imageChanged });
+    }
 
-const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
-  if (!user?.id) return;
+    try {
+      const url = isEditing 
+        ? `${BASE_URL}/api/picker/inventory/update` 
+        : `${BASE_URL}/api/picker/inventory`;
 
-  const url =
-    nextStatus === "picking"
+      console.log(`📡 Sending ${isEditing ? 'UPDATE' : 'CREATE'} request to:`, url);
+
+      const response = await fetch(url, {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+      console.log("📥 Response:", { ok: response.ok, status: response.status, result });
+
+      if (response.ok) {
+        setModalVisible(false);
+        await queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
+        await queryClient.refetchQueries({ queryKey: ["/api/picker/inventory", user?.id] });
+        showAlert("Success", isEditing ? "Product Updated!" : "Product Added!");
+        
+        setFormName("");
+        setFormBrand("");
+        setFormDescription("");
+        setFormPrice("");
+        setFormOriginalPrice("");
+        setFormStock("");
+        setFormLocation("");
+        setFormCategoryId(null);
+        setFormImage(null);
+        setImageChanged(false);
+      } else {
+        showAlert("Error", result.error || "Save failed");
+      }
+    } catch (err) {
+      console.error("❌ Network error:", err);
+      showAlert("Error", "Server connection failed");
+    }
+  };
+
+  const handleDeleteProduct = (id: string) => {
+    console.log("🗑️ Delete initiated for inventory ID:", id);
+    setItemToDelete(id);
+    setDeleteModalVisible(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+    
+    try {
+      const url = `${BASE_URL}/api/picker/inventory/${itemToDelete}?userId=${user?.id}`;
+      console.log("📡 DELETE request to:", url);
+      
+      const res = await fetch(url, { method: 'DELETE' });
+      const responseText = await res.text();
+      
+      console.log("📥 DELETE response:", {
+        ok: res.ok,
+        status: res.status,
+        body: responseText
+      });
+      
+      if (res.ok) {
+        await queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
+        await queryClient.refetchQueries({ queryKey: ["/api/picker/inventory", user?.id] });
+        console.log("✅ Item deleted successfully");
+        showAlert("Success", "Item removed from inventory");
+      } else {
+        const error = responseText ? JSON.parse(responseText) : { error: "Unknown error" };
+        console.error("❌ Delete failed:", error);
+        showAlert("Error", error.error || "Delete failed");
+      }
+    } catch (err) { 
+      console.error("❌ Delete error:", err);
+      showAlert("Error", "Network error. Please try again."); 
+    } finally {
+      setDeleteModalVisible(false);
+      setItemToDelete(null);
+    }
+  };
+
+  const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
+    if (!user?.id) return;
+
+    const url = nextStatus === "picking"
       ? `${BASE_URL}/api/orders/${orderId}/take`
       : `${BASE_URL}/api/orders/${orderId}/pack`;
 
-  const body =
-    nextStatus === "picking"
+    const body = nextStatus === "picking"
       ? { userId: user.id, role: "picker" }
-      :{ userId: user.id };
+      : { userId: user.id };
 
-  const response = await fetch(url, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
 
-  if (!response.ok) {
-    const err = await response.json();
-    Alert.alert("Error", err.error || "Update failed");
-    return;
-  }
+    if (!response.ok) {
+      const err = await response.json();
+      showAlert("Error", err.error || "Update failed");
+      return;
+    }
 
-  queryClient.invalidateQueries({
-  queryKey: ["/api/picker/dashboard", user?.id],
-});
-};
-
-
+    queryClient.invalidateQueries({ queryKey: ["/api/picker/dashboard", user?.id] });
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -596,24 +567,24 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
           </>
         ) : (
           <View>
-           {dashLoading ? (
-      <ActivityIndicator size="large" color={theme.primary} />
-    ) : ordersToDisplay.length > 0 ? (
-      ordersToDisplay.map((order: any) => (
-      <OrderCard 
-        key={order.id} 
-        order={order} 
-        onUpdateStatus={handleUpdateOrderStatus}
-        storeName={dashboard?.store?.name || "Store"} // ✅ Use store.name
-        userId={user?.id || ""}
-      />
-    ))
-    ) : (
-      <View style={styles.centeredContent}>
-        <Feather name="package" size={50} color="#ccc" />
-        <ThemedText style={{ marginTop: 10, color: theme.textSecondary }}>No active orders</ThemedText>
-      </View>
-    )}
+            {dashLoading ? (
+              <ActivityIndicator size="large" color={theme.primary} />
+            ) : ordersToDisplay.length > 0 ? (
+              ordersToDisplay.map((order: any) => (
+                <OrderCard 
+                  key={order.id} 
+                  order={order} 
+                  onUpdateStatus={handleUpdateOrderStatus}
+                  storeName={dashboard?.store?.name || "Store"}
+                  userId={user?.id || ""}
+                />
+              ))
+            ) : (
+              <View style={styles.centeredContent}>
+                <Feather name="package" size={50} color="#ccc" />
+                <ThemedText style={{ marginTop: 10, color: theme.textSecondary }}>No active orders</ThemedText>
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
@@ -627,32 +598,30 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
             </TouchableOpacity>
           </View>
           <ScrollView showsVerticalScrollIndicator={false}>
-            <ThemedText style={styles.label}>Category</ThemedText>
+            <ThemedText style={styles.label}>Category *</ThemedText>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryArea}>
               {Array.isArray(categories) && categories.map(cat => (
-  <TouchableOpacity 
-    key={cat.id} 
-    onPress={() => setFormCategoryId(cat.id)}
-    style={[
-      styles.categoryChip,
-      formCategoryId === cat.id && { backgroundColor: theme.primary }
-    ]}
-  >
-    <ThemedText
-      style={[
-        styles.chipText,
-        formCategoryId === cat.id && { color: "white" }
-      ]}
-    >
-      {cat.name}
-    </ThemedText>
-  </TouchableOpacity>
-))}
-
+                <TouchableOpacity 
+                  key={cat.id} 
+                  onPress={() => setFormCategoryId(cat.id)}
+                  style={[styles.categoryChip, formCategoryId === cat.id && { backgroundColor: theme.primary }]}
+                >
+                  <ThemedText style={[styles.chipText, formCategoryId === cat.id && { color: "white" }]}>
+                    {cat.name}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
             </ScrollView>
 
             <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-              {formImage ? <Image source={{ uri: formImage }} style={styles.fullImage} /> : <View style={styles.imagePlaceholder}><Feather name="camera" size={40} color="#ccc" /></View>}
+              {formImage ? (
+                <Image source={{ uri: formImage }} style={styles.fullImage} />
+              ) : (
+                <View style={styles.imagePlaceholder}>
+                  <Feather name="camera" size={40} color="#ccc" />
+                  <ThemedText style={{ marginTop: 8, color: '#999' }}>Tap to add image</ThemedText>
+                </View>
+              )}
             </TouchableOpacity>
 
             <ThemedText style={styles.label}>Product Name *</ThemedText>
@@ -692,40 +661,60 @@ const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
           </ScrollView>
         </ThemedView>
       </Modal>
-      <CustomAlertModal
-      visible={alertVisible}
-      title={alertTitle}
-      message={alertMessage}
-      onClose={() => setAlertVisible(false)}
-    />
-    </ThemedView>
 
-    
-  
-);
+      <CustomAlertModal
+        visible={alertVisible}
+        title={alertTitle}
+        message={alertMessage}
+        onClose={() => setAlertVisible(false)}
+      />
+
+      <Modal transparent visible={deleteModalVisible} animationType="fade">
+        <Pressable style={styles.alertOverlay} onPress={() => setDeleteModalVisible(false)}>
+          <View style={styles.alertContainer}>
+            <ThemedText type="h3" style={styles.alertTitle}>Delete Item</ThemedText>
+            <ThemedText style={styles.alertMessage}>Remove this item from your store inventory?</ThemedText>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity 
+                style={[styles.alertButton, { backgroundColor: '#ddd', flex: 1 }]}
+                onPress={() => setDeleteModalVisible(false)}
+              >
+                <ThemedText style={[styles.alertButtonText, { color: '#333' }]}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.alertButton, { backgroundColor: '#e74c3c', flex: 1 }]}
+                onPress={confirmDelete}
+              >
+                <ThemedText style={styles.alertButtonText}>Delete</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+    </ThemedView>
+  );
 }
 
 function InventoryItemRow({ item, onEdit, onDelete }: { item: InventoryItem; onEdit: (item: InventoryItem) => void; onDelete: (id: string) => void; }) {
   const { theme } = useTheme();
   return (
     <View style={[styles.inventoryRow, { borderBottomColor: theme.border }]}>
-       <Image source={{ uri: getImageUrl(item.product.image) }} style={styles.inventoryImg} />
-       <View style={styles.inventoryInfo}>
-         {/* CHANGE: Changed type to "body" and added fontWeight: '600' */}
-         <ThemedText type="body" style={{ fontWeight: '600' }}>
-           {item.product.name}
-         </ThemedText>
-         <ThemedText type="caption">Stock: {item.stockCount} | Rp {item.product.price}</ThemedText>
-       </View>
-       <TouchableOpacity style={styles.iconBtn} onPress={() => {
-  console.log("🗑️ Delete button pressed for:", item.id);
-  onDelete(item.id);
-}}>
-         <Feather name="trash-2" size={18} color="#e74c3c" />
-       </TouchableOpacity>
-       <TouchableOpacity style={[styles.editBtnSmall, { backgroundColor: theme.primary + "15" }]} onPress={() => onEdit(item)}>
-         <Feather name="edit-2" size={16} color={theme.primary} />
-       </TouchableOpacity>
+      <Image source={{ uri: getImageUrl(item.product.image) }} style={styles.inventoryImg} />
+      <View style={styles.inventoryInfo}>
+        <ThemedText type="body" style={{ fontWeight: '600' }}>
+          {item.product.name}
+        </ThemedText>
+        <ThemedText type="caption">Stock: {item.stockCount} | Rp {item.product.price}</ThemedText>
+      </View>
+      <TouchableOpacity style={styles.iconBtn} onPress={() => {
+        console.log("🗑️ Delete button pressed for:", item.id);
+        onDelete(item.id);
+      }}>
+        <Feather name="trash-2" size={18} color="#e74c3c" />
+      </TouchableOpacity>
+      <TouchableOpacity style={[styles.editBtnSmall, { backgroundColor: theme.primary + "15" }]} onPress={() => onEdit(item)}>
+        <Feather name="edit-2" size={16} color={theme.primary} />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -767,7 +756,7 @@ const styles = StyleSheet.create({
   orderPrice: { fontWeight: 'bold', fontSize: 16 },
   actionBtn: { flexDirection: 'row', padding: 12, borderRadius: 8, marginTop: 15, justifyContent: 'center', alignItems: 'center' },
   actionBtnText: { color: 'white', fontWeight: 'bold', marginLeft: 8 },
-   alertOverlay: {
+  alertOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
@@ -809,5 +798,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-
 });
