@@ -116,11 +116,13 @@ function OrderCard({
   
   const isAtStore = order.status === "packed";
   const isOnWay = order.status === "delivering";
+  const isDelivered = order.status === "delivered";
 
   const getStatusColor = () => {
+    if (isDelivered) return theme.success;
     if (isAtStore) return theme.warning;
     if (isOnWay) return theme.primary;
-    return theme.success;
+    return theme.textSecondary;
   };
 
   const openMaps = () => {
@@ -151,7 +153,7 @@ function OrderCard({
         <View>
           <ThemedText type="h3">Order #{order.id.slice(0, 8).toUpperCase()}</ThemedText>
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            {isAtStore ? "📍 Waiting at Store" : "🚚 In Transit"}
+            {isDelivered ? "✅ Delivered" : isAtStore ? "📍 Waiting at Store" : "🚚 In Transit"}
           </ThemedText>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor() + "20" }]}>
@@ -164,13 +166,15 @@ function OrderCard({
       <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
       <View style={styles.orderDetails}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 8 }}>
-          <Feather name="home" size={14} color={theme.textSecondary} />
-          <View style={{ flex: 1, height: 2, backgroundColor: isAtStore ? theme.border : theme.primary }} />
-          <Feather name="truck" size={16} color={isOnWay ? theme.primary : theme.textSecondary} />
-          <View style={{ flex: 1, height: 2, backgroundColor: theme.border }} />
-          <Feather name="map-pin" size={14} color={theme.textSecondary} />
-        </View>
+        {!isDelivered && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 8 }}>
+            <Feather name="home" size={14} color={theme.textSecondary} />
+            <View style={{ flex: 1, height: 2, backgroundColor: isAtStore ? theme.border : theme.primary }} />
+            <Feather name="truck" size={16} color={isOnWay ? theme.primary : theme.textSecondary} />
+            <View style={{ flex: 1, height: 2, backgroundColor: theme.border }} />
+            <Feather name="map-pin" size={14} color={theme.textSecondary} />
+          </View>
+        )}
 
         <View style={styles.detailRow}>
           <Feather name="package" size={16} color={theme.textSecondary} />
@@ -190,51 +194,61 @@ function OrderCard({
             <ThemedText type="h3" style={{ color: theme.warning }}>Rp {order.total.toLocaleString()}</ThemedText>
           </View>
         )}
-      </View>
 
-      <View style={styles.orderActions}>
-        <Pressable style={[styles.mapButton, { borderColor: theme.border }]} onPress={openMaps}>
-          <Feather name="navigation" size={18} color={theme.secondary} />
-        </Pressable>
-
-        <Pressable style={[styles.mapButton, { borderColor: theme.border }]} onPress={() => navigation.navigate("Chat", { orderId: order.id })}>
-          <Feather name="message-square" size={18} color={theme.primary} />
-        </Pressable>
-        
-        {isAtStore && (
-          <Pressable
-            style={[styles.actionButton, { backgroundColor: disabled ? "#999" : theme.primary, flex: 1 }]}
-            onPress={() => onPickup(order.id)}
-            disabled={isUpdating || disabled}
-          >
-            {isUpdating ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Feather name="package" size={16} color="#FFF" />
-                <ThemedText type="button" style={{ color: "#FFF" }}>Pick Up</ThemedText>
-              </View>
-            )}
-          </Pressable>
-        )}
-
-        {isOnWay && (
-          <Pressable
-            style={[styles.actionButton, { backgroundColor: disabled ? "#999" : theme.success, flex: 1 }]}
-            onPress={() => onComplete(order.id)}
-            disabled={isUpdating || disabled}
-          >
-            {isUpdating ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Feather name="check-circle" size={16} color="#FFF" />
-                <ThemedText type="button" style={{ color: "#FFF" }}>Enter PIN</ThemedText>
-              </View>
-            )}
-          </Pressable>
+        {isDelivered && order.deliveredAt && (
+          <View style={{ marginTop: 8 }}>
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+              Delivered: {new Date(order.deliveredAt).toLocaleString()}
+            </ThemedText>
+          </View>
         )}
       </View>
+
+      {!isDelivered && (
+        <View style={styles.orderActions}>
+          <Pressable style={[styles.mapButton, { borderColor: theme.border }]} onPress={openMaps}>
+            <Feather name="navigation" size={18} color={theme.secondary} />
+          </Pressable>
+
+          <Pressable style={[styles.mapButton, { borderColor: theme.border }]} onPress={() => navigation.navigate("Chat", { orderId: order.id })}>
+            <Feather name="message-square" size={18} color={theme.primary} />
+          </Pressable>
+          
+          {isAtStore && (
+            <Pressable
+              style={[styles.actionButton, { backgroundColor: disabled ? "#999" : theme.primary, flex: 1 }]}
+              onPress={() => onPickup(order.id)}
+              disabled={isUpdating || disabled}
+            >
+              {isUpdating ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Feather name="package" size={16} color="#FFF" />
+                  <ThemedText type="button" style={{ color: "#FFF" }}>Pick Up</ThemedText>
+                </View>
+              )}
+            </Pressable>
+          )}
+
+          {isOnWay && (
+            <Pressable
+              style={[styles.actionButton, { backgroundColor: disabled ? "#999" : theme.success, flex: 1 }]}
+              onPress={() => onComplete(order.id)}
+              disabled={isUpdating || disabled}
+            >
+              {isUpdating ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Feather name="check-circle" size={16} color="#FFF" />
+                  <ThemedText type="button" style={{ color: "#FFF" }}>Enter PIN</ThemedText>
+                </View>
+              )}
+            </Pressable>
+          )}
+        </View>
+      )}
     </Card>
   );
 }
@@ -304,8 +318,10 @@ export default function DriverDashboardScreen() {
       Alert.alert("✅ Success", "Order delivered successfully!");
     },
     onError: (error: Error) => {
-      Alert.alert("❌ Invalid PIN", error.message);
+      // ✅ Show alert for incorrect PIN
+      Alert.alert("❌ Incorrect PIN", error.message || "The PIN you entered is incorrect. Please try again.");
       setUpdatingOrderId(null);
+      // ✅ Don't close modal so user can retry
     }
   });
 
@@ -343,7 +359,14 @@ export default function DriverDashboardScreen() {
   const activeOrders = dashboard?.orders?.active || [];
   const completedOrders = dashboard?.orders?.completed || [];
   const hasActiveDelivery = activeOrders.length > 0;
-  const allActiveOrders = hasActiveDelivery ? activeOrders : readyOrders;
+  
+  // ✅ Sort by creation date - newest first (most recent at top)
+  const allActiveOrders = (hasActiveDelivery ? activeOrders : readyOrders)
+    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  
+  const sortedCompletedOrders = completedOrders
+    .sort((a: any, b: any) => new Date(b.deliveredAt || b.createdAt).getTime() - new Date(a.deliveredAt || a.createdAt).getTime());
+  
   const todayEarnings = completedOrders.reduce((sum: number, order: any) => sum + order.total, 0);
 
   return (
@@ -375,6 +398,50 @@ export default function DriverDashboardScreen() {
             <Feather name="inbox" size={48} color={theme.textSecondary} />
             <ThemedText type="h3" style={{ marginTop: Spacing.md }}>No Deliveries</ThemedText>
           </Card>
+        )}
+
+        {/* ✅ Today's Completed Deliveries Section */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.xl }}>
+          <ThemedText type="h3" style={styles.sectionTitle}>
+            Today's Deliveries ({sortedCompletedOrders.length})
+          </ThemedText>
+          <Pressable onPress={() => setShowCompleted(!showCompleted)}>
+            <Feather name={showCompleted ? "chevron-up" : "chevron-down"} size={24} color={theme.text} />
+          </Pressable>
+        </View>
+
+        {showCompleted && (
+          <>
+            {sortedCompletedOrders.length > 0 ? (
+              <>
+                <Card style={{ padding: 16, marginBottom: 12, backgroundColor: theme.success + "15" }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <ThemedText type="body">Total Earnings Today</ThemedText>
+                    <ThemedText type="h2" style={{ color: theme.success }}>
+                      Rp {todayEarnings.toLocaleString()}
+                    </ThemedText>
+                  </View>
+                </Card>
+                
+                {sortedCompletedOrders.map((order: any) => (
+                  <OrderCard 
+                    key={order.id} 
+                    order={order}
+                    onPickup={() => {}}
+                    onComplete={() => {}}
+                    isUpdating={false}
+                  />
+                ))}
+              </>
+            ) : (
+              <Card style={styles.emptyCard}>
+                <Feather name="check-circle" size={48} color={theme.textSecondary} />
+                <ThemedText type="body" style={{ marginTop: Spacing.md, color: theme.textSecondary }}>
+                  No deliveries completed today
+                </ThemedText>
+              </Card>
+            )}
+          </>
         )}
       </ScrollView>
 

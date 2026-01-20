@@ -225,13 +225,18 @@ export default function PickerDashboardScreen() {
     }
   });
 
+  // ✅ Sort orders by creation date - newest first (most recent at top)
   const ordersToDisplay = useMemo(() => {
     if (!dashboard?.orders) return [];
-    return [
+    const allOrders = [
       ...(dashboard.orders.pending || []),
       ...(dashboard.orders.active || []),
       ...(dashboard.orders.packed || []),
     ];
+    // Sort by creation date descending (newest first)
+    return allOrders.sort((a: any, b: any) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   }, [dashboard]);
 
   const filteredInventory = useMemo(() => {
@@ -365,7 +370,6 @@ export default function PickerDashboardScreen() {
       formData.append("inventoryId", selectedInventoryId);
     }
 
-    // ✅ Handle both blob: (web) and file:// (mobile) URLs
     if (formImage && imageChanged) {
       const isNewImage = formImage.startsWith('file://') || formImage.startsWith('blob:');
       

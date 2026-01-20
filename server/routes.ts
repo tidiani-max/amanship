@@ -1476,9 +1476,12 @@ app.put("/api/driver/orders/:id/complete", async (req, res) => {
       return res.status(400).json({ error: "Order must be in delivering status" });
     }
 
-    // 4️⃣ Verify PIN matches
+    // 4️⃣ Verify PIN matches - IMPROVED ERROR MESSAGE
     if (order.deliveryPin !== deliveryPin.toString()) {
-      return res.status(401).json({ error: "Invalid PIN" });
+      console.log(`❌ PIN mismatch - Expected: ${order.deliveryPin}, Got: ${deliveryPin}`);
+      return res.status(401).json({ 
+        error: "Incorrect PIN. Please check with the customer and try again." 
+      });
     }
 
     // 5️⃣ Complete the order
@@ -1499,6 +1502,7 @@ app.put("/api/driver/orders/:id/complete", async (req, res) => {
       { orderId: order.id }
     );
 
+    console.log(`✅ Order ${id} completed by driver ${userId}`);
     res.json(completed);
   } catch (error) {
     console.error("❌ Complete delivery error:", error);
