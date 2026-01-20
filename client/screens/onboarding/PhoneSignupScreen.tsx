@@ -88,33 +88,34 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
 
   const fullPhone = `+62${phone}`;
 
-  const handleInitialAction = async () => {
-    if (mode === "signup") {
-      if (!name || !email || !password) {
-        Alert.alert("Missing Information", "Please fill in all fields to create an account.");
-        return;
-      }
-      const emailRegex = /\S+@\S+\.\S+/;
-      if (!emailRegex.test(email)) {
-        Alert.alert("Invalid Email", "Please enter a valid email address.");
-        return;
-      }
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    if (mode === "login") {
-      const result = await login(fullPhone, password);
-      setIsLoading(false);
-      if (result.success) {
-        onComplete();
-      } else {
-        Alert.alert("Login Failed", result.error || "Invalid phone or password");
-        setError(result.error || "Invalid credentials");
-      }
+const handleInitialAction = async () => {
+  if (mode === "login") {
+    const result = await login(fullPhone, password);
+    setIsLoading(false);
+    
+    // ✅ DETECT FIRST LOGIN
+    if (result.error === "first_login_required") {
+      Alert.alert(
+        "First Time Login", 
+        "Please verify your phone number to activate your account",
+        [{ 
+          text: "Verify Now", 
+          onPress: () => {
+            setMode("signup"); // Use signup flow for OTP
+            handleInitialAction(); // Trigger OTP send
+          }
+        }]
+      );
       return;
     }
+    
+    if (result.success) {
+      onComplete();
+    } else {
+      Alert.alert("Login Failed", result.error || "Invalid credentials");
+    }
+    return;
+  }
 
     const result = await sendOtp(fullPhone, mode as AuthMode); 
     setIsLoading(true);

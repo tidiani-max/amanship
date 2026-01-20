@@ -28,6 +28,7 @@ export const users = pgTable("users", {
   appleId: text("apple_id"),
   googleId: text("google_id"),
   role: text("role").notNull().default("customer"),
+  accountStatus: text("account_status").notNull().default("active"), 
   areaId: integer("area_id"),
   storeId: integer("store_id"),
   pushToken: text("push_token"),
