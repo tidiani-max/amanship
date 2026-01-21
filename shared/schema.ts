@@ -288,7 +288,8 @@ export const insertUserSchema = createInsertSchema(users).pick({
   storeId: true,
   email: true,    // Add this
   googleId: true, // Add this
-  appleId: true   // Add this
+  appleId: true,   // Add this
+  accountStatus: true,
 });
 // Add this to shared/schema.ts
 

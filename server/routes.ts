@@ -222,30 +222,99 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
   // 1. Updated OTP Send: Check if user exists based on mode
-app.post("/api/auth/otp/send", async (req, res) => {
+
+// In server/routes.ts - UPDATE this part in verify endpoint
+app.post("/api/auth/otp/verify", async (req, res) => {
   try {
-    const { phone, mode } = req.body; // mode: 'signup' | 'forgot' | 'login'
-    if (!phone) return res.status(400).json({ error: "Phone required" });
+    const { phone, code, name, email, password, mode } = req.body;
+    if (!phone || !code) return res.status(400).json({ error: "Phone and code required" });
 
-    const existingUser = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+    // 1. Validate OTP
+    const validOtp = await db.select().from(otpCodes)
+      .where(and(
+        eq(otpCodes.phone, phone), 
+        eq(otpCodes.code, code), 
+        eq(otpCodes.verified, false), 
+        gt(otpCodes.expiresAt, new Date())
+      ))
+      .limit(1);
 
-    // Alert logic: If signup and user exists, or if forgot and user doesn't exist
-    if (mode === "signup" && existingUser.length > 0) {
-      return res.status(400).json({ error: "This phone number is already registered. Please login instead." });
+    if (!validOtp.length) return res.status(400).json({ error: "Invalid or expired OTP" });
+
+    // 2. Mark OTP as verified
+    await db.update(otpCodes).set({ verified: true }).where(eq(otpCodes.id, validOtp[0].id));
+
+    // 3. Check for existing user
+    const existingUsers = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+    let user;
+
+    if (existingUsers.length > 0) {
+      // --- UPDATE EXISTING USER ---
+      const updateData: any = {
+        password: password || existingUsers[0].password,
+        email: email || existingUsers[0].email,
+        username: name || existingUsers[0].username,
+      };
+
+      // ✅ ACTIVATE ACCOUNT if it was pending
+      if (existingUsers[0].accountStatus === "pending_activation") {
+        updateData.accountStatus = "active";
+      }
+
+      const updatedUsers = await db.update(users)
+        .set(updateData)
+        .where(eq(users.phone, phone))
+        .returning();
+      user = updatedUsers[0];
+    } else {
+      // --- CREATE NEW USER ---
+      const isSuperAdmin = phone === '+6288289943397';
+      const timestamp = Date.now().toString().slice(-4);
+      const safeUsername = name ? `${name}_${timestamp}` : `user_${phone.slice(-4)}_${timestamp}`;
+
+      const newUser = await db.insert(users).values({
+        username: safeUsername,
+        password: password,
+        phone,
+        email: email || null,
+        role: isSuperAdmin ? "admin" : "customer",
+        accountStatus: "active", // ✅ Set as active for new users
+      }).returning();
+      user = newUser[0];
     }
-    if (mode === "forgot" && existingUser.length === 0) {
-      return res.status(400).json({ error: "No account found with this phone number." });
+
+    // 4. Staff/Store Logic
+    const staffRecord = await storage.getStoreStaffByUserId(user.id);
+    let staffInfo = null;
+    if (staffRecord) {
+      const store = await storage.getStoreById(staffRecord.storeId);
+      staffInfo = { 
+        storeId: staffRecord.storeId, 
+        storeName: store?.name || "Unknown", 
+        role: staffRecord.role, 
+        status: staffRecord.status 
+      };
     }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    res.json({ 
+      user: { 
+        id: user.id, 
+        username: user.username, 
+        phone: user.phone, 
+        email: user.email, 
+        role: user.role 
+      }, 
+      staffInfo 
+    });
+
+  } catch (error: any) {
+    console.error("❌ OTP verify error details:", error);
     
-    await db.insert(otpCodes).values({ phone, code, expiresAt });
-
-    res.json({ success: true, code, message: "OTP sent" });
-  } catch (error) {
-    console.error("❌ OTP send error:", error);
-    res.status(500).json({ error: "Failed to send OTP" });
+    if (error.code === '23505') {
+      return res.status(400).json({ error: "Username or Phone already exists in system." });
+    }
+    
+    res.status(500).json({ error: "Verification failed internally" });
   }
 });
 
