@@ -3,6 +3,20 @@
     "version": ">= 14.0.0"
   },
   "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EAS_NO_ARTIFACTORY": "1",
+        "GRADLE_OPTS": "-Dorg.gradle.caching=false -Dorg.gradle.daemon=false"
+      },
+      "ios": {
+        "simulator": false
+      },
+      "android": {
+        "gradleCommand": ":app:assembleDebug"
+      }
+    },
     "preview": {
       "android": {
         "buildType": "apk",
