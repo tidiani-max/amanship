@@ -2115,20 +2115,21 @@ app.post("/api/admin/stores/:storeId/staff", async (req, res) => {
       : await storage.getUserByEmail(email!);
 
     if (!user) {
-      // Create new user with temporary credentials
+      // ✅ Create new staff user with pending_activation status
       const username = phone || email!.split("@")[0];
       const tempPassword = Math.random().toString(36).slice(-8);
       
       user = await storage.createUser({
         username,
-        password: tempPassword, // Should be hashed in production
+        password: tempPassword,
         phone: phone || null,
         email: email || null,
         name: name || username,
         role,
+        accountStatus: "pending_activation", // ✅ NEW: Set pending until first login
       });
       
-      console.log(`✅ Created new user: ${username} (temp password: ${tempPassword})`);
+      console.log(`✅ Created new staff user (pending activation): ${username}`);
     } else {
       // Update existing user role if different
       if (user.role !== role) {
