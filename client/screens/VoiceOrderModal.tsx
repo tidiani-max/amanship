@@ -3,16 +3,8 @@ import { View, StyleSheet, Pressable, Alert, ActivityIndicator } from "react-nat
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-  withSequence,
-  withSpring,
-} from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming, withSequence, withSpring } from "react-native-reanimated";
 import { useQuery } from "@tanstack/react-query";
-import { Audio } from "expo-av";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -25,120 +17,110 @@ export default function VoiceOrderModal() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const navigation = useNavigation<any>();
-
+  
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
-
-  const recordingRef = useRef<Audio.Recording | null>(null);
-
+  const recognitionRef = useRef<any>(null);
+  
   const pulseScale = useSharedValue(1);
   const waveOpacity = useSharedValue(0);
 
-  // ================= FETCH PRODUCTS =================
-  const { data: productsData, isLoading } = useQuery({
-    queryKey: ["voice-products"],
+  // --- 1. Fetch products from your API ---
+  const { data: products = [], isLoading } = useQuery<Product[]>({
+    queryKey: ["products"],
     queryFn: async () => {
-      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/products`);
-      if (!res.ok) throw new Error("Failed to fetch products");
-      return res.json();
-    },
+      const response = await fetch('${process.env.EXPO_PUBLIC_DOMAIN}/api/products'); 
+      if (!response.ok) throw new Error("Check backend route!");
+      return response.json();
+    }
   });
 
-  const products: Product[] = Array.isArray(productsData) ? productsData : [];
+  // --- 2. Hidden Search Logic ---
+const findItemsInTranscript = (text: string): CartItem[] => {
+  const lowerText = text.toLowerCase();
+  const matched: CartItem[] = [];
+  const addedProductIds = new Set<string>();
 
-  // ================= AUDIO =================
-  const startRecording = async () => {
-    const perm = await Audio.requestPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert("Microphone permission required");
-      return;
+  // 1. QUANTITY DETECTION (Detects "2", "3", "two", "three", etc.)
+  const numberMap: { [key: string]: number } = {
+    one: 1, two: 2, three: 3, four: 4, five: 5,
+    six: 6, seven: 7, eight: 8, nine: 9, ten: 10
+  };
+
+  const getQuantity = (phrase: string) => {
+    const words = phrase.split(' ');
+    for (let i = 0; i < words.length; i++) {
+      // Check for digits (2) or words (two)
+      if (!isNaN(parseInt(words[i]))) return parseInt(words[i]);
+      if (numberMap[words[i]]) return numberMap[words[i]];
     }
-
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    });
-
-    const recording = new Audio.Recording();
-    await recording.prepareToRecordAsync(
-      Audio.RecordingOptionsPresets.HIGH_QUALITY
-    );
-    await recording.startAsync();
-
-    recordingRef.current = recording;
-    setIsListening(true);
+    return 1; // Default
   };
 
-  const stopRecording = async () => {
-    setIsListening(false);
-    const recording = recordingRef.current;
-    if (!recording) return;
+  // 2. SMARTER MATCHING (Scoring System)
+  // We split the transcript by "and" or commas to handle multiple items
+  const sentences = lowerText.split(/and|,|\n/);
 
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
-    recordingRef.current = null;
+  sentences.forEach((sentence) => {
+    let bestMatch: Product | null = null;
+    let highestScore = 0;
 
-    if (uri) await sendAudio(uri);
-  };
+    products.forEach((product) => {
+      const pName = product.name.toLowerCase();
+      const pBrand = (product.brand || "").toLowerCase();
+      let score = 0;
 
-  const sendAudio = async (uri: string) => {
-    const formData = new FormData();
-    formData.append("file", {
-      uri,
-      name: "voice.m4a",
-      type: "audio/m4a",
-    } as any);
+      // Exact match gets highest score
+      if (sentence.includes(pName)) score += 10;
+      // Brand match adds value
+      if (pBrand && sentence.includes(pBrand)) score += 5;
+      // Partial word match
+      const pWords = pName.split(' ');
+      pWords.forEach(word => {
+        if (word.length > 2 && sentence.includes(word)) score += 2;
+      });
 
-    const res = await fetch(
-      `${process.env.EXPO_PUBLIC_DOMAIN}/api/speech-to-text`,
-      {
-        method: "POST",
-        body: formData,
-      }
-    );
-
-    const data = await res.json();
-    setTranscript(data.text || "");
-  };
-
-  // ================= MATCH PRODUCTS =================
-  const findItemsInTranscript = (text: string): CartItem[] => {
-    const lower = text.toLowerCase();
-    const matched: CartItem[] = [];
-    const used = new Set<string>();
-
-    products.forEach((p) => {
-      if (lower.includes(p.name.toLowerCase()) && !used.has(p.id)) {
-        matched.push({ product: p, quantity: 1 });
-        used.add(p.id);
+      if (score > highestScore) {
+        highestScore = score;
+        bestMatch = product;
       }
     });
 
-    return matched;
-  };
-
-  const handleProcessVoice = () => {
-    const items = findItemsInTranscript(transcript);
-    if (!items.length) {
-      Alert.alert("No items found");
-      return;
+    // Only add the best match for this specific part of the sentence
+    if (bestMatch && !addedProductIds.has((bestMatch as Product).id)) {
+      const qty = getQuantity(sentence);
+      matched.push({ product: bestMatch, quantity: qty });
+      addedProductIds.add((bestMatch as Product).id);
     }
-    navigation.navigate("VoiceConfirm", { items });
-  };
+  });
 
-  // ================= ANIMATION =================
+  return matched;
+};
+
+  // --- Web Speech Setup ---
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = 'en-US';
+
+      recognitionRef.current.onresult = (event: any) => {
+        let currentTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          currentTranscript += event.results[i][0].transcript;
+        }
+        setTranscript(currentTranscript);
+      };
+      recognitionRef.current.onend = () => setIsListening(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (isListening) {
-      pulseScale.value = withRepeat(
-        withSequence(withTiming(1.3), withTiming(1)),
-        -1,
-        true
-      );
-      waveOpacity.value = withRepeat(
-        withSequence(withTiming(0.4), withTiming(0.1)),
-        -1,
-        true
-      );
+      pulseScale.value = withRepeat(withSequence(withTiming(1.3), withTiming(1)), -1, true);
+      waveOpacity.value = withRepeat(withSequence(withTiming(0.4), withTiming(0.1)), -1, true);
     } else {
       pulseScale.value = withSpring(1);
       waveOpacity.value = withTiming(0);
@@ -150,65 +132,92 @@ export default function VoiceOrderModal() {
     opacity: waveOpacity.value,
   }));
 
-  // ================= UI =================
-  if (isLoading) {
-    return (
-      <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" />
-      </ThemedView>
-    );
+const handleProcessVoice = () => {
+  console.log("Button Pressed!"); // Add this to debug in your console
+  
+  if (isListening) {
+     setIsListening(false);
+     recognitionRef.current?.stop();
   }
+
+  const matchedItems = findItemsInTranscript(transcript);
+  
+  if (matchedItems.length > 0) {
+    // Try .navigate if .replace is causing issues with your specific stack setup
+    navigation.navigate("VoiceConfirm", { items: matchedItems });
+  } else {
+    Alert.alert("No Items Found", "Try saying something like 'I need Water'");
+  }
+};
+
+  const handleMicPress = () => {
+    if (!recognitionRef.current) return;
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      setTranscript("");
+      setIsListening(true);
+      recognitionRef.current.start();
+    }
+  };
 
   return (
     <ThemedView style={[styles.container, { paddingTop: insets.top + Spacing.lg }]}>
-      <View style={styles.transcriptArea}>
-        <ThemedText type="h2" style={styles.transcriptText}>
-          {transcript || (isListening ? "Listening..." : "Say a product name")}
-        </ThemedText>
-      </View>
-
-      <View style={styles.micArea}>
-        <Animated.View
-          style={[styles.pulse, { backgroundColor: theme.primary }, pulseStyle]}
-        />
-        <Pressable
-          onPress={isListening ? stopRecording : startRecording}
-          style={[
-            styles.micBtn,
-            { backgroundColor: isListening ? theme.error : theme.primary },
-            Shadows.medium,
-          ]}
-        >
-          <Feather name={isListening ? "square" : "mic"} size={40} color="white" />
+      <View style={styles.header}>
+        <Pressable onPress={() => navigation.goBack()} style={styles.headerBtn}>
+          <ThemedText style={{ color: theme.error }}>Cancel</ThemedText>
         </Pressable>
+        <ThemedText type="h3">Voice Assistant</ThemedText>
+        <View style={{ width: 60 }} />
       </View>
 
-      {transcript.length > 0 && !isListening && (
-        <View style={styles.footer}>
-          <Button onPress={handleProcessVoice}>Review My Basket</Button>
+      <View style={styles.content}>
+        <View style={styles.transcriptArea}>
+           <ThemedText type="h2" style={styles.transcriptText}>
+             {transcript || (isListening ? "Listening..." : "Tell me what food or water you need...")}
+           </ThemedText>
         </View>
-      )}
+
+        <View style={styles.micArea}>
+          <Animated.View style={[styles.pulse, { backgroundColor: theme.primary }, pulseStyle]} />
+          <Pressable
+            onPress={handleMicPress}
+            style={[styles.micBtn, { backgroundColor: isListening ? theme.error : theme.primary }, Shadows.medium]}
+          >
+            <Feather name={isListening ? "square" : "mic"} size={40} color="white" />
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.footer}>
+        {transcript.length > 0 && !isListening && (
+          <Button onPress={handleProcessVoice}>
+            Review My Basket
+          </Button>
+        )}
+      </View>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  header: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 20 },
+  headerBtn: { padding: 10 },
+  content: { flex: 1, alignItems: "center", justifyContent: "center" },
   transcriptArea: { minHeight: 150, paddingHorizontal: 40 },
   transcriptText: { textAlign: "center", lineHeight: 36 },
   micArea: { alignItems: "center", marginTop: 40 },
   pulse: { position: "absolute", width: 120, height: 120, borderRadius: 60 },
-  micBtn: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  footer: {
-    position: "absolute",
-    bottom: 40,
-    left: 20,
-    right: 20,
-  },
+  micBtn: { width: 100, height: 100, borderRadius: 50, alignItems: "center", justifyContent: "center" },
+  footer: { 
+  position: "absolute", 
+  bottom: 0, 
+  left: 0, 
+  right: 0, 
+  padding: 20, 
+  paddingBottom: 40,
+  zIndex: 10, // <--- This ensures the button is always "on top" of animations
+},
 });
