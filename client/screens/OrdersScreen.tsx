@@ -40,6 +40,7 @@ export default function OrdersScreen() {
       return response.json();
     },
     enabled: !!userId,
+    refetchInterval: 5000,
   });
 
   const activeOrders = allOrders.filter((o: any) => 

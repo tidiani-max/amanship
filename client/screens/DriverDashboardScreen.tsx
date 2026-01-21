@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Pressable, Switch, Alert, Linking, Platform, TextInput, Modal } from "react-native";
+import { View, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Pressable, Alert, Linking, Platform, TextInput, Modal, TouchableOpacity } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -11,7 +12,6 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import { useNavigation } from "@react-navigation/native";
 
 function PINModal({ 
   visible, 
@@ -256,12 +256,31 @@ function OrderCard({
 export default function DriverDashboardScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const queryClient = useQueryClient();
+  const navigation = useNavigation<any>();
   const [showCompleted, setShowCompleted] = useState(false);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+
+  // ✅ Handle logout
+  const handleLogout = () => {
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: async () => {
+            await logout();
+          },
+        },
+      ]
+    );
+  };
 
   const { data: dashboard, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["/api/driver/dashboard", user?.id],
@@ -318,10 +337,8 @@ export default function DriverDashboardScreen() {
       Alert.alert("✅ Success", "Order delivered successfully!");
     },
     onError: (error: Error) => {
-      // ✅ Show alert for incorrect PIN
       Alert.alert("❌ Incorrect PIN", error.message || "The PIN you entered is incorrect. Please try again.");
       setUpdatingOrderId(null);
-      // ✅ Don't close modal so user can retry
     }
   });
 
@@ -360,7 +377,6 @@ export default function DriverDashboardScreen() {
   const completedOrders = dashboard?.orders?.completed || [];
   const hasActiveDelivery = activeOrders.length > 0;
   
-  // ✅ Sort by creation date - newest first (most recent at top)
   const allActiveOrders = (hasActiveDelivery ? activeOrders : readyOrders)
     .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   
@@ -371,13 +387,34 @@ export default function DriverDashboardScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      {/* ✅ Header with Notification & Logout */}
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.md }]}>
+        <View style={{ flex: 1 }}>
+          <ThemedText type="h2">Driver Dashboard</ThemedText>
+        </View>
+        
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity 
+            style={[styles.iconButton, { backgroundColor: theme.primary + '15' }]}
+            onPress={() => navigation.navigate('Notifications')}
+          >
+            <Feather name="bell" size={20} color={theme.primary} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.iconButton, { backgroundColor: theme.error + '15' }]}
+            onPress={handleLogout}
+          >
+            <Feather name="log-out" size={20} color={theme.error} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing.xl }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.primary} />}
       >
-        <ThemedText type="h2" style={{ marginBottom: Spacing.lg }}>Driver Dashboard</ThemedText>
-
         <ThemedText type="h3" style={styles.sectionTitle}>
           Active Deliveries ({allActiveOrders.length})
         </ThemedText>
@@ -400,7 +437,6 @@ export default function DriverDashboardScreen() {
           </Card>
         )}
 
-        {/* ✅ Today's Completed Deliveries Section */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.xl }}>
           <ThemedText type="h3" style={styles.sectionTitle}>
             Today's Deliveries ({sortedCompletedOrders.length})
@@ -460,6 +496,8 @@ export default function DriverDashboardScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  header: { backgroundColor: 'white', paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', flexDirection: 'row', alignItems: 'center' },
+  iconButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 16 },

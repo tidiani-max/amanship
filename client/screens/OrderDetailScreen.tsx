@@ -42,6 +42,7 @@ export default function OrderDetailScreen() {
       return response.json();
     },
     initialData: initialOrder,
+    refetchInterval: 3000,
   });
 
   const formatPrice = (price: any) => {

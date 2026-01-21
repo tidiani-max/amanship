@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from "react";
 import { 
   View, StyleSheet, ScrollView, RefreshControl, 
-  Pressable, Switch, TextInput, Modal, Image, TouchableOpacity, ActivityIndicator 
+  Pressable, Switch, TextInput, Modal, Image, TouchableOpacity, ActivityIndicator, Alert 
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from 'expo-image-picker';
+import { useNavigation } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -163,8 +164,9 @@ function CustomAlertModal({
 export default function PickerDashboardScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const queryClient = useQueryClient();
+  const navigation = useNavigation<any>();
 
   const [activeTab, setActiveTab] = useState<"orders" | "inventory">("orders");
   const [searchQuery, setSearchQuery] = useState("");
@@ -196,6 +198,25 @@ export default function PickerDashboardScreen() {
     setAlertVisible(true);
   };
 
+  // ✅ Handle logout
+  const handleLogout = () => {
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: async () => {
+            await logout();
+            // Navigation will be handled automatically by AuthContext
+          },
+        },
+      ]
+    );
+  };
+
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
     queryFn: async () => {
@@ -214,7 +235,8 @@ export default function PickerDashboardScreen() {
     queryFn: async () => {
       const res = await fetch(`${BASE_URL}/api/picker/inventory?userId=${user?.id || 'demo-picker'}`);
       return res.json();
-    }
+    },
+    refetchInterval: 10000,
   });
 
   const { data: dashboard, isLoading: dashLoading, refetch: refetchDash } = useQuery({
@@ -222,10 +244,10 @@ export default function PickerDashboardScreen() {
     queryFn: async () => {
       const res = await fetch(`${BASE_URL}/api/picker/dashboard?userId=${user?.id || 'demo-picker'}`);
       return res.json();
-    }
+    },
+    refetchInterval: 3000,
   });
 
-  // ✅ Sort orders by creation date - newest first (most recent at top)
   const ordersToDisplay = useMemo(() => {
     if (!dashboard?.orders) return [];
     const allOrders = [
@@ -233,7 +255,6 @@ export default function PickerDashboardScreen() {
       ...(dashboard.orders.active || []),
       ...(dashboard.orders.packed || []),
     ];
-    // Sort by creation date descending (newest first)
     return allOrders.sort((a: any, b: any) => 
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -517,13 +538,29 @@ export default function PickerDashboardScreen() {
     <ThemedView style={styles.container}>
       <View style={[styles.headerContainer, { paddingTop: insets.top + Spacing.md }]}>
         <View style={styles.headerRow}>
-          <View>
+          <View style={{ flex: 1 }}>
             <ThemedText type="h2">Store Ops</ThemedText>
             <ThemedText style={{ color: theme.textSecondary }}>
               📍 {dashboard?.store?.name || "Loading..."}
             </ThemedText>
           </View>
-          <Switch value={true} />
+          
+          {/* ✅ Notification & Logout Buttons */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <TouchableOpacity 
+              style={[styles.iconButton, { backgroundColor: theme.primary + '15' }]}
+              onPress={() => navigation.navigate('Notifications')}
+            >
+              <Feather name="bell" size={20} color={theme.primary} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.iconButton, { backgroundColor: theme.error + '15' }]}
+              onPress={handleLogout}
+            >
+              <Feather name="log-out" size={20} color={theme.error} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.tabContainer}>
@@ -727,6 +764,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   headerContainer: { backgroundColor: 'white', paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  iconButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   tabContainer: { flexDirection: 'row' },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 12, borderBottomWidth: 3, borderBottomColor: 'transparent' },
   tabText: { fontSize: 16 },

@@ -64,6 +64,12 @@ export function useNotifications() {
       return;
     }
 
+    // ✅ Skip notification setup on web
+    if (Platform.OS === 'web') {
+      console.log('⚠️ Push notifications not supported on web');
+      return;
+    }
+
     try {
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
@@ -133,6 +139,9 @@ export function useNotifications() {
 
   // ✅ NEW: Send welcome notification on login
   const sendWelcomeNotification = async () => {
+    // Skip on web
+    if (Platform.OS === 'web') return;
+
     try {
       // Get role-specific welcome message
       const welcomeMessages: Record<string, { title: string; body: string; emoji: string }> = {
