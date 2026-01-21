@@ -14,6 +14,9 @@ import fs from "fs";
 import path from 'path';
 import { Expo } from 'expo-server-sdk';
 import multer from "multer";
+import OpenAI from "openai";
+
+
 
 
 
@@ -24,6 +27,8 @@ const DEMO_USER_ID = "demo-user";
 
 // Multer storage configuration
 const UPLOADS_PATH = path.resolve(process.cwd(), "uploads");
+const upload = multer({ dest: "uploads/" });
+const openai = new OpenAI();
 
 const chatDir = path.join(process.cwd(), "uploads", "chat");
 if (!fs.existsSync(chatDir)) {
@@ -1100,6 +1105,28 @@ app.get("/api/products/:id/store", async (req, res) => {
       error: "Failed to fetch product store",
       details: error instanceof Error ? error.message : "Unknown error"
     });
+  }
+});
+
+
+app.post("/api/speech-to-text", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No audio file" });
+    }
+
+    const transcription = await openai.audio.transcriptions.create({
+      file: fs.createReadStream(req.file.path),
+      model: "gpt-4o-transcribe",
+      language: "en",
+    });
+
+    fs.unlinkSync(req.file.path);
+
+    res.json({ text: transcription.text });
+  } catch (err) {
+    console.error("❌ Speech error:", err);
+    res.status(500).json({ error: "Speech transcription failed" });
   }
 });
 

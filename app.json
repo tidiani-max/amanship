@@ -12,8 +12,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.kilatgo.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "KilatGo needs access to your microphone for voice orders",
-        "NSSpeechRecognitionUsageDescription": "KilatGo needs access to speech recognition for voice orders"
+        "NSMicrophoneUsageDescription": "Allow KilatGo to access your microphone for voice orders.",
+        "NSSpeechRecognitionUsageDescription": "Allow KilatGo to use speech recognition for voice orders.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -21,7 +22,8 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
