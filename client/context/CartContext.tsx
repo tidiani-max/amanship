@@ -17,12 +17,13 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+// ✅ API response type that matches your backend
 interface CartItemFromAPI {
   id: string;
   userId: string;
   productId: string;
   quantity: number;
-  storeId: string; // ✅ ADD THIS
+  storeId: string;
   product: {
     id: string;
     name: string;
@@ -33,48 +34,49 @@ interface CartItemFromAPI {
     categoryId: string;
     description: string | null;
     nutrition: any;
-    inStock: boolean;
-    stockCount: number;
+    inStock?: boolean;
+    stockCount?: number;
   };
 }
-
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   
-const { data: cartData = [], isLoading } = useQuery<CartItemFromAPI[]>({
-    queryKey: ["/api/cart", user?.id], // Add user.id to the key
+  const { data: cartData = [], isLoading } = useQuery<CartItemFromAPI[]>({
+    queryKey: ["/api/cart", user?.id],
     queryFn: async () => {
-      // Add the userId to the URL
       const res = await apiRequest("GET", `/api/cart?userId=${user?.id}`);
       return res.json();
     },
-    enabled: !!user?.id, // Only fetch if user is logged in
+    enabled: !!user?.id,
   });
 
-const items: CartItemType[] = cartData.map((item) => ({
-  product: {
-    id: item.product.id,
-    name: item.product.name,
-    brand: item.product.brand,
-    price: item.product.price,
-    originalPrice: item.product.originalPrice || undefined,
-    image: item.product.image || "",
-    category: item.product.categoryId,
-    description: item.product.description || "",
-    nutrition: item.product.nutrition,
-    storeId: item.storeId, // ✅ ADD THIS
-  },
-  quantity: item.quantity,
-  cartItemId: item.id,
-}));
+  // ✅ Map API response to your CartItem type
+  const items: CartItemType[] = React.useMemo(() => {
+    return cartData.map((item): CartItemType => ({
+      product: {
+        id: item.product.id,
+        name: item.product.name,
+        brand: item.product.brand,
+        price: item.product.price,
+        originalPrice: item.product.originalPrice ?? undefined,
+        image: item.product.image ?? undefined,
+        categoryId: item.product.categoryId,
+        category: item.product.categoryId, // For backward compatibility
+        description: item.product.description ?? "",
+        nutrition: item.product.nutrition,
+        inStock: item.product.inStock,
+        stockCount: item.product.stockCount,
+        storeId: item.storeId,
+      },
+      quantity: item.quantity,
+      cartItemId: item.id,
+    }));
+  }, [cartData]);
 
-
-
-const addMutation = useMutation({
+  const addMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: string; quantity: number }) => {
-      // Include userId here!
       const res = await apiRequest("POST", "/api/cart", { 
         productId, 
         quantity, 
@@ -93,13 +95,12 @@ const addMutation = useMutation({
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cart", user?.id] });
     },
   });
 
-const removeMutation = useMutation({
+  const removeMutation = useMutation({
     mutationFn: async (cartItemId: string) => {
-      // Ensure this is hitting the correct ID
       const res = await apiRequest("DELETE", `/api/cart/${cartItemId}`);
       return res.json();
     },
@@ -108,9 +109,8 @@ const removeMutation = useMutation({
     },
   });
 
-const clearMutation = useMutation({
+  const clearMutation = useMutation({
     mutationFn: async () => {
-      // Tell the backend WHICH user's cart to clear
       const res = await apiRequest("DELETE", `/api/cart?userId=${user?.id}`);
       return res.json();
     },
@@ -120,30 +120,38 @@ const clearMutation = useMutation({
   });
 
   const addToCart = useCallback((product: Product, quantity = 1) => {
+    if (!user?.id) {
+      console.warn("Cannot add to cart: User not logged in");
+      return;
+    }
     addMutation.mutate({ productId: product.id, quantity });
-  }, [addMutation]);
+  }, [addMutation, user?.id]);
 
   const removeFromCart = useCallback((productId: string) => {
     const item = items.find((i) => i.product.id === productId);
-    if (item && (item as any).cartItemId) {
-      removeMutation.mutate((item as any).cartItemId);
+    if (item?.cartItemId) {
+      removeMutation.mutate(item.cartItemId);
     }
   }, [items, removeMutation]);
 
   const updateQuantity = useCallback((productId: string, quantity: number) => {
     const item = items.find((i) => i.product.id === productId);
-    if (item && (item as any).cartItemId) {
+    if (item?.cartItemId) {
       if (quantity <= 0) {
-        removeMutation.mutate((item as any).cartItemId);
+        removeMutation.mutate(item.cartItemId);
       } else {
-        updateMutation.mutate({ cartItemId: (item as any).cartItemId, quantity });
+        updateMutation.mutate({ cartItemId: item.cartItemId, quantity });
       }
     }
   }, [items, updateMutation, removeMutation]);
 
   const clearCart = useCallback(() => {
+    if (!user?.id) {
+      console.warn("Cannot clear cart: User not logged in");
+      return;
+    }
     clearMutation.mutate();
-  }, [clearMutation]);
+  }, [clearMutation, user?.id]);
 
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);

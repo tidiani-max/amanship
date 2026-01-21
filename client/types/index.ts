@@ -1,26 +1,25 @@
+// types/index.ts - UPDATED Product interface
+
 export interface Product {
   id: string;
   name: string;
   brand: string;
   price: number;
   originalPrice?: number;
-
-  image?: string;          // ✅ optional
-  category: string;
+  image?: string;
+  categoryId?: string;        // ✅ Changed from 'category' to 'categoryId' to match API
+  category?: string;           // ✅ Keep this for backward compatibility
   description: string;
-
-  nutrition?: {            // ✅ optional & typed
+  nutrition?: {
     calories?: string;
     protein?: string;
     carbs?: string;
     fat?: string;
   };
-
-  inStock?: boolean;       // ✅ inventory
-  stockCount?: number;     // ✅ inventory
+  inStock?: boolean;
+  stockCount?: number;
+  storeId?: string;            // ✅ Added storeId for multi-store support
 }
-
-
 
 export interface Category {
   id: string;
@@ -33,6 +32,7 @@ export interface Category {
 export interface CartItem {
   product: Product;
   quantity: number;
+  cartItemId?: string;         // ✅ Added for cart operations
 }
 
 export interface Address {

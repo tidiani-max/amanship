@@ -1031,6 +1031,22 @@ app.get("/api/category/products", async (req, res) => {
   }
 });
 
+app.get("/api/products", async (req, res) => {
+  try {
+    console.log("🟢 HIT /api/products - Fetching all products");
+
+    // Get all products from database
+    const allProducts = await db.select().from(products);
+
+    console.log(`✅ Found ${allProducts.length} products`);
+
+    res.json(allProducts);
+  } catch (error) {
+    console.error("❌ /api/products error:", error);
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
+});
+
   app.get("/api/products/:id", async (req, res) => {
     try {
       const product = await storage.getProductById(req.params.id);

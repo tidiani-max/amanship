@@ -8,7 +8,6 @@
     "scheme": "kilatgo",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kilatgo.app",
@@ -17,23 +16,22 @@
         "NSSpeechRecognitionUsageDescription": "KilatGo needs access to speech recognition for voice orders"
       }
     },
-
     "android": {
       "package": "com.kilatgo.app",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "permissions": ["RECORD_AUDIO"],
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#FFD700"
       }
     },
-
     "web": {
       "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
-
     "plugins": [
       [
         "expo-splash-screen",
@@ -70,17 +68,27 @@
                 "**/libc++_shared.so",
                 "**/libfbjni.so"
               ],
-              "exclude": ["META-INF/DEPENDENCIES"]
+              "exclude": [
+                "META-INF/DEPENDENCIES"
+              ]
             }
           }
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow KilatGo to access your microphone for voice orders.",
+          "speechRecognitionPermission": "Allow KilatGo to use speech recognition for voice orders.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
       ]
     ],
-
     "experiments": {
       "reactCompiler": true
     },
-
     "extra": {
       "eas": {
         "projectId": "113ea7fa-db9e-4380-b05f-dd63a05e5632"
