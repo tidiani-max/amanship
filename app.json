@@ -8,12 +8,20 @@
     "scheme": "kilatgo",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "notification": {
+      "icon": "./assets/images/notification-icon.png",
+      "color": "#FFD700",
+      "iosDisplayInForeground": true,
+      "androidMode": "default",
+      "androidCollapsedTitle": "{{unread_count}} new notifications"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kilatgo.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Allow KilatGo to access your microphone for voice orders.",
         "NSSpeechRecognitionUsageDescription": "Allow KilatGo to use speech recognition for voice orders.",
+        "NSUserNotificationsUsageDescription": "We send you order updates and delivery notifications.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -23,7 +31,10 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "RECORD_AUDIO",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
@@ -85,6 +96,14 @@
           "androidSpeechServicePackages": [
             "com.google.android.googlequicksearchbox"
           ]
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#FFD700",
+          "sounds": []
         }
       ]
     ],

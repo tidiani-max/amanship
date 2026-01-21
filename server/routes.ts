@@ -12,12 +12,15 @@ import { findNearestAvailableStore, getStoresWithAvailability, estimateDeliveryT
 import express, { Express } from 'express';
 import fs from "fs";
 import path from 'path';
-import { Expo } from 'expo-server-sdk';
 import multer from "multer";
 
-
-
-
+// ✅ IMPORT NOTIFICATION FUNCTIONS (removed local duplicate)
+import { 
+  notifyPickersNewOrder, 
+  notifyDriversPackedOrder,
+  notifyCustomerOrderStatus,
+  notifyChatMessage 
+} from './notifications';
 
 // ==================== CONFIGURATION ====================
 const DEMO_USER_ID = "demo-user";
@@ -32,7 +35,6 @@ if (!fs.existsSync(chatDir)) {
 
 const chatStorage = multer.diskStorage({
   destination: chatDir,
-
   filename: (_req, file, cb) => {
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     cb(null, `chat-${uniqueSuffix}${path.extname(file.originalname)}`);
@@ -46,39 +48,40 @@ const fileStorage = multer.diskStorage({
 });
 const uploadMiddleware = multer({ storage: fileStorage });
 
-// Push notification helper
-const expo = new Expo();
-async function sendPushNotification(userId: string, title: string, body: string, data?: any) {
-  const [user] = await db.select().from(users).where(eq(users.id, userId));
-  if (user?.pushToken && Expo.isExpoPushToken(user.pushToken)) {
-    try {
-      await expo.sendPushNotificationsAsync([{
-        to: user.pushToken,
-        sound: 'default',
-        title,
-        body,
-        data: data || {},
-      }]);
-    } catch (error) {
-      console.error("❌ Push Error:", error);
-    }
-  }
-}
-
 export async function registerRoutes(app: Express): Promise<Server> {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-
 // 🟢 HEALTH CHECK & DEBUG ROUTE
-  app.get("/api/health", (req, res) => {
-    res.json({ 
-      status: "alive", 
-      time: new Date().toISOString(),
-      env: process.env.NODE_ENV || "not set"
-    });
+app.get("/api/health", (req, res) => {
+  res.json({ 
+    status: "alive", 
+    time: new Date().toISOString(),
+    env: process.env.NODE_ENV || "not set"
   });
+});
+
+// ==================== PUSH TOKEN REGISTRATION ====================
+app.post("/api/users/push-token", async (req, res) => {
+  try {
+    const { userId, token } = req.body;
+    
+    if (!userId || !token) {
+      return res.status(400).json({ error: "userId and token required" });
+    }
+
+    await db.update(users)
+      .set({ pushToken: token })
+      .where(eq(users.id, userId));
+
+    console.log(`✅ Push token saved for user ${userId}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("❌ Failed to save push token:", error);
+    res.status(500).json({ error: "Failed to save token" });
+  }
+});
   
   
   // ==================== 1. CORS MIDDLEWARE (MUST BE FIRST!) ====================
@@ -116,6 +119,7 @@ app.use(express.urlencoded({ extended: true }));
   app.use('/attached_assets', express.static(path.join(process.cwd(), 'attached_assets')));
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
   // Replace those long ../../../ paths with this:
+
 
 
  app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async (req: Request, res: Response) => {
@@ -779,7 +783,6 @@ app.put("/api/driver/orders/:id/status", async (req, res) => {
       return res.status(400).json({ error: "Missing status or userId" });
     }
 
-    // 1️⃣ Get driver staff record
     const [staff] = await db
       .select()
       .from(storeStaff)
@@ -789,34 +792,30 @@ app.put("/api/driver/orders/:id/status", async (req, res) => {
       return res.status(403).json({ error: "Driver not assigned to store" });
     }
 
-    // 2️⃣ PICK UP ORDER (packed → delivering)
     if (status === "delivering") {
       const [picked] = await db
         .update(orders)
-        .set({
-          status: "delivering",
-          driverId: userId,
-        })
+        .set({ status: "delivering", driverId: userId })
         .where(
           and(
             eq(orders.id, id),
             eq(orders.storeId, staff.storeId),
             eq(orders.status, "packed"),
-            isNull(orders.driverId) // 🔒 HARD LOCK
+            isNull(orders.driverId)
           )
         )
         .returning();
 
       if (!picked) {
-        return res.status(409).json({
-          error: "Order already taken or not available",
-        });
+        return res.status(409).json({ error: "Order already taken or not available" });
       }
+
+      // 🔔 NOTIFY CUSTOMER ORDER IS OUT FOR DELIVERY
+      await notifyCustomerOrderStatus(picked.id, "delivering");
 
       return res.json(picked);
     }
 
-    // 3️⃣ COMPLETE DELIVERY (delivering → delivered)
     const [completed] = await db
       .update(orders)
       .set({ status })
@@ -832,6 +831,9 @@ app.put("/api/driver/orders/:id/status", async (req, res) => {
     if (!completed) {
       return res.status(403).json({ error: "Order not accessible" });
     }
+
+    // 🔔 NOTIFY CUSTOMER OF STATUS CHANGE
+    await notifyCustomerOrderStatus(completed.id, status);
 
     res.json(completed);
   } catch (error) {
@@ -1234,19 +1236,12 @@ console.log("📦 Registering order routes...");
 
 app.post("/api/orders", async (req, res) => {
   try {
-    const {
-      userId,
-      addressId,
-      items,
-      customerLat,
-      customerLng,
-    } = req.body;
+    const { userId, addressId, items, customerLat, customerLng } = req.body;
 
     if (!userId || !items?.length || !customerLat || !customerLng) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // 1️⃣ Resolve store per product
     const itemsWithStore = await Promise.all(
       items.map(async (item: any) => {
         const [inv] = await db
@@ -1256,12 +1251,10 @@ app.post("/api/orders", async (req, res) => {
           .limit(1);
 
         if (!inv) throw new Error("Product not available");
-
         return { ...item, storeId: inv.storeId };
       })
     );
 
-    // 2️⃣ Group items by store
     const itemsByStore: Record<string, any[]> = {};
     for (const item of itemsWithStore) {
       if (!itemsByStore[item.storeId]) itemsByStore[item.storeId] = [];
@@ -1270,21 +1263,14 @@ app.post("/api/orders", async (req, res) => {
 
     const createdOrders = [];
 
-    // 3️⃣ Create ONE order per store
     for (const storeId of Object.keys(itemsByStore)) {
       const storeItems = itemsByStore[storeId];
-
       const DELIVERY_FEE_PER_STORE = 10000;
-
       const itemsTotal = storeItems.reduce(
         (sum, i) => sum + Number(i.price) * Number(i.quantity),
         0
       );
-
-      const deliveryFee = DELIVERY_FEE_PER_STORE;
-      const total = itemsTotal + deliveryFee;
-
-      // ✅ Generate random 4-digit PIN
+      const total = itemsTotal + DELIVERY_FEE_PER_STORE;
       const deliveryPin = Math.floor(1000 + Math.random() * 9000).toString();
 
       const [order] = await db
@@ -1294,13 +1280,13 @@ app.post("/api/orders", async (req, res) => {
           storeId,
           addressId,
           total,
-          deliveryFee,
+          deliveryFee: DELIVERY_FEE_PER_STORE,
           status: "pending",
           orderNumber: `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`,
           items: storeItems,
           customerLat: String(customerLat),
           customerLng: String(customerLng),
-          deliveryPin, // ✅ Store the PIN
+          deliveryPin,
         })
         .returning();
 
@@ -1313,20 +1299,8 @@ app.post("/api/orders", async (req, res) => {
         }))
       );
 
-      // Notify store staff
-      const staff = await db
-        .select()
-        .from(storeStaff)
-        .where(eq(storeStaff.storeId, storeId));
-
-      for (const s of staff) {
-        await sendPushNotification(
-          s.userId,
-          "📦 New Order",
-          `Order ${order.orderNumber} is ready`,
-          { orderId: order.id }
-        );
-      }
+      // 🔔 NOTIFY PICKERS ABOUT NEW ORDER
+      await notifyPickersNewOrder(storeId, order.id);
 
       createdOrders.push(order);
     }
@@ -1366,6 +1340,12 @@ app.patch("/api/orders/:id/pack", async (req, res) => {
       .set({ status: "packed" })
       .where(eq(orders.id, req.params.id))
       .returning();
+
+    // 🔔 NOTIFY CUSTOMER ABOUT STATUS CHANGE
+    await notifyCustomerOrderStatus(updated.id, "packed");
+
+    // 🔔 NOTIFY AVAILABLE DRIVERS
+    await notifyDriversPackedOrder(staff.storeId, updated.id);
 
     res.json(updated);
   } catch (err) {
@@ -1464,7 +1444,6 @@ app.put("/api/driver/orders/:id/complete", async (req, res) => {
       return res.status(400).json({ error: "Driver ID and PIN required" });
     }
 
-    // 1️⃣ Get driver staff record
     const [staff] = await db
       .select()
       .from(storeStaff)
@@ -1474,17 +1453,12 @@ app.put("/api/driver/orders/:id/complete", async (req, res) => {
       return res.status(403).json({ error: "Driver not assigned to store" });
     }
 
-    // 2️⃣ Get the order
-    const [order] = await db
-      .select()
-      .from(orders)
-      .where(eq(orders.id, id));
+    const [order] = await db.select().from(orders).where(eq(orders.id, id));
 
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    // 3️⃣ Verify driver owns this order
     if (order.driverId !== userId) {
       return res.status(403).json({ error: "Not your delivery" });
     }
@@ -1493,7 +1467,6 @@ app.put("/api/driver/orders/:id/complete", async (req, res) => {
       return res.status(400).json({ error: "Order must be in delivering status" });
     }
 
-    // 4️⃣ Verify PIN matches - IMPROVED ERROR MESSAGE
     if (order.deliveryPin !== deliveryPin.toString()) {
       console.log(`❌ PIN mismatch - Expected: ${order.deliveryPin}, Got: ${deliveryPin}`);
       return res.status(401).json({ 
@@ -1501,23 +1474,14 @@ app.put("/api/driver/orders/:id/complete", async (req, res) => {
       });
     }
 
-    // 5️⃣ Complete the order
     const [completed] = await db
       .update(orders)
-      .set({ 
-        status: "delivered",
-        deliveredAt: new Date()
-      })
+      .set({ status: "delivered", deliveredAt: new Date() })
       .where(eq(orders.id, id))
       .returning();
 
-    // 6️⃣ Notify customer
-    await sendPushNotification(
-      order.userId,
-      "✅ Order Delivered",
-      `Your order has been delivered successfully`,
-      { orderId: order.id }
-    );
+    // 🔔 NOTIFY CUSTOMER ORDER DELIVERED
+    await notifyCustomerOrderStatus(completed.id, "delivered");
 
     console.log(`✅ Order ${id} completed by driver ${userId}`);
     res.json(completed);
@@ -1540,21 +1504,14 @@ app.put("/api/driver/orders/:id/complete", async (req, res) => {
     }
   });
 
-  app.post(
-  "/api/messages",
-  uploadChat.single("file"),
-  async (req, res) => {
-
+app.post("/api/messages", uploadChat.single("file"), async (req, res) => {
   try {
     const { orderId, senderId, type } = req.body;
     let content = req.body.content;
 
-    
     if (req.file) {
       const baseUrl = `${req.protocol}://${req.get("host")}`;
       content = `${baseUrl}/uploads/chat/${req.file.filename}`;
-
-
     }
 
     if (!orderId || !senderId || !content) {
@@ -1568,18 +1525,14 @@ app.put("/api/driver/orders/:id/complete", async (req, res) => {
       content,
     }).returning();
 
-    // Fetch order to determine receiver
     const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
     
     if (order) {
       const receiverId = (senderId === order.userId) ? order.driverId : order.userId;
       if (receiverId) {
-        await sendPushNotification(
-          receiverId, 
-          "New Message 💬", 
-          req.file ? "📷 Image" : content, 
-          { orderId }
-        );
+        // 🔔 NOTIFY RECEIVER ABOUT NEW MESSAGE
+        const messagePreview = req.file ? "📷 Sent an image" : content;
+        await notifyChatMessage(orderId, senderId, messagePreview);
       }
     }
 
