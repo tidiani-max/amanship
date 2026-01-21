@@ -93,6 +93,9 @@ export function useNotifications() {
           token: token,
         });
         console.log('✅ Token saved to server');
+
+        // ✅ NEW: Send welcome notification after successful token registration
+        await sendWelcomeNotification();
       }
 
       // Android-specific channel setup
@@ -125,6 +128,54 @@ export function useNotifications() {
       }
     } catch (error) {
       console.error('❌ Error registering for push notifications:', error);
+    }
+  };
+
+  // ✅ NEW: Send welcome notification on login
+  const sendWelcomeNotification = async () => {
+    try {
+      // Get role-specific welcome message
+      const welcomeMessages: Record<string, { title: string; body: string; emoji: string }> = {
+        customer: {
+          title: "Welcome to KilatGo! 🎉",
+          body: "You'll receive updates about your orders here",
+          emoji: "🛒"
+        },
+        picker: {
+          title: "Welcome, Picker! 📦",
+          body: "You'll be notified about new orders instantly",
+          emoji: "📦"
+        },
+        driver: {
+          title: "Welcome, Driver! 🚚",
+          body: "You'll receive delivery notifications here",
+          emoji: "🚚"
+        },
+        admin: {
+          title: "Welcome, Admin! 👑",
+          body: "System notifications are enabled",
+          emoji: "👑"
+        }
+      };
+
+      const roleMessage = welcomeMessages[user?.role || 'customer'] || welcomeMessages.customer;
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: roleMessage.title,
+          body: roleMessage.body,
+          data: { type: 'welcome', userId: user?.id },
+          sound: 'default',
+        },
+        trigger: { 
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 2 
+        },
+      });
+
+      console.log('✅ Welcome notification scheduled');
+    } catch (error) {
+      console.error('❌ Failed to send welcome notification:', error);
     }
   };
 
