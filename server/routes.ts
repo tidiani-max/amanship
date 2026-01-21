@@ -195,126 +195,43 @@ if (req.file) {
     }
   });
 
-// In server/routes.ts - modify login endpoint
 app.post("/api/auth/login", async (req, res) => {
   const { phone, password } = req.body;
   const result = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
   const user = result[0];
 
-  if (!user) {
-    return res.status(401).json({ error: "User not found" });
-  }
-
-  // ✅ CHECK IF FIRST LOGIN (staff created by admin)
-  if (user.accountStatus === "pending_activation") {
-    return res.status(403).json({ 
-      error: "first_login_required",
-      message: "Please complete account setup",
-      phone: user.phone
-    });
-  }
-
-  if (user.password !== password) {
-    return res.status(401).json({ error: "Invalid password" });
+  if (!user || user.password !== password) {
+    return res.status(401).json({ error: "Invalid phone or password" });
   }
   
   res.json({ user: { id: user.id, username: user.username, phone: user.phone, role: user.role } });
 });
 
   // 1. Updated OTP Send: Check if user exists based on mode
-
-// In server/routes.ts - UPDATE this part in verify endpoint
-app.post("/api/auth/otp/verify", async (req, res) => {
+app.post("/api/auth/otp/send", async (req, res) => {
   try {
-    const { phone, code, name, email, password, mode } = req.body;
-    if (!phone || !code) return res.status(400).json({ error: "Phone and code required" });
+    const { phone, mode } = req.body; // mode: 'signup' | 'forgot' | 'login'
+    if (!phone) return res.status(400).json({ error: "Phone required" });
 
-    // 1. Validate OTP
-    const validOtp = await db.select().from(otpCodes)
-      .where(and(
-        eq(otpCodes.phone, phone), 
-        eq(otpCodes.code, code), 
-        eq(otpCodes.verified, false), 
-        gt(otpCodes.expiresAt, new Date())
-      ))
-      .limit(1);
+    const existingUser = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
 
-    if (!validOtp.length) return res.status(400).json({ error: "Invalid or expired OTP" });
-
-    // 2. Mark OTP as verified
-    await db.update(otpCodes).set({ verified: true }).where(eq(otpCodes.id, validOtp[0].id));
-
-    // 3. Check for existing user
-    const existingUsers = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
-    let user;
-
-    if (existingUsers.length > 0) {
-      // --- UPDATE EXISTING USER ---
-      const updateData: any = {
-        password: password || existingUsers[0].password,
-        email: email || existingUsers[0].email,
-        username: name || existingUsers[0].username,
-      };
-
-      // ✅ ACTIVATE ACCOUNT if it was pending
-      if (existingUsers[0].accountStatus === "pending_activation") {
-        updateData.accountStatus = "active";
-      }
-
-      const updatedUsers = await db.update(users)
-        .set(updateData)
-        .where(eq(users.phone, phone))
-        .returning();
-      user = updatedUsers[0];
-    } else {
-      // --- CREATE NEW USER ---
-      const isSuperAdmin = phone === '+6288289943397';
-      const timestamp = Date.now().toString().slice(-4);
-      const safeUsername = name ? `${name}_${timestamp}` : `user_${phone.slice(-4)}_${timestamp}`;
-
-      const newUser = await db.insert(users).values({
-        username: safeUsername,
-        password: password,
-        phone,
-        email: email || null,
-        role: isSuperAdmin ? "admin" : "customer",
-        accountStatus: "active", // ✅ Set as active for new users
-      }).returning();
-      user = newUser[0];
+    // Alert logic: If signup and user exists, or if forgot and user doesn't exist
+    if (mode === "signup" && existingUser.length > 0) {
+      return res.status(400).json({ error: "This phone number is already registered. Please login instead." });
+    }
+    if (mode === "forgot" && existingUser.length === 0) {
+      return res.status(400).json({ error: "No account found with this phone number." });
     }
 
-    // 4. Staff/Store Logic
-    const staffRecord = await storage.getStoreStaffByUserId(user.id);
-    let staffInfo = null;
-    if (staffRecord) {
-      const store = await storage.getStoreById(staffRecord.storeId);
-      staffInfo = { 
-        storeId: staffRecord.storeId, 
-        storeName: store?.name || "Unknown", 
-        role: staffRecord.role, 
-        status: staffRecord.status 
-      };
-    }
-
-    res.json({ 
-      user: { 
-        id: user.id, 
-        username: user.username, 
-        phone: user.phone, 
-        email: user.email, 
-        role: user.role 
-      }, 
-      staffInfo 
-    });
-
-  } catch (error: any) {
-    console.error("❌ OTP verify error details:", error);
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
     
-    if (error.code === '23505') {
-      return res.status(400).json({ error: "Username or Phone already exists in system." });
-    }
-    
-    res.status(500).json({ error: "Verification failed internally" });
+    await db.insert(otpCodes).values({ phone, code, expiresAt });
+
+    res.json({ success: true, code, message: "OTP sent" });
+  } catch (error) {
+    console.error("❌ OTP send error:", error);
+    res.status(500).json({ error: "Failed to send OTP" });
   }
 });
 
@@ -1100,22 +1017,6 @@ app.get("/api/category/products", async (req, res) => {
   }
 });
 
-app.get("/api/products", async (req, res) => {
-  try {
-    console.log("🟢 HIT /api/products - Fetching all products");
-
-    // Get all products from database
-    const allProducts = await db.select().from(products);
-
-    console.log(`✅ Found ${allProducts.length} products`);
-
-    res.json(allProducts);
-  } catch (error) {
-    console.error("❌ /api/products error:", error);
-    res.status(500).json({ error: "Failed to fetch products" });
-  }
-});
-
   app.get("/api/products/:id", async (req, res) => {
     try {
       const product = await storage.getProductById(req.params.id);
@@ -1171,7 +1072,6 @@ app.get("/api/products/:id/store", async (req, res) => {
     });
   }
 });
-
 
 
   // ==================== 8. CART ====================
@@ -2115,21 +2015,20 @@ app.post("/api/admin/stores/:storeId/staff", async (req, res) => {
       : await storage.getUserByEmail(email!);
 
     if (!user) {
-      // ✅ Create new staff user with pending_activation status
+      // Create new user with temporary credentials
       const username = phone || email!.split("@")[0];
       const tempPassword = Math.random().toString(36).slice(-8);
       
       user = await storage.createUser({
         username,
-        password: tempPassword,
+        password: tempPassword, // Should be hashed in production
         phone: phone || null,
         email: email || null,
         name: name || username,
         role,
-        accountStatus: "pending_activation", // ✅ NEW: Set pending until first login
       });
       
-      console.log(`✅ Created new staff user (pending activation): ${username}`);
+      console.log(`✅ Created new user: ${username} (temp password: ${tempPassword})`);
     } else {
       // Update existing user role if different
       if (user.role !== role) {

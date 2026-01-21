@@ -821,21 +821,16 @@ export default function AdminDashboardScreen() {
   });
 
   // ---------------------- STAFF MUTATIONS ----------------------
- const addStaffMutation = useMutation({
-  mutationFn: async (data: any) => {
-    console.log("Adding staff:", data);
-    // ❌ REMOVE THIS LINE:
-    // accountStatus: "pending_activation" 
-    
-    const response = await apiRequest("POST", `/api/admin/stores/${data.storeId}/staff`, data);
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Failed to add staff");
-    }
-    return response.json();
-  },
-    
-   
+  const addStaffMutation = useMutation({
+    mutationFn: async (data: any) => {
+      console.log("Adding staff:", data);
+      const response = await apiRequest("POST", `/api/admin/stores/${data.storeId}/staff`, data);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to add staff");
+      }
+      return response.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
       setShowStaffModal(false);
