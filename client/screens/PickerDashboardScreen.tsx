@@ -229,31 +229,14 @@ export default function PickerDashboardScreen() {
     }
   });
 
- const { data: inventoryData, isLoading: invLoading, refetch: refetchInv, error: invError } = useQuery<InventoryItem[]>({
-  queryKey: ["/api/picker/inventory", user?.id],
-  queryFn: async () => {
-    const res = await fetch(`${BASE_URL}/api/picker/inventory?userId=${user?.id || 'demo-picker'}`);
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
-    const data = await res.json();
-    
-    // Ensure we always return an array
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (data && Array.isArray(data.inventory)) {
-      return data.inventory;
-    }
-    console.error("Unexpected inventory response:", data);
-    return [];
-  },
-  refetchInterval: 10000,
-  retry: 1,
-});
-
-// Safe inventory reference
-const inventory = inventoryData || [];
+  const { data: inventory, isLoading: invLoading, refetch: refetchInv } = useQuery<InventoryItem[]>({
+    queryKey: ["/api/picker/inventory", user?.id],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/picker/inventory?userId=${user?.id || 'demo-picker'}`);
+      return res.json();
+    },
+    refetchInterval: 10000,
+  });
 
   const { data: dashboard, isLoading: dashLoading, refetch: refetchDash } = useQuery({
     queryKey: ["/api/picker/dashboard", user?.id],
