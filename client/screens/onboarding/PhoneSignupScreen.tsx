@@ -69,18 +69,21 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const colorScheme = useColorScheme();
-  const { sendOtp, verifyOtp, loginWithApple, login } = useAuth();
+  const { sendOtp, verifyOtp, loginWithApple, login, resetFirstLoginPassword } = useAuth();
 
   type AuthMode = "login" | "signup" | "forgot";
+  type Step = "input" | "otp" | "resetPassword";
 
   const [mode, setMode] = useState<AuthMode>("signup");
-  const [step, setStep] = useState<"input" | "otp">("input");
+  const [step, setStep] = useState<Step>("input");
 
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otpCode, setOtpCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,44 +91,53 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
 
   const fullPhone = `+62${phone}`;
 
-const handleInitialAction = async () => {
-  if (mode === "login") {
-    const result = await login(fullPhone, password);
-    setIsLoading(false);
-    
-    // ✅ DETECT FIRST LOGIN
-    if (result.error === "first_login_required") {
-      Alert.alert(
-        "First Time Login", 
-        "Please verify your phone number to activate your account",
-        [{ 
-          text: "Verify Now", 
-          onPress: () => {
-            setMode("signup"); // Use signup flow for OTP
-            handleInitialAction(); // Trigger OTP send
-          }
-        }]
-      );
+  // ========================================
+  // STEP 1: Phone + Password Input
+  // ========================================
+  const handleInitialAction = async () => {
+    if (mode === "signup") {
+      if (!name || !email || !password) {
+        Alert.alert("Missing Information", "Please fill in all fields to create an account.");
+        return;
+      }
+      const emailRegex = /\S+@\S+\.\S+/;
+      if (!emailRegex.test(email)) {
+        Alert.alert("Invalid Email", "Please enter a valid email address.");
+        return;
+      }
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    // ✅ LOGIN MODE: Check for staff first login
+    if (mode === "login") {
+      const result = await login(fullPhone, password);
+      setIsLoading(false);
+      
+      // ✅ DETECT FIRST LOGIN for staff
+      if (result.error === "first_login_required") {
+        setStep("resetPassword");
+        return;
+      }
+      
+      if (result.success) {
+        onComplete();
+      } else {
+        Alert.alert("Login Failed", result.error || "Invalid phone or password");
+        setError(result.error || "Invalid credentials");
+      }
       return;
     }
-    
-    if (result.success) {
-      onComplete();
-    } else {
-      Alert.alert("Login Failed", result.error || "Invalid credentials");
-    }
-    return;
-  }
 
-    const result = await sendOtp(fullPhone, mode as AuthMode); 
-    setIsLoading(true);
+    // SIGNUP/FORGOT MODE: Send OTP
+    const result = await sendOtp(fullPhone, mode as AuthMode);
+    setIsLoading(false);
 
     if (result.success) {
-      setIsLoading(false);
       setSentCode(result.code); 
       setStep("otp");
     } else {
-      setIsLoading(false);
       Alert.alert(
         mode === "signup" ? "Account Exists" : "User Not Found",
         result.error || "This action cannot be completed.",
@@ -143,6 +155,9 @@ const handleInitialAction = async () => {
     }
   };
 
+  // ========================================
+  // STEP 2: Verify OTP
+  // ========================================
   const handleVerifyOTP = async () => {
     setIsLoading(true);
     setError(null);
@@ -155,6 +170,37 @@ const handleInitialAction = async () => {
     setIsLoading(false);
     if (result.success) onComplete();
     else setError(result.error || "Invalid OTP");
+  };
+
+  // ========================================
+  // STEP 3: Reset Password (Staff First Login)
+  // ========================================
+  const handleResetPassword = async () => {
+    if (newPassword.length < 4) {
+      Alert.alert("Error", "Password must be at least 4 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert("Error", "Passwords do not match");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    const result = await resetFirstLoginPassword(fullPhone, newPassword);
+    setIsLoading(false);
+
+    if (result.success) {
+      Alert.alert("Success", "Password updated! You can now login with your new password.");
+      // Reset to login screen
+      setStep("input");
+      setPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } else {
+      setError(result.error || "Failed to update password");
+    }
   };
 
   const handleAppleSignIn = async () => {
@@ -180,6 +226,70 @@ const handleInitialAction = async () => {
     }
   };
 
+  // ========================================
+  // RENDER: Reset Password Screen
+  // ========================================
+  if (step === "resetPassword") {
+    return (
+      <KeyboardAwareScrollViewCompat
+        style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
+        contentContainerStyle={[
+          styles.container, 
+          { paddingTop: headerHeight + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl }
+        ]}
+      >
+        <View style={styles.centerWrapper}>
+          <View style={styles.content}>
+            <View style={{ marginBottom: Spacing.lg, padding: Spacing.lg, backgroundColor: theme.primary + "20", borderRadius: BorderRadius.sm }}>
+              <Feather name="lock" size={32} color={theme.primary} style={{ alignSelf: 'center', marginBottom: Spacing.md }} />
+              <ThemedText type="h2" style={{ textAlign: 'center', marginBottom: Spacing.sm }}>
+                Set Your Password
+              </ThemedText>
+              <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: 'center' }}>
+                This is your first login. Please create a secure password.
+              </ThemedText>
+            </View>
+
+            {error && (
+              <View style={[styles.errorBox, { backgroundColor: theme.error + "20" }]}>
+                <ThemedText type="caption" style={{ color: theme.error }}>{error}</ThemedText>
+              </View>
+            )}
+
+            <TextInput 
+              style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]} 
+              placeholder="New Password" 
+              placeholderTextColor={theme.textSecondary}
+              secureTextEntry 
+              value={newPassword} 
+              onChangeText={setNewPassword} 
+            />
+
+            <TextInput 
+              style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.sm }]} 
+              placeholder="Confirm Password" 
+              placeholderTextColor={theme.textSecondary}
+              secureTextEntry 
+              value={confirmPassword} 
+              onChangeText={setConfirmPassword} 
+            />
+
+            <Button 
+              onPress={handleResetPassword} 
+              disabled={isLoading || !newPassword || !confirmPassword}
+              style={{ marginTop: Spacing.lg }}
+            >
+              {isLoading ? "Updating..." : "Set Password"}
+            </Button>
+          </View>
+        </View>
+      </KeyboardAwareScrollViewCompat>
+    );
+  }
+
+  // ========================================
+  // RENDER: Main Login/Signup Screen
+  // ========================================
   return (
     <KeyboardAwareScrollViewCompat
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}

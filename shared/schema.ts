@@ -32,6 +32,7 @@ export const users = pgTable("users", {
   areaId: integer("area_id"),
   storeId: integer("store_id"),
   pushToken: text("push_token"),
+  firstLogin: boolean("first_login").default(true).notNull(), 
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -290,6 +291,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   googleId: true, // Add this
   appleId: true,   // Add this
   accountStatus: true,
+  firstLogin: true,
 });
 // Add this to shared/schema.ts
 

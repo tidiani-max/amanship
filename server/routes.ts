@@ -208,8 +208,77 @@ app.post("/api/auth/login", async (req, res) => {
     return res.status(401).json({ error: "Invalid phone or password" });
   }
   
-  res.json({ user: { id: user.id, username: user.username, phone: user.phone, role: user.role } });
+  // ✅ Check if staff needs to reset password on first login
+  const isStaff = ["picker", "driver"].includes(user.role);
+  
+  if (isStaff && user.firstLogin) {
+    // Staff first login - trigger password reset flow
+    return res.json({ 
+      error: "first_login_required",
+      user: { 
+        id: user.id, 
+        phone: user.phone, 
+        role: user.role,
+        firstLogin: true
+      }
+    });
+  }
+  
+  // Normal login
+  res.json({ 
+    user: { 
+      id: user.id, 
+      username: user.username, 
+      phone: user.phone, 
+      role: user.role,
+      firstLogin: user.firstLogin || false
+    }
+  });
 });
+
+app.post("/api/auth/reset-first-login", async (req, res) => {
+  try {
+    const { phone, newPassword } = req.body;
+    
+    if (!phone || !newPassword) {
+      return res.status(400).json({ error: "Phone and new password required" });
+    }
+
+    if (newPassword.length < 4) {
+      return res.status(400).json({ error: "Password must be at least 4 characters" });
+    }
+
+    // Update password and mark firstLogin as false
+    const [updated] = await db
+      .update(users)
+      .set({ 
+        password: newPassword,
+        firstLogin: false 
+      })
+      .where(eq(users.phone, phone))
+      .returning();
+
+    if (!updated) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({ 
+      success: true,
+      user: {
+        id: updated.id,
+        username: updated.username,
+        phone: updated.phone,
+        role: updated.role,
+        firstLogin: false
+      }
+    });
+  } catch (error) {
+    console.error("❌ Reset first login password error:", error);
+    res.status(500).json({ error: "Failed to reset password" });
+  }
+});
+
+
 
   // 1. Updated OTP Send: Check if user exists based on mode
 app.post("/api/auth/otp/send", async (req, res) => {
@@ -245,7 +314,6 @@ app.post("/api/auth/otp/verify", async (req, res) => {
     const { phone, code, name, email, password, mode } = req.body;
     if (!phone || !code) return res.status(400).json({ error: "Phone and code required" });
 
-    // 1. Validate OTP
     const validOtp = await db.select().from(otpCodes)
       .where(and(
         eq(otpCodes.phone, phone), 
@@ -257,32 +325,26 @@ app.post("/api/auth/otp/verify", async (req, res) => {
 
     if (!validOtp.length) return res.status(400).json({ error: "Invalid or expired OTP" });
 
-    // 2. Mark OTP as verified
     await db.update(otpCodes).set({ verified: true }).where(eq(otpCodes.id, validOtp[0].id));
 
-    // 3. Check for existing user by PHONE (Primary Key for our logic)
     const existingUsers = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
     let user;
 
     if (existingUsers.length > 0) {
-      // --- UPDATE EXISTING USER ---
+      // UPDATE EXISTING USER
       const updatedUsers = await db.update(users)
         .set({ 
           password: password || existingUsers[0].password,
           email: email || existingUsers[0].email,
-          // Only update username if the new name is provided
-          username: name || existingUsers[0].username 
+          username: name || existingUsers[0].username,
+          firstLogin: false // ✅ Password reset via OTP = not first login anymore
         })
         .where(eq(users.phone, phone))
         .returning();
       user = updatedUsers[0];
     } else {
-      // --- CREATE NEW USER ---
+      // CREATE NEW USER
       const isSuperAdmin = phone === '+6288289943397';
-      
-      // Fix for the Duplicate Username Error:
-      // We try to use the name, but if that's taken or empty, we use phone + timestamp
-      // This ensures "users_username_unique" is NEVER violated.
       const timestamp = Date.now().toString().slice(-4);
       const safeUsername = name ? `${name}_${timestamp}` : `user_${phone.slice(-4)}_${timestamp}`;
 
@@ -292,11 +354,11 @@ app.post("/api/auth/otp/verify", async (req, res) => {
         phone,
         email: email || null,
         role: isSuperAdmin ? "admin" : "customer",
+        firstLogin: false // ✅ New users don't need password reset
       }).returning();
       user = newUser[0];
     }
 
-    // 4. Staff/Store Logic
     const staffRecord = await storage.getStoreStaffByUserId(user.id);
     let staffInfo = null;
     if (staffRecord) {
@@ -315,7 +377,8 @@ app.post("/api/auth/otp/verify", async (req, res) => {
         username: user.username, 
         phone: user.phone, 
         email: user.email, 
-        role: user.role 
+        role: user.role,
+        firstLogin: user.firstLogin || false
       }, 
       staffInfo 
     });
@@ -323,7 +386,6 @@ app.post("/api/auth/otp/verify", async (req, res) => {
   } catch (error: any) {
     console.error("❌ OTP verify error details:", error);
     
-    // Catch the specific Postgres Unique Violation
     if (error.code === '23505') {
       return res.status(400).json({ error: "Username or Phone already exists in system." });
     }
@@ -331,6 +393,8 @@ app.post("/api/auth/otp/verify", async (req, res) => {
     res.status(500).json({ error: "Verification failed internally" });
   }
 });
+
+
 
   // ==================== 4. PICKER ROUTES (BEFORE /api/orders) ====================
 console.log("📦 Registering picker routes...");
@@ -1973,34 +2037,31 @@ app.post("/api/admin/stores/:storeId/staff", async (req, res) => {
       return res.status(400).json({ error: "Phone or email required" });
     }
 
-    // Check if store exists
     const store = await storage.getStoreById(storeId);
     if (!store) {
       return res.status(404).json({ error: "Store not found" });
     }
 
-    // Find or create user
     let user = phone 
       ? await storage.getUserByPhone(phone) 
       : await storage.getUserByEmail(email!);
 
     if (!user) {
-      // Create new user with temporary credentials
       const username = phone || email!.split("@")[0];
       const tempPassword = Math.random().toString(36).slice(-8);
       
       user = await storage.createUser({
         username,
-        password: tempPassword, // Should be hashed in production
+        password: tempPassword,
         phone: phone || null,
         email: email || null,
         name: name || username,
         role,
+        firstLogin: true // ✅ SET firstLogin for new staff
       });
       
       console.log(`✅ Created new user: ${username} (temp password: ${tempPassword})`);
     } else {
-      // Update existing user role if different
       if (user.role !== role) {
         await db.update(users)
           .set({ role })
@@ -2009,7 +2070,6 @@ app.post("/api/admin/stores/:storeId/staff", async (req, res) => {
       }
     }
 
-    // Check if already staff at this store
     const existingStaff = await storage.getStoreStaff(storeId);
     const alreadyStaff = existingStaff.find(s => s.userId === user!.id);
     
@@ -2017,7 +2077,6 @@ app.post("/api/admin/stores/:storeId/staff", async (req, res) => {
       return res.status(400).json({ error: "User is already staff at this store" });
     }
 
-    // Create staff assignment
     const newStaff = await storage.createStoreStaff({
       userId: user.id,
       storeId,
@@ -2027,7 +2086,6 @@ app.post("/api/admin/stores/:storeId/staff", async (req, res) => {
 
     console.log(`✅ Staff added: ${newStaff.id}`);
 
-    // Return enriched staff data
     res.json({
       ...newStaff,
       user: {
