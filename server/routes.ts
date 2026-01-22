@@ -1028,10 +1028,20 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
     console.log("🟢 HIT /api/home/products", { lat, lng });
 
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      return res.status(400).json({ error: "lat & lng required" });
+      console.log("❌ Invalid coordinates:", { lat, lng });
+      return res.status(400).json({ error: "Valid lat & lng required" });
     }
 
-    // Query DB - ✅ REMOVED stock_count > 0 filter
+    // First, let's check if we have any stores at all
+    const allStores = await db.select().from(stores);
+    console.log(`📍 Total stores in database: ${allStores.length}`);
+
+    if (allStores.length === 0) {
+      console.log("❌ No stores in database");
+      return res.json([]);
+    }
+
+    // Use CAST to ensure latitude/longitude are treated as numeric
     const result = await db.execute(sql<HomeProductRow>`
       SELECT
         p.id,
@@ -1049,38 +1059,70 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
         (
           6371 * acos(
             cos(radians(${lat}))
-            * cos(radians(s.latitude))
-            * cos(radians(s.longitude) - radians(${lng}))
+            * cos(radians(CAST(s.latitude AS DOUBLE PRECISION)))
+            * cos(radians(CAST(s.longitude AS DOUBLE PRECISION)) - radians(${lng}))
             + sin(radians(${lat}))
-            * sin(radians(s.latitude))
+            * sin(radians(CAST(s.latitude AS DOUBLE PRECISION)))
           )
         ) AS distance
       FROM stores s
       JOIN store_inventory si ON si.store_id = s.id
       JOIN products p ON p.id = si.product_id
       WHERE
-        (
+        s.is_active = true
+        AND (
           6371 * acos(
             cos(radians(${lat}))
-            * cos(radians(s.latitude))
-            * cos(radians(s.longitude) - radians(${lng}))
+            * cos(radians(CAST(s.latitude AS DOUBLE PRECISION)))
+            * cos(radians(CAST(s.longitude AS DOUBLE PRECISION)) - radians(${lng}))
             + sin(radians(${lat}))
-            * sin(radians(s.latitude))
+            * sin(radians(CAST(s.latitude AS DOUBLE PRECISION)))
           )
         ) <= 3
       ORDER BY distance ASC;
     `);
 
-    console.log("✅ home products found:", result.rows.length);
+    console.log(`✅ Found ${result.rows.length} products from nearby stores`);
+    
+    // If no results, let's debug by showing all stores with distances
+    if (result.rows.length === 0) {
+      const debugStores = await db.execute(sql`
+        SELECT
+          s.id,
+          s.name,
+          s.latitude,
+          s.longitude,
+          s.is_active,
+          (
+            6371 * acos(
+              cos(radians(${lat}))
+              * cos(radians(CAST(s.latitude AS DOUBLE PRECISION)))
+              * cos(radians(CAST(s.longitude AS DOUBLE PRECISION)) - radians(${lng}))
+              + sin(radians(${lat}))
+              * sin(radians(CAST(s.latitude AS DOUBLE PRECISION)))
+            )
+          ) AS distance
+        FROM stores s
+        ORDER BY distance ASC
+        LIMIT 5;
+      `);
+      
+      console.log("🔍 Nearest stores (debug):", debugStores.rows);
+    }
+    
     res.json(result.rows);
   } catch (error) {
-    console.error("❌ /api/home/products error", error);
-    res.status(500).json({ error: "Failed to fetch home products" });
+    console.error("❌ /api/home/products error:", error);
+    console.error("Error stack:", error instanceof Error ? error.stack : "Unknown error");
+    res.status(500).json({ 
+      error: "Failed to fetch home products",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
   }
 });
 
 
-app.get("/api/category/products", async (req, res) => {
+app.get("/api/category/products", async (req: Request, res: Response) => {
   try {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
@@ -1108,10 +1150,10 @@ app.get("/api/category/products", async (req, res) => {
         (
           6371 * acos(
             cos(radians(${lat}))
-            * cos(radians(s.latitude))
-            * cos(radians(s.longitude) - radians(${lng}))
+            * cos(radians(CAST(s.latitude AS DOUBLE PRECISION)))
+            * cos(radians(CAST(s.longitude AS DOUBLE PRECISION)) - radians(${lng}))
             + sin(radians(${lat}))
-            * sin(radians(s.latitude))
+            * sin(radians(CAST(s.latitude AS DOUBLE PRECISION)))
           )
         ) AS distance
       FROM stores s
@@ -1120,23 +1162,28 @@ app.get("/api/category/products", async (req, res) => {
       WHERE
         p.category_id = ${categoryId}
         AND si.stock_count > 0
+        AND s.is_active = true
         AND (
           6371 * acos(
             cos(radians(${lat}))
-            * cos(radians(s.latitude))
-            * cos(radians(s.longitude) - radians(${lng}))
+            * cos(radians(CAST(s.latitude AS DOUBLE PRECISION)))
+            * cos(radians(CAST(s.longitude AS DOUBLE PRECISION)) - radians(${lng}))
             + sin(radians(${lat}))
-            * sin(radians(s.latitude))
+            * sin(radians(CAST(s.latitude AS DOUBLE PRECISION)))
           )
         ) <= 3
       ORDER BY distance ASC;
     `);
 
-    console.log("✅ category products found:", result.rows.length);
+    console.log(`✅ Found ${result.rows.length} products in category ${categoryId}`);
     res.json(result.rows);
   } catch (error) {
-    console.error("❌ /api/category/products error", error);
-    res.status(500).json({ error: "Failed to fetch category products" });
+    console.error("❌ /api/category/products error:", error);
+    console.error("Error details:", error instanceof Error ? error.message : "Unknown error");
+    res.status(500).json({ 
+      error: "Failed to fetch category products",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
   }
 });
 
