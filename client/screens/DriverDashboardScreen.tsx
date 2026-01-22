@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -11,7 +12,7 @@ import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/query-client";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing } from "@/constants/theme";
 
 function PINModal({ 
   visible, 
@@ -44,7 +45,7 @@ function PINModal({
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+        <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
           <ThemedText type="h3" style={{ marginBottom: 12 }}>Enter Delivery PIN</ThemedText>
           <ThemedText type="body" style={{ color: theme.textSecondary, marginBottom: 20, textAlign: "center" }}>
             Ask the customer for their 4-digit PIN
@@ -264,7 +265,6 @@ export default function DriverDashboardScreen() {
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
-  // ✅ Handle logout
   const handleLogout = () => {
     Alert.alert(
       "Logout",
@@ -367,7 +367,7 @@ export default function DriverDashboardScreen() {
   if (isLoading) {
     return (
       <ThemedView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.primary} />
+        <ActivityIndicator size="large" color="#4CAF50" />
       </ThemedView>
     );
   }
@@ -387,37 +387,58 @@ export default function DriverDashboardScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* ✅ Header with Notification & Logout */}
-      <View style={[styles.header, { paddingTop: insets.top + Spacing.md }]}>
-        <View style={{ flex: 1 }}>
-          <ThemedText type="h2">Driver Dashboard</ThemedText>
-        </View>
-        
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <TouchableOpacity 
-            style={[styles.iconButton, { backgroundColor: theme.primary + '15' }]}
-            onPress={() => navigation.navigate('Notifications')}
-          >
-            <Feather name="bell" size={20} color={theme.primary} />
-          </TouchableOpacity>
+      {/* ✅ IMPROVED GRADIENT HEADER */}
+      <LinearGradient
+        colors={['#4CAF50', '#45a049']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.headerGradient, { paddingTop: insets.top + 10 }]}
+      >
+        <View style={styles.headerContent}>
+          <View style={{ flex: 1 }}>
+            <ThemedText style={styles.headerTitle}>Delivery Hub</ThemedText>
+            <View style={styles.statusRow}>
+              <View style={styles.statusDot} />
+              <ThemedText style={styles.statusText}>Online</ThemedText>
+            </View>
+          </View>
           
-          <TouchableOpacity 
-            style={[styles.iconButton, { backgroundColor: theme.error + '15' }]}
-            onPress={handleLogout}
-          >
-            <Feather name="log-out" size={20} color={theme.error} />
-          </TouchableOpacity>
+          {/* ✅ IMPROVED ICON BUTTONS */}
+          <View style={styles.headerButtons}>
+            <TouchableOpacity 
+              style={styles.headerButton}
+              onPress={() => navigation.navigate('Notifications')}
+            >
+              <View style={styles.iconCircle}>
+                <Feather name="bell" size={22} color="#4CAF50" />
+              </View>
+              <ThemedText style={styles.buttonLabel}>Alerts</ThemedText>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.headerButton}
+              onPress={handleLogout}
+            >
+              <View style={[styles.iconCircle, { backgroundColor: '#ff4444' }]}>
+                <Feather name="log-out" size={22} color="white" />
+              </View>
+              <ThemedText style={styles.buttonLabel}>Logout</ThemedText>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </LinearGradient>
 
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing.xl }]}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.primary} />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#4CAF50" />}
       >
-        <ThemedText type="h3" style={styles.sectionTitle}>
-          Active Deliveries ({allActiveOrders.length})
-        </ThemedText>
+        <View style={styles.sectionHeader}>
+          <Feather name="truck" size={20} color="#4CAF50" />
+          <ThemedText type="h3" style={styles.sectionTitle}>
+            Active Deliveries ({allActiveOrders.length})
+          </ThemedText>
+        </View>
 
         {allActiveOrders.length > 0 ? (
           allActiveOrders.map((order: any) => (
@@ -433,14 +454,20 @@ export default function DriverDashboardScreen() {
         ) : (
           <Card style={styles.emptyCard}>
             <Feather name="inbox" size={48} color={theme.textSecondary} />
-            <ThemedText type="h3" style={{ marginTop: Spacing.md }}>No Deliveries</ThemedText>
+            <ThemedText type="h3" style={{ marginTop: Spacing.md, color: theme.textSecondary }}>No Deliveries</ThemedText>
+            <ThemedText type="body" style={{ marginTop: 8, color: theme.textSecondary }}>
+              New orders will appear here
+            </ThemedText>
           </Card>
         )}
 
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.xl }}>
-          <ThemedText type="h3" style={styles.sectionTitle}>
-            Today's Deliveries ({sortedCompletedOrders.length})
-          </ThemedText>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.xl, marginBottom: 12 }}>
+          <View style={styles.sectionHeader}>
+            <Feather name="check-circle" size={20} color="#4CAF50" />
+            <ThemedText type="h3" style={styles.sectionTitle}>
+              Today's Completed ({sortedCompletedOrders.length})
+            </ThemedText>
+          </View>
           <Pressable onPress={() => setShowCompleted(!showCompleted)}>
             <Feather name={showCompleted ? "chevron-up" : "chevron-down"} size={24} color={theme.text} />
           </Pressable>
@@ -452,7 +479,7 @@ export default function DriverDashboardScreen() {
               <>
                 <Card style={{ padding: 16, marginBottom: 12, backgroundColor: theme.success + "15" }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <ThemedText type="body">Total Earnings Today</ThemedText>
+                    <ThemedText type="body">💰 Total Earnings Today</ThemedText>
                     <ThemedText type="h2" style={{ color: theme.success }}>
                       Rp {todayEarnings.toLocaleString()}
                     </ThemedText>
@@ -496,12 +523,21 @@ export default function DriverDashboardScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { backgroundColor: 'white', paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', flexDirection: 'row', alignItems: 'center' },
-  iconButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  headerGradient: { paddingBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 5 },
+  headerContent: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 0 },
+  headerTitle: { fontSize: 24, fontWeight: 'bold', color: 'white', marginBottom: 4 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff' },
+  statusText: { fontSize: 14, color: 'rgba(255,255,255,0.9)' },
+  headerButtons: { flexDirection: 'row', gap: 12 },
+  headerButton: { alignItems: 'center' },
+  iconCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  buttonLabel: { fontSize: 11, fontWeight: '600', color: 'white', marginTop: 4 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 16 },
-  sectionTitle: { marginBottom: 12 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 0 },
+  sectionTitle: { marginBottom: 0 },
   orderCard: { marginBottom: 12, padding: 16 },
   orderHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },

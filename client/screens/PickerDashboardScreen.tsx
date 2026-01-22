@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from "@react-navigation/native";
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -198,7 +199,6 @@ export default function PickerDashboardScreen() {
     setAlertVisible(true);
   };
 
-  // ✅ Handle logout
   const handleLogout = () => {
     Alert.alert(
       "Logout",
@@ -210,7 +210,6 @@ export default function PickerDashboardScreen() {
           style: "destructive",
           onPress: async () => {
             await logout();
-            // Navigation will be handled automatically by AuthContext
           },
         },
       ]
@@ -225,7 +224,6 @@ export default function PickerDashboardScreen() {
       if (Array.isArray(json)) return json;
       if (Array.isArray(json.categories)) return json.categories;
       if (Array.isArray(json.data)) return json.data;
-      console.warn("⚠️ Unexpected categories response:", json);
       return [];
     }
   });
@@ -272,8 +270,6 @@ export default function PickerDashboardScreen() {
   };
 
   const pickImage = async () => {
-    console.log("📷 Opening image picker...");
-    
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
@@ -282,16 +278,8 @@ export default function PickerDashboardScreen() {
     });
     
     if (!result.canceled && result.assets[0]) {
-      console.log("✅ Image selected:", {
-        uri: result.assets[0].uri,
-        width: result.assets[0].width,
-        height: result.assets[0].height,
-      });
-      
       setFormImage(result.assets[0].uri);
       setImageChanged(true);
-    } else {
-      console.log("❌ Image picker cancelled");
     }
   };
 
@@ -309,7 +297,6 @@ export default function PickerDashboardScreen() {
       setFormCategoryId(item.categoryId || (item as any).product?.categoryId || null);
       setFormImage(item.product.image ?? null);
       setImageChanged(false);
-      console.log("📝 Editing item:", item.id, "Image:", item.product.image);
     } else {
       setIsEditing(false);
       setSelectedInventoryId(null);
@@ -323,19 +310,11 @@ export default function PickerDashboardScreen() {
       setFormCategoryId(null);
       setFormImage(null);
       setImageChanged(false);
-      console.log("➕ Creating new item");
     }
     setModalVisible(true);
   };
 
   const handleSaveProduct = async () => {
-    console.log("💾 Save product called", { 
-      isEditing, 
-      selectedInventoryId, 
-      imageChanged, 
-      formImage: formImage?.substring(0, 50) 
-    });
-    
     if (!user || !user.id) {
       showAlert("Error", "You must be logged in to save products.");
       return;
@@ -371,8 +350,6 @@ export default function PickerDashboardScreen() {
       return;
     }
 
-    console.log("✅ Validation passed, building FormData");
-
     const formData = new FormData();
     formData.append("userId", user.id); 
     formData.append("name", formName.trim());
@@ -395,17 +372,13 @@ export default function PickerDashboardScreen() {
       const isNewImage = formImage.startsWith('file://') || formImage.startsWith('blob:');
       
       if (isNewImage) {
-        console.log("📤 Preparing to upload NEW image:", formImage.substring(0, 50));
-        
         try {
           if (formImage.startsWith('blob:')) {
-            console.log("🌐 Converting blob to file...");
             const response = await fetch(formImage);
             const blob = await response.blob();
             const filename = `image-${Date.now()}.jpg`;
             const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
             formData.append("image", file as any);
-            console.log("✅ Blob converted and added to FormData");
           } else {
             const filename = formImage.split('/').pop() || 'photo.jpg';
             const match = /\.(\w+)$/.exec(filename);
@@ -415,16 +388,12 @@ export default function PickerDashboardScreen() {
               name: filename,
               type: type,
             } as any);
-            console.log("✅ Mobile image added to FormData");
           }
         } catch (error) {
-          console.error("❌ Error processing image:", error);
           showAlert("Error", "Failed to process image");
           return;
         }
       }
-    } else {
-      console.log("ℹ️ No new image to upload", { formImage, imageChanged });
     }
 
     try {
@@ -432,15 +401,12 @@ export default function PickerDashboardScreen() {
         ? `${BASE_URL}/api/picker/inventory/update` 
         : `${BASE_URL}/api/picker/inventory`;
 
-      console.log(`📡 Sending ${isEditing ? 'UPDATE' : 'CREATE'} request to:`, url);
-
       const response = await fetch(url, {
         method: "POST",
         body: formData,
       });
 
       const result = await response.json();
-      console.log("📥 Response:", { ok: response.ok, status: response.status, result });
 
       if (response.ok) {
         setModalVisible(false);
@@ -462,13 +428,11 @@ export default function PickerDashboardScreen() {
         showAlert("Error", result.error || "Save failed");
       }
     } catch (err) {
-      console.error("❌ Network error:", err);
       showAlert("Error", "Server connection failed");
     }
   };
 
   const handleDeleteProduct = (id: string) => {
-    console.log("🗑️ Delete initiated for inventory ID:", id);
     setItemToDelete(id);
     setDeleteModalVisible(true);
   };
@@ -478,29 +442,18 @@ export default function PickerDashboardScreen() {
     
     try {
       const url = `${BASE_URL}/api/picker/inventory/${itemToDelete}?userId=${user?.id}`;
-      console.log("📡 DELETE request to:", url);
-      
       const res = await fetch(url, { method: 'DELETE' });
       const responseText = await res.text();
-      
-      console.log("📥 DELETE response:", {
-        ok: res.ok,
-        status: res.status,
-        body: responseText
-      });
       
       if (res.ok) {
         await queryClient.invalidateQueries({ queryKey: ["/api/picker/inventory"] });
         await queryClient.refetchQueries({ queryKey: ["/api/picker/inventory", user?.id] });
-        console.log("✅ Item deleted successfully");
         showAlert("Success", "Item removed from inventory");
       } else {
         const error = responseText ? JSON.parse(responseText) : { error: "Unknown error" };
-        console.error("❌ Delete failed:", error);
         showAlert("Error", error.error || "Delete failed");
       }
     } catch (err) { 
-      console.error("❌ Delete error:", err);
       showAlert("Error", "Network error. Please try again."); 
     } finally {
       setDeleteModalVisible(false);
@@ -536,42 +489,71 @@ export default function PickerDashboardScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={[styles.headerContainer, { paddingTop: insets.top + Spacing.md }]}>
-        <View style={styles.headerRow}>
+      {/* ✅ IMPROVED GRADIENT HEADER */}
+      <LinearGradient
+        colors={['#FFD700', '#FFA500']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.headerGradient, { paddingTop: insets.top + 10 }]}
+      >
+        <View style={styles.headerContent}>
           <View style={{ flex: 1 }}>
-            <ThemedText type="h2">Store Ops</ThemedText>
-            <ThemedText style={{ color: theme.textSecondary }}>
-              📍 {dashboard?.store?.name || "Loading..."}
-            </ThemedText>
+            <ThemedText style={styles.headerTitle}>Store Operations</ThemedText>
+            <View style={styles.storeInfo}>
+              <Feather name="map-pin" size={14} color="rgba(0,0,0,0.7)" />
+              <ThemedText style={styles.storeName}>
+                {dashboard?.store?.name || "Loading..."}
+              </ThemedText>
+            </View>
           </View>
           
-          {/* ✅ Notification & Logout Buttons */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          {/* ✅ IMPROVED ICON BUTTONS WITH LABELS */}
+          <View style={styles.headerButtons}>
             <TouchableOpacity 
-              style={[styles.iconButton, { backgroundColor: theme.primary + '15' }]}
+              style={styles.headerButton}
               onPress={() => navigation.navigate('Notifications')}
             >
-              <Feather name="bell" size={20} color={theme.primary} />
+              <View style={styles.iconCircle}>
+                <Feather name="bell" size={22} color="#FFD700" />
+              </View>
+              <ThemedText style={styles.buttonLabel}>Alerts</ThemedText>
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={[styles.iconButton, { backgroundColor: theme.error + '15' }]}
+              style={styles.headerButton}
               onPress={handleLogout}
             >
-              <Feather name="log-out" size={20} color={theme.error} />
+              <View style={[styles.iconCircle, { backgroundColor: '#ff4444' }]}>
+                <Feather name="log-out" size={22} color="white" />
+              </View>
+              <ThemedText style={styles.buttonLabel}>Logout</ThemedText>
             </TouchableOpacity>
           </View>
         </View>
 
+        {/* ✅ IMPROVED TABS */}
         <View style={styles.tabContainer}>
-          <Pressable onPress={() => setActiveTab("orders")} style={[styles.tab, activeTab === "orders" && { borderBottomColor: theme.primary }]}>
-            <ThemedText style={[styles.tabText, activeTab === "orders" ? { color: theme.primary, fontWeight: '700' } : { color: theme.textSecondary }]}>Orders</ThemedText>
+          <Pressable 
+            onPress={() => setActiveTab("orders")} 
+            style={[styles.tab, activeTab === "orders" && styles.activeTab]}
+          >
+            <Feather name="package" size={18} color={activeTab === "orders" ? "#FFD700" : "rgba(0,0,0,0.5)"} />
+            <ThemedText style={[styles.tabText, activeTab === "orders" && styles.activeTabText]}>
+              Orders
+            </ThemedText>
           </Pressable>
-          <Pressable onPress={() => setActiveTab("inventory")} style={[styles.tab, activeTab === "inventory" && { borderBottomColor: theme.primary }]}>
-            <ThemedText style={[styles.tabText, activeTab === "inventory" ? { color: theme.primary, fontWeight: '700' } : { color: theme.textSecondary }]}>Inventory</ThemedText>
+          
+          <Pressable 
+            onPress={() => setActiveTab("inventory")} 
+            style={[styles.tab, activeTab === "inventory" && styles.activeTab]}
+          >
+            <Feather name="box" size={18} color={activeTab === "inventory" ? "#FFD700" : "rgba(0,0,0,0.5)"} />
+            <ThemedText style={[styles.tabText, activeTab === "inventory" && styles.activeTabText]}>
+              Inventory
+            </ThemedText>
           </Pressable>
         </View>
-      </View>
+      </LinearGradient>
 
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
@@ -589,13 +571,13 @@ export default function PickerDashboardScreen() {
               />
             </View>
 
-            <TouchableOpacity style={[styles.addBtn, { backgroundColor: theme.primary }]} onPress={() => openEditModal()}>
+            <TouchableOpacity style={styles.addBtn} onPress={() => openEditModal()}>
               <Feather name="plus" size={18} color="white" />
               <ThemedText style={styles.addBtnText}>Add Store Item</ThemedText>
             </TouchableOpacity>
 
             {invLoading ? (
-              <ActivityIndicator size="large" color={theme.primary} />
+              <ActivityIndicator size="large" color="#FFD700" />
             ) : filteredInventory.length > 0 ? (
               <Card style={styles.inventoryListCard}>
                 {filteredInventory.map(item => (
@@ -609,7 +591,7 @@ export default function PickerDashboardScreen() {
         ) : (
           <View>
             {dashLoading ? (
-              <ActivityIndicator size="large" color={theme.primary} />
+              <ActivityIndicator size="large" color="#FFD700" />
             ) : ordersToDisplay.length > 0 ? (
               ordersToDisplay.map((order: any) => (
                 <OrderCard 
@@ -630,6 +612,7 @@ export default function PickerDashboardScreen() {
         )}
       </ScrollView>
 
+      {/* Modals remain the same */}
       <Modal visible={modalVisible} animationType="slide">
         <ThemedView style={[styles.modalContent, { paddingTop: insets.top + 20 }]}>
           <View style={styles.modalHeader}>
@@ -747,10 +730,7 @@ function InventoryItemRow({ item, onEdit, onDelete }: { item: InventoryItem; onE
         </ThemedText>
         <ThemedText type="caption">Stock: {item.stockCount} | Rp {item.product.price}</ThemedText>
       </View>
-      <TouchableOpacity style={styles.iconBtn} onPress={() => {
-        console.log("🗑️ Delete button pressed for:", item.id);
-        onDelete(item.id);
-      }}>
+      <TouchableOpacity style={styles.iconBtn} onPress={() => onDelete(item.id)}>
         <Feather name="trash-2" size={18} color="#e74c3c" />
       </TouchableOpacity>
       <TouchableOpacity style={[styles.editBtnSmall, { backgroundColor: theme.primary + "15" }]} onPress={() => onEdit(item)}>
@@ -762,17 +742,25 @@ function InventoryItemRow({ item, onEdit, onDelete }: { item: InventoryItem; onE
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerContainer: { backgroundColor: 'white', paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  iconButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  tabContainer: { flexDirection: 'row' },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 12, borderBottomWidth: 3, borderBottomColor: 'transparent' },
-  tabText: { fontSize: 16 },
+  headerGradient: { paddingBottom: 0, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 5 },
+  headerContent: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 15 },
+  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#000', marginBottom: 4 },
+  storeInfo: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  storeName: { fontSize: 14, color: 'rgba(0,0,0,0.7)' },
+  headerButtons: { flexDirection: 'row', gap: 12 },
+  headerButton: { alignItems: 'center' },
+  iconCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  buttonLabel: { fontSize: 11, fontWeight: '600', color: '#000', marginTop: 4 },
+  tabContainer: { flexDirection: 'row', backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, gap: 8 },
+  activeTab: { borderBottomWidth: 3, borderBottomColor: '#FFD700' },
+  tabText: { fontSize: 15, color: 'rgba(0,0,0,0.5)', fontWeight: '500' },
+  activeTabText: { color: '#000', fontWeight: 'bold' },
   scrollContent: { padding: 20, paddingBottom: 100 },
   searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 12, paddingHorizontal: 15, marginBottom: 20 },
   searchInput: { flex: 1, height: 45, marginLeft: 10 },
-  addBtn: { flexDirection: 'row', padding: 16, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  addBtnText: { color: 'white', fontWeight: 'bold', marginLeft: 8 },
+  addBtn: { flexDirection: 'row', padding: 16, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 20, backgroundColor: '#FFD700' },
+  addBtnText: { color: '#000', fontWeight: 'bold', marginLeft: 8 },
   inventoryListCard: { paddingHorizontal: 10 },
   inventoryRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1 },
   inventoryImg: { width: 45, height: 45, borderRadius: 8, backgroundColor: '#f0f0f0' },
@@ -798,46 +786,10 @@ const styles = StyleSheet.create({
   orderPrice: { fontWeight: 'bold', fontSize: 16 },
   actionBtn: { flexDirection: 'row', padding: 12, borderRadius: 8, marginTop: 15, justifyContent: 'center', alignItems: 'center' },
   actionBtnText: { color: 'white', fontWeight: 'bold', marginLeft: 8 },
-  alertOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  alertContainer: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20,
-    width: '90%',
-    maxWidth: 320,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  alertTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  alertMessage: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  alertButton: {
-    backgroundColor: '#007AFF',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  alertButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  alertOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  alertContainer: { backgroundColor: 'white', borderRadius: 12, padding: 20, width: '90%', maxWidth: 320, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5 },
+  alertTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
+  alertMessage: { fontSize: 14, color: '#666', marginBottom: 20, textAlign: 'center' },
+  alertButton: { backgroundColor: '#007AFF', padding: 12, borderRadius: 8, alignItems: 'center' },
+  alertButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
 });
