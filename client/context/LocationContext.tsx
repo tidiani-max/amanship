@@ -30,9 +30,10 @@ interface LocationContextType {
   errorMessage: string | null;
   isManualLocation: boolean;
   manualAddress: string | null;
+  addressLabel: string | null; // ✅ NEW: Add this
   requestLocationPermission: () => Promise<boolean>;
   refreshStoreAvailability: () => void;
-  setManualLocation: (location: ManualLocation) => void;
+  setManualLocation: (location: ManualLocation & { label: string }) => void; // ✅ UPDATED
   clearManualLocation: () => void;
   useCurrentLocation: () => Promise<void>;
 }
@@ -113,23 +114,24 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // New function to set manual location
-  const setManualLocationFunc = useCallback((manualLoc: ManualLocation) => {
-    setLocation({
-      latitude: manualLoc.latitude,
-      longitude: manualLoc.longitude,
-    });
-    setIsManualLocation(true);
-    setManualAddress(manualLoc.address);
-    setLocationStatus("granted");
-    setErrorMessage(null);
-  }, []);
+const setManualLocationFunc = useCallback((manualLoc: ManualLocation & { label: string }) => {
+  setLocation({
+    latitude: manualLoc.latitude,
+    longitude: manualLoc.longitude,
+  });
+  setIsManualLocation(true);
+  setManualAddress(manualLoc.address);
+  setAddressLabel(manualLoc.label); // ✅ NEW
+  setLocationStatus("granted");
+  setErrorMessage(null);
+}, []);
 
   // Clear manual location and return to GPS
-  const clearManualLocation = useCallback(() => {
-    setIsManualLocation(false);
-    setManualAddress(null);
-    // This will trigger useCurrentLocation
-  }, []);
+ const clearManualLocation = useCallback(() => {
+  setIsManualLocation(false);
+  setManualAddress(null);
+  setAddressLabel(null); // ✅ NEW
+}, []);
 
   // Use current GPS location
   const useCurrentLocation = useCallback(async () => {
@@ -200,6 +202,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const storeAvailable = !!availabilityData?.available;
   const codAllowed = availabilityData?.codAllowed ?? false;
   const estimatedDeliveryMinutes = availabilityData?.estimatedDeliveryMinutes ?? null;
+  const [addressLabel, setAddressLabel] = useState<string | null>(null);
 
   return (
     <LocationContext.Provider
@@ -214,6 +217,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         errorMessage,
         isManualLocation,
         manualAddress,
+        addressLabel,
         requestLocationPermission,
         refreshStoreAvailability,
         setManualLocation: setManualLocationFunc,

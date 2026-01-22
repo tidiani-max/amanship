@@ -102,13 +102,15 @@ export default function HomeScreen() {
   const [toastVisible, setToastVisible] = useState(false);
   const [lastAddedProduct, setLastAddedProduct] = useState<string>("");
 
-  const {
+ const {
     locationStatus,
     store,
     storeAvailable,
     estimatedDeliveryMinutes,
     isCheckingAvailability,
     requestLocationPermission,
+    isManualLocation,
+    addressLabel, // ✅ NEW
   } = useLocation();
 
   // --- DATA FETCHING ---
@@ -281,38 +283,41 @@ const availableCategories = useMemo(() => {
           </Pressable>
         </View>
         {/* --- LOCATION SELECTOR BANNER --- */}
-<View style={[styles.locationSelector, { backgroundColor: theme.cardBackground }]}>
-  <Pressable 
-    style={styles.locationSelectorButton}
-    onPress={() => navigation.navigate("EditAddress")}
-  >
-    <View style={[styles.locationIcon, { backgroundColor: theme.primary + "20" }]}>
-      <Feather 
-        name="map-pin"
-        size={16} 
-        color={theme.primary} 
-      />
-    </View>
-    <View style={{ flex: 1 }}>
-      <ThemedText type="caption" style={{ color: theme.textSecondary, fontSize: 11 }}>
-        Delivering to
-      </ThemedText>
-      <ThemedText type="body" numberOfLines={1} style={{ fontWeight: "600" }}>
-        {store?.name || "Detecting location..."}
-      </ThemedText>
-    </View>
-    <Feather name="edit-3" size={18} color={theme.primary} />
-  </Pressable>
-  
-  {!storeAvailable && location && (
-    <View style={[styles.noStoreWarning, { backgroundColor: theme.warning + "20" }]}>
-      <Feather name="alert-circle" size={14} color={theme.warning} />
-      <ThemedText type="caption" style={{ color: theme.warning, flex: 1 }}>
-        No stores available in this area
-      </ThemedText>
-    </View>
-  )}
-</View>
+        <View style={[styles.locationSelector, { backgroundColor: theme.cardBackground }]}>
+          <Pressable 
+            style={styles.locationSelectorButton}
+            onPress={() => navigation.navigate("EditAddress")}
+          >
+            <View style={[styles.locationIcon, { backgroundColor: theme.primary + "20" }]}>
+              <Feather 
+                name={isManualLocation ? "home" : "navigation"}
+                size={16} 
+                color={theme.primary} 
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="caption" style={{ color: theme.textSecondary, fontSize: 11 }}>
+                Delivering to
+              </ThemedText>
+              <ThemedText type="body" numberOfLines={1} style={{ fontWeight: "600" }}>
+                {/* ✅ Show address label if manual, otherwise show store name or GPS */}
+                {isManualLocation && addressLabel 
+                  ? addressLabel 
+                  : store?.name || "Current Location (GPS)"}
+              </ThemedText>
+            </View>
+            <Feather name="edit-3" size={18} color={theme.primary} />
+          </Pressable>
+          
+          {!storeAvailable && location && (
+            <View style={[styles.noStoreWarning, { backgroundColor: theme.warning + "20" }]}>
+              <Feather name="alert-circle" size={14} color={theme.warning} />
+              <ThemedText type="caption" style={{ color: theme.warning, flex: 1 }}>
+                No stores available in this area
+              </ThemedText>
+            </View>
+          )}
+        </View>
         
 
         {/* --- LOCATION / STORE STATUS --- */}

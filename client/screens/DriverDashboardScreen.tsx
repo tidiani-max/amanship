@@ -166,6 +166,49 @@ function OrderCard({
       </View>
 
       <View style={[styles.divider, { backgroundColor: theme.border }]} />
+      {/* ✅ NEW: Customer Address Section */}
+      {order.address && (
+        <View style={[styles.addressSection, { 
+          backgroundColor: theme.backgroundDefault, 
+          borderRadius: 8,
+          padding: 12,
+          marginBottom: 12 
+        }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Feather name="map-pin" size={16} color={theme.primary} />
+            <ThemedText type="body" style={{ fontWeight: '600', marginLeft: 6 }}>
+              Delivery Address
+            </ThemedText>
+          </View>
+          
+          {/* Address Label */}
+          {order.address.label && (
+            <ThemedText type="h3" style={{ marginBottom: 4 }}>
+              {order.address.label}
+            </ThemedText>
+          )}
+          
+          {/* Full Address */}
+          <ThemedText type="body" style={{ color: theme.textSecondary }}>
+            {order.address.fullAddress}
+          </ThemedText>
+          
+          {/* Additional Details */}
+          {order.address.details && (
+            <View style={{ 
+              marginTop: 8, 
+              paddingTop: 8, 
+              borderTopWidth: 1, 
+              borderTopColor: theme.border 
+            }}>
+              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                📝 {order.address.details}
+              </ThemedText>
+            </View>
+          )}
+        </View>
+      )}
+
 
       <View style={styles.orderDetails}>
         {!isDelivered && (
@@ -540,5 +583,8 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
   modalContent: { width: "80%", padding: 24, borderRadius: 16, alignItems: "center" },
   pinInput: { fontSize: 32, fontWeight: "bold", letterSpacing: 12, textAlign: "center", paddingVertical: 16, paddingHorizontal: 24, borderRadius: 12, borderWidth: 2, width: "100%" },
-  modalButton: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center" }
+  modalButton: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center" },
+  addressSection: {
+    // Added inline in component
+  },
 });

@@ -828,7 +828,6 @@ app.get("/api/driver/dashboard", async (req, res) => {
     const { userId } = req.query;
     if (!userId) return res.status(400).json({ error: "Missing userId" });
 
-    // 1️⃣ Get driver staff record
     const [staff] = await db
       .select()
       .from(storeStaff)
@@ -842,7 +841,33 @@ app.get("/api/driver/dashboard", async (req, res) => {
       });
     }
 
-    // 2️⃣ Active delivery (LOCK = only one)
+    // Get orders with addresses ✅ UPDATED
+    const getOrdersWithAddresses = async (ordersList: any[]) => {
+      return Promise.all(
+        ordersList.map(async (order) => {
+          // Get address details
+          let addressInfo = null;
+          if (order.addressId) {
+            const [addr] = await db
+              .select()
+              .from(addresses)
+              .where(eq(addresses.id, order.addressId))
+              .limit(1);
+            
+            if (addr) {
+              addressInfo = {
+                label: addr.label,
+                fullAddress: addr.fullAddress,
+                details: addr.details,
+              };
+            }
+          }
+
+          return { ...order, address: addressInfo };
+        })
+      );
+    };
+
     const activeOrders = await db
       .select()
       .from(orders)
@@ -854,7 +879,6 @@ app.get("/api/driver/dashboard", async (req, res) => {
         )
       );
 
-    // 3️⃣ Ready orders (packed, unassigned)
     const readyOrders = await db
       .select()
       .from(orders)
@@ -866,7 +890,6 @@ app.get("/api/driver/dashboard", async (req, res) => {
         )
       );
 
-    // 4️⃣ Completed orders (delivered)
     const completedOrders = await db
       .select()
       .from(orders)
@@ -883,9 +906,9 @@ app.get("/api/driver/dashboard", async (req, res) => {
       store: staff.storeId,
       staffRecord: { status: "online" },
       orders: {
-        ready: readyOrders,
-        active: activeOrders,
-        completed: completedOrders,
+        ready: await getOrdersWithAddresses(readyOrders),
+        active: await getOrdersWithAddresses(activeOrders),
+        completed: await getOrdersWithAddresses(completedOrders),
       },
     });
   } catch (error) {
