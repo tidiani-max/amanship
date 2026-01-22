@@ -1032,7 +1032,7 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Valid lat & lng required" });
     }
 
-    // First, let's check if we have any stores at all
+    // Check stores first
     const allStores = await db.select().from(stores);
     console.log(`📍 Total stores in database: ${allStores.length}`);
 
@@ -1041,7 +1041,7 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
       return res.json([]);
     }
 
-    // Use CAST to ensure latitude/longitude are treated as numeric
+    // Convert decimal to float - FIX for the coordinate casting issue
     const result = await db.execute(sql<HomeProductRow>`
       SELECT
         p.id,
@@ -1058,11 +1058,13 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
         s.name AS "storeName",
         (
           6371 * acos(
-            cos(radians(${lat}))
-            * cos(radians(CAST(s.latitude AS DOUBLE PRECISION)))
-            * cos(radians(CAST(s.longitude AS DOUBLE PRECISION)) - radians(${lng}))
-            + sin(radians(${lat}))
-            * sin(radians(CAST(s.latitude AS DOUBLE PRECISION)))
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${lat}::numeric))
+              * cos(radians(s.latitude::numeric))
+              * cos(radians(s.longitude::numeric) - radians(${lng}::numeric))
+              + sin(radians(${lat}::numeric))
+              * sin(radians(s.latitude::numeric))
+            ))
           )
         ) AS distance
       FROM stores s
@@ -1072,11 +1074,13 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
         s.is_active = true
         AND (
           6371 * acos(
-            cos(radians(${lat}))
-            * cos(radians(CAST(s.latitude AS DOUBLE PRECISION)))
-            * cos(radians(CAST(s.longitude AS DOUBLE PRECISION)) - radians(${lng}))
-            + sin(radians(${lat}))
-            * sin(radians(CAST(s.latitude AS DOUBLE PRECISION)))
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${lat}::numeric))
+              * cos(radians(s.latitude::numeric))
+              * cos(radians(s.longitude::numeric) - radians(${lng}::numeric))
+              + sin(radians(${lat}::numeric))
+              * sin(radians(s.latitude::numeric))
+            ))
           )
         ) <= 3
       ORDER BY distance ASC;
@@ -1084,7 +1088,7 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
 
     console.log(`✅ Found ${result.rows.length} products from nearby stores`);
     
-    // If no results, let's debug by showing all stores with distances
+    // Debug logging if no results
     if (result.rows.length === 0) {
       const debugStores = await db.execute(sql`
         SELECT
@@ -1095,19 +1099,34 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
           s.is_active,
           (
             6371 * acos(
-              cos(radians(${lat}))
-              * cos(radians(CAST(s.latitude AS DOUBLE PRECISION)))
-              * cos(radians(CAST(s.longitude AS DOUBLE PRECISION)) - radians(${lng}))
-              + sin(radians(${lat}))
-              * sin(radians(CAST(s.latitude AS DOUBLE PRECISION)))
+              LEAST(1.0, GREATEST(-1.0,
+                cos(radians(${lat}::numeric))
+                * cos(radians(s.latitude::numeric))
+                * cos(radians(s.longitude::numeric) - radians(${lng}::numeric))
+                + sin(radians(${lat}::numeric))
+                * sin(radians(s.latitude::numeric))
+              ))
             )
           ) AS distance
         FROM stores s
+        WHERE s.is_active = true
         ORDER BY distance ASC
         LIMIT 5;
       `);
       
       console.log("🔍 Nearest stores (debug):", debugStores.rows);
+      
+      // Check if any stores have inventory
+      const inventoryCheck = await db.execute(sql`
+        SELECT 
+          s.name as store_name,
+          COUNT(si.id) as inventory_count
+        FROM stores s
+        LEFT JOIN store_inventory si ON si.store_id = s.id
+        WHERE s.is_active = true
+        GROUP BY s.id, s.name;
+      `);
+      console.log("📦 Store inventory counts:", inventoryCheck.rows);
     }
     
     res.json(result.rows);
@@ -1120,7 +1139,6 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
     });
   }
 });
-
 
 app.get("/api/category/products", async (req: Request, res: Response) => {
   try {
@@ -1149,11 +1167,13 @@ app.get("/api/category/products", async (req: Request, res: Response) => {
         TRUE AS "isAvailable",
         (
           6371 * acos(
-            cos(radians(${lat}))
-            * cos(radians(CAST(s.latitude AS DOUBLE PRECISION)))
-            * cos(radians(CAST(s.longitude AS DOUBLE PRECISION)) - radians(${lng}))
-            + sin(radians(${lat}))
-            * sin(radians(CAST(s.latitude AS DOUBLE PRECISION)))
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${lat}::numeric))
+              * cos(radians(s.latitude::numeric))
+              * cos(radians(s.longitude::numeric) - radians(${lng}::numeric))
+              + sin(radians(${lat}::numeric))
+              * sin(radians(s.latitude::numeric))
+            ))
           )
         ) AS distance
       FROM stores s
@@ -1165,11 +1185,13 @@ app.get("/api/category/products", async (req: Request, res: Response) => {
         AND s.is_active = true
         AND (
           6371 * acos(
-            cos(radians(${lat}))
-            * cos(radians(CAST(s.latitude AS DOUBLE PRECISION)))
-            * cos(radians(CAST(s.longitude AS DOUBLE PRECISION)) - radians(${lng}))
-            + sin(radians(${lat}))
-            * sin(radians(CAST(s.latitude AS DOUBLE PRECISION)))
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${lat}::numeric))
+              * cos(radians(s.latitude::numeric))
+              * cos(radians(s.longitude::numeric) - radians(${lng}::numeric))
+              + sin(radians(${lat}::numeric))
+              * sin(radians(s.latitude::numeric))
+            ))
           )
         ) <= 3
       ORDER BY distance ASC;
