@@ -71,10 +71,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const checkPhone = async (phone: string) => {
+const checkPhone = async (phone: string) => {
   try {
+    console.log("📞 Checking phone:", phone);
+    
     const response = await apiRequest("POST", "/api/auth/check-phone", { phone });
     const data = await response.json();
+    
+    console.log("📱 Check phone response:", data);
     
     if (response.ok) {
       return { 
@@ -88,25 +92,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { exists: false, error: data.error || "Failed to check phone" };
     }
   } catch (error) {
+    console.error("❌ Check phone network error:", error);
     return { exists: false, error: "Network error. Please try again." };
   }
 };
 
-  const login = async (phone: string, password: string) => {
-    try {
-      const response = await apiRequest("POST", "/api/auth/login", { phone, password });
-      const data = await response.json();
-      if (response.ok) {
-        setUser(data.user);
-        await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
-        return { success: true };
-      } else {
-        return { success: false, error: data.error || "Login failed" };
+const login = async (phone: string, password: string) => {
+  try {
+    console.log("🔐 Attempting login for:", phone);
+    
+    const response = await apiRequest("POST", "/api/auth/login", { phone, password });
+    const data = await response.json();
+    
+    console.log("📥 Login response:", data);
+    
+    if (response.ok) {
+      // ✅ Check if it's a first login staff member
+      if (data.error === "first_login_required") {
+        console.log("⚠️ First login required - should redirect to password reset");
+        return { 
+          success: false, 
+          error: "first_login_required",
+          requiresPasswordReset: true 
+        };
       }
-    } catch (error) {
-      return { success: false, error: "Network error. Please try again." };
+      
+      // ✅ Normal successful login
+      setUser(data.user);
+      await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+      return { success: true };
+    } else {
+      return { success: false, error: data.error || "Login failed" };
     }
-  };
+  } catch (error) {
+    console.error("❌ Login network error:", error);
+    return { success: false, error: "Network error. Please try again." };
+  }
+};
 
   const signup = async (username: string, password: string, phone?: string) => {
     try {
@@ -223,25 +245,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ✅ FUNCTION DEFINITION (already exists in your code)
-  const resetFirstLoginPassword = async (phone: string, newPassword: string) => {
-    try {
-      const response = await apiRequest("POST", "/api/auth/reset-first-login", {
-        phone,
-        newPassword
-      });
+const resetFirstLoginPassword = async (phone: string, newPassword: string) => {
+  try {
+    console.log("🔄 Resetting password for:", phone);
+    
+    const response = await apiRequest("POST", "/api/auth/reset-first-login", {
+      phone,
+      newPassword
+    });
 
-      const data = await response.json();
+    const data = await response.json();
 
-      if (response.ok && data.success) {
-        return { success: true };
-      }
+    console.log("📝 Reset password response:", data);
 
-      return { success: false, error: data.error || "Failed to reset password" };
-    } catch (error) {
-      console.error("Reset password error:", error);
-      return { success: false, error: "Network error" };
+    if (response.ok && data.success) {
+      // ✅ DO NOT auto-login after password reset
+      // User should login manually with their new password
+      return { success: true };
     }
-  };
+
+    return { success: false, error: data.error || "Failed to reset password" };
+  } catch (error) {
+    console.error("❌ Reset password network error:", error);
+    return { success: false, error: "Network error. Please try again." };
+  }
+};
 
   return (
     <AuthContext.Provider

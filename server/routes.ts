@@ -201,10 +201,14 @@ if (req.file) {
 
 app.post("/api/auth/login", async (req, res) => {
   const { phone, password } = req.body;
+  
+  console.log("🔐 Login attempt for phone:", phone);
+  
   const result = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
   const user = result[0];
 
   if (!user || user.password !== password) {
+    console.log("❌ Login failed - invalid credentials");
     return res.status(401).json({ error: "Invalid phone or password" });
   }
   
@@ -212,6 +216,7 @@ app.post("/api/auth/login", async (req, res) => {
   const isStaff = ["picker", "driver"].includes(user.role);
   
   if (isStaff && user.firstLogin) {
+    console.log("⚠️ Staff first login detected - redirecting to password reset");
     // Staff first login - trigger password reset flow
     return res.json({ 
       error: "first_login_required",
@@ -223,6 +228,8 @@ app.post("/api/auth/login", async (req, res) => {
       }
     });
   }
+  
+  console.log("✅ Login successful for user:", user.id, "Role:", user.role);
   
   // Normal login
   res.json({ 
@@ -294,6 +301,8 @@ app.post("/api/auth/reset-first-login", async (req, res) => {
       return res.status(400).json({ error: "Password must be at least 4 characters" });
     }
 
+    console.log("🔄 Resetting first login password for:", phone);
+
     // Update password and mark firstLogin as false
     const [updated] = await db
       .update(users)
@@ -307,6 +316,8 @@ app.post("/api/auth/reset-first-login", async (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: "User not found" });
     }
+
+    console.log("✅ Password reset successful for user:", updated.id);
 
     res.json({ 
       success: true,

@@ -142,61 +142,65 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
   // ========================================
   // STEP 1: Check Phone Number
   // ========================================
-  const handlePhoneSubmit = async () => {
-    if (phone.length < 9) {
-      showAlert("Invalid Phone", "Please enter a valid phone number");
+const handlePhoneSubmit = async () => {
+  if (phone.length < 9) {
+    showAlert("Invalid Phone", "Please enter a valid phone number");
+    return;
+  }
+
+  setIsLoading(true);
+
+  if (mode === "login") {
+    // ✅ Check if user exists and if first login
+    const result = await checkPhone(fullPhone);
+    setIsLoading(false);
+
+    console.log("📱 Check phone result:", result);
+
+    if (!result.exists) {
+      showAlert("Account Not Found", result.message || "No account found with this number. Please sign up.");
       return;
     }
 
-    setIsLoading(true);
-
-    if (mode === "login") {
-      // ✅ Check if user exists and if first login
-      const result = await checkPhone(fullPhone);
-      setIsLoading(false);
-
-      if (!result.exists) {
-        showAlert("Account Not Found", result.message || "No account found with this number. Please sign up.");
-        return;
-      }
-
-      // ✅ If staff first login, go to password reset DIRECTLY
-      if (result.requiresPasswordReset) {
-        setStep("resetPassword");
-        return;
-      }
-
-      // ✅ Normal user, show password field
-      setStep("password");
-    } 
-    else if (mode === "forgot") {
-      // ✅ FORGOT PASSWORD: Send OTP first, THEN ask for new password
-      const result = await sendOtp(fullPhone, "forgot");
-      setIsLoading(false);
-
-      if (result.success) {
-        setSentCode(result.code);
-        setStep("otp");
-      } else {
-        showAlert("Error", result.error || "Unable to send OTP");
-      }
+    // ✅ FIXED: If staff first login, go to password reset DIRECTLY
+    if (result.requiresPasswordReset) {
+      console.log("🔄 Staff first login detected - showing reset password screen");
+      setStep("resetPassword");
+      return;
     }
-    else {
-      // ✅ Signup - send OTP
-      const result = await sendOtp(fullPhone, mode);
-      setIsLoading(false);
 
-      if (result.success) {
-        setSentCode(result.code);
-        setStep("otp");
-      } else {
-        showAlert(
-          "Account Exists",
-          result.error || "This phone is already registered"
-        );
-      }
+    // ✅ Normal user, show password field
+    console.log("✅ Regular user - showing password field");
+    setStep("password");
+  } 
+  else if (mode === "forgot") {
+    // ✅ FORGOT PASSWORD: Send OTP first, THEN ask for new password
+    const result = await sendOtp(fullPhone, "forgot");
+    setIsLoading(false);
+
+    if (result.success) {
+      setSentCode(result.code);
+      setStep("otp");
+    } else {
+      showAlert("Error", result.error || "Unable to send OTP");
     }
-  };
+  }
+  else {
+    // ✅ Signup - send OTP
+    const result = await sendOtp(fullPhone, mode);
+    setIsLoading(false);
+
+    if (result.success) {
+      setSentCode(result.code);
+      setStep("otp");
+    } else {
+      showAlert(
+        "Account Exists",
+        result.error || "This phone is already registered"
+      );
+    }
+  }
+};
 
   // ========================================
   // STEP 2: Login with Password
@@ -284,31 +288,37 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
   // ========================================
   // STEP 4: Reset Password (First Login - NO OTP)
   // ========================================
-  const handleResetPassword = async () => {
-    if (newPassword.length < 4) {
-      showAlert("Invalid Password", "Password must be at least 4 characters");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      showAlert("Password Mismatch", "Passwords do not match");
-      return;
-    }
+const handleResetPassword = async () => {
+  if (newPassword.length < 4) {
+    showAlert("Invalid Password", "Password must be at least 4 characters");
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    showAlert("Password Mismatch", "Passwords do not match");
+    return;
+  }
 
-    setIsLoading(true);
-    const result = await resetFirstLoginPassword(fullPhone, newPassword);
-    setIsLoading(false);
+  console.log("🔄 Submitting password reset for:", fullPhone);
 
-    if (result.success) {
-      showAlert("Success", "Password updated! Please login with your new password.");
-      setMode("login");
-      setStep("phone");
-      setPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } else {
-      showAlert("Error", result.error || "Failed to update password");
-    }
-  };
+  setIsLoading(true);
+  const result = await resetFirstLoginPassword(fullPhone, newPassword);
+  setIsLoading(false);
+
+  console.log("📝 Reset password result:", result);
+
+  if (result.success) {
+    showAlert("Success", "Password updated successfully! You can now login with your new password.");
+    // Reset to login mode
+    setMode("login");
+    setStep("phone");
+    setPhone("");
+    setPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+  } else {
+    showAlert("Error", result.error || "Failed to update password");
+  }
+};
 
   const handleAppleSignIn = async () => {
     try {
