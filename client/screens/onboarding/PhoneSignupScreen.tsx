@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, TextInput, Pressable, Platform, Alert, useColorScheme } from "react-native";
+import { View, StyleSheet, TextInput, Pressable, Platform, Modal, useColorScheme } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
@@ -16,6 +16,43 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 
 WebBrowser.maybeCompleteAuthSession();
 
+// ========================================
+// ALERT MODAL COMPONENT
+// ========================================
+function AlertModal({ visible, title, message, onClose, theme }: {
+  visible: boolean;
+  title: string;
+  message: string;
+  onClose: () => void;
+  theme: any;
+}) {
+  if (!visible) return null;
+
+  return (
+    <Modal transparent visible={visible} animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={[styles.alertBox, { backgroundColor: theme.backgroundDefault }]}>
+          <View style={styles.alertHeader}>
+            <ThemedText type="h3">{title}</ThemedText>
+            <Pressable onPress={onClose} style={styles.closeButton}>
+              <Feather name="x" size={24} color={theme.text} />
+            </Pressable>
+          </View>
+          <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
+            {message}
+          </ThemedText>
+          <Button onPress={onClose} style={{ marginTop: Spacing.lg }}>
+            Got it
+          </Button>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ========================================
+// GOOGLE SIGN IN BUTTON
+// ========================================
 interface GoogleSignInButtonProps {
   onSuccess: () => void;
   onError: (error: string) => void;
@@ -64,18 +101,21 @@ function GoogleSignInButton({ onSuccess, onError, onLoadingChange, theme }: Goog
   );
 }
 
+// ========================================
+// MAIN COMPONENT
+// ========================================
 export default function PhoneSignupScreen({ onComplete }: { onComplete: () => void }) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const colorScheme = useColorScheme();
-  const { sendOtp, verifyOtp, loginWithApple, login, resetFirstLoginPassword } = useAuth();
+  const { sendOtp, verifyOtp, loginWithApple, login, resetFirstLoginPassword, checkPhone } = useAuth();
 
   type AuthMode = "login" | "signup" | "forgot";
-  type Step = "input" | "otp" | "resetPassword";
+  type Step = "phone" | "password" | "otp" | "resetPassword";
 
   const [mode, setMode] = useState<AuthMode>("signup");
-  const [step, setStep] = useState<Step>("input");
+  const [step, setStep] = useState<Step>("phone");
 
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
@@ -86,120 +126,142 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
   const [confirmPassword, setConfirmPassword] = useState("");
   
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
   const [sentCode, setSentCode] = useState<string | null | undefined>(null);
 
   const fullPhone = `+62${phone}`;
 
-  // ========================================
-  // STEP 1: Phone + Password Input
-  // ========================================
-  const handleInitialAction = async () => {
-    if (mode === "signup") {
-      if (!name || !email || !password) {
-        Alert.alert("Missing Information", "Please fill in all fields to create an account.");
-        return;
-      }
-      const emailRegex = /\S+@\S+\.\S+/;
-      if (!emailRegex.test(email)) {
-        Alert.alert("Invalid Email", "Please enter a valid email address.");
-        return;
-      }
-    }
+  const showAlert = (title: string, message: string) => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertVisible(true);
+  };
 
-    setIsLoading(true);
-    setError(null);
-
-    // ✅ LOGIN MODE: Check for staff first login
-    if (mode === "login") {
-      const result = await login(fullPhone, password);
-      setIsLoading(false);
-      
-      // ✅ DETECT FIRST LOGIN for staff
-      if (result.error === "first_login_required") {
-        setStep("resetPassword");
-        return;
-      }
-      
-      if (result.success) {
-        onComplete();
-      } else {
-        Alert.alert("Login Failed", result.error || "Invalid phone or password");
-        setError(result.error || "Invalid credentials");
-      }
+  // ========================================
+  // STEP 1: Check Phone Number
+  // ========================================
+  const handlePhoneSubmit = async () => {
+    if (phone.length < 9) {
+      showAlert("Invalid Phone", "Please enter a valid phone number");
       return;
     }
 
-    // SIGNUP/FORGOT MODE: Send OTP
-    const result = await sendOtp(fullPhone, mode as AuthMode);
-    setIsLoading(false);
+    setIsLoading(true);
 
-    if (result.success) {
-      setSentCode(result.code); 
-      setStep("otp");
+    if (mode === "login") {
+      // ✅ Check if user exists and if first login
+      const result = await checkPhone(fullPhone);
+      setIsLoading(false);
+
+      if (!result.exists) {
+        showAlert("Account Not Found", result.message || "No account found with this number. Please sign up.");
+        return;
+      }
+
+      // ✅ If staff first login, go to password reset
+      if (result.requiresPasswordReset) {
+        setStep("resetPassword");
+        return;
+      }
+
+      // ✅ Normal user, show password field
+      setStep("password");
     } else {
-      Alert.alert(
-        mode === "signup" ? "Account Exists" : "User Not Found",
-        result.error || "This action cannot be completed.",
-        [
-          { 
-            text: mode === "signup" ? "Login Instead" : "Try Again", 
-            onPress: () => {
-              if (mode === "signup") setMode("login");
-            }
-          },
-          { text: "Cancel", style: "cancel" }
-        ]
-      );
-      setError(result.error ?? "Process failed");
+      // ✅ Signup/Forgot - send OTP
+      const result = await sendOtp(fullPhone, mode);
+      setIsLoading(false);
+
+      if (result.success) {
+        setSentCode(result.code);
+        setStep("otp");
+      } else {
+        showAlert(
+          mode === "signup" ? "Account Exists" : "User Not Found",
+          result.error || "Unable to proceed"
+        );
+      }
     }
   };
 
   // ========================================
-  // STEP 2: Verify OTP
+  // STEP 2: Login with Password
+  // ========================================
+  const handlePasswordSubmit = async () => {
+    if (password.length < 4) {
+      showAlert("Invalid Password", "Password must be at least 4 characters");
+      return;
+    }
+
+    setIsLoading(true);
+    const result = await login(fullPhone, password);
+    setIsLoading(false);
+
+    if (result.success) {
+      onComplete();
+    } else {
+      showAlert("Login Failed", result.error || "Invalid credentials");
+    }
+  };
+
+  // ========================================
+  // STEP 3: Verify OTP (Signup/Forgot)
   // ========================================
   const handleVerifyOTP = async () => {
+    if (!name || !email || !password) {
+      showAlert("Missing Information", "Please fill in all fields");
+      return;
+    }
+
+    const emailRegex = /\S+@\S+\.\S+/;
+    if (!emailRegex.test(email)) {
+      showAlert("Invalid Email", "Please enter a valid email address");
+      return;
+    }
+
     setIsLoading(true);
-    setError(null);
     const result = await verifyOtp(fullPhone, otpCode, {
       name: mode === "signup" ? name : undefined,
       email: mode === "signup" ? email : undefined,
       password: (mode === "signup" || mode === "forgot") ? password : undefined,
-      mode: mode as AuthMode
+      mode
     });
     setIsLoading(false);
-    if (result.success) onComplete();
-    else setError(result.error || "Invalid OTP");
+
+    if (result.success) {
+      onComplete();
+    } else {
+      showAlert("Verification Failed", result.error || "Invalid OTP");
+    }
   };
 
   // ========================================
-  // STEP 3: Reset Password (Staff First Login)
+  // STEP 4: Reset Password (First Login)
   // ========================================
   const handleResetPassword = async () => {
     if (newPassword.length < 4) {
-      Alert.alert("Error", "Password must be at least 4 characters");
+      showAlert("Invalid Password", "Password must be at least 4 characters");
       return;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match");
+      showAlert("Password Mismatch", "Passwords do not match");
       return;
     }
 
     setIsLoading(true);
-    setError(null);
-
     const result = await resetFirstLoginPassword(fullPhone, newPassword);
     setIsLoading(false);
 
     if (result.success) {
-      Alert.alert("Success", "Password updated! You can now login with your new password.");
-      // Reset to login screen
-      setStep("input");
+      showAlert("Success", "Password updated! Please login with your new password.");
+      // Reset to login phone step
+      setStep("phone");
       setPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } else {
-      setError(result.error || "Failed to update password");
+      showAlert("Error", result.error || "Failed to update password");
     }
   };
 
@@ -220,9 +282,9 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
       setIsLoading(false);
       
       if (result.success) onComplete();
-      else setError(result.error || "Apple Sign-In failed");
+      else showAlert("Error", result.error || "Apple Sign-In failed");
     } catch (e: any) {
-      if (e.code !== "ERR_REQUEST_CANCELED") setError("Apple Sign-In failed");
+      if (e.code !== "ERR_REQUEST_CANCELED") showAlert("Error", "Apple Sign-In failed");
     }
   };
 
@@ -249,12 +311,6 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
                 This is your first login. Please create a secure password.
               </ThemedText>
             </View>
-
-            {error && (
-              <View style={[styles.errorBox, { backgroundColor: theme.error + "20" }]}>
-                <ThemedText type="caption" style={{ color: theme.error }}>{error}</ThemedText>
-              </View>
-            )}
 
             <TextInput 
               style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]} 
@@ -283,12 +339,20 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
             </Button>
           </View>
         </View>
+
+        <AlertModal
+          visible={alertVisible}
+          title={alertTitle}
+          message={alertMessage}
+          onClose={() => setAlertVisible(false)}
+          theme={theme}
+        />
       </KeyboardAwareScrollViewCompat>
     );
   }
 
   // ========================================
-  // RENDER: Main Login/Signup Screen
+  // RENDER: Main Screens (Phone, Password, OTP)
   // ========================================
   return (
     <KeyboardAwareScrollViewCompat
@@ -300,16 +364,17 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
     >
       <View style={styles.centerWrapper}>
         <View style={styles.content}>
-          {step === "input" && (
+          {/* Tabs (only show on phone step) */}
+          {step === "phone" && (
             <View style={styles.tabContainer}>
               <Pressable 
-                onPress={() => { setMode("signup"); setStep("input"); setError(null); }} 
+                onPress={() => { setMode("signup"); setStep("phone"); }} 
                 style={[styles.tab, mode === "signup" && { borderBottomColor: theme.primary }]}
               >
                 <ThemedText style={{ color: mode === "signup" ? theme.primary : theme.textSecondary, fontWeight: '600' }}>Signup</ThemedText>
               </Pressable>
               <Pressable 
-                onPress={() => { setMode("login"); setStep("input"); setError(null); }} 
+                onPress={() => { setMode("login"); setStep("phone"); }} 
                 style={[styles.tab, mode === "login" && { borderBottomColor: theme.primary }]}
               >
                 <ThemedText style={{ color: mode === "login" ? theme.primary : theme.textSecondary, fontWeight: '600' }}>Login</ThemedText>
@@ -318,14 +383,10 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
           )}
 
           <ThemedText type="h2" style={styles.title}>
-            {step === "otp" ? "Verify Code" : mode === "forgot" ? "Reset Password" : mode === "signup" ? "Create Account" : "Welcome Back"}
+            {step === "phone" && (mode === "signup" ? "Create Account" : mode === "forgot" ? "Reset Password" : "Welcome Back")}
+            {step === "password" && "Enter Password"}
+            {step === "otp" && "Verify Code"}
           </ThemedText>
-
-          {error && (
-            <View style={[styles.errorBox, { backgroundColor: theme.error + "20" }]}>
-              <ThemedText type="caption" style={{ color: theme.error }}>{error}</ThemedText>
-            </View>
-          )}
 
           {sentCode && step === "otp" && (
             <View style={[styles.codeHint, { backgroundColor: theme.primary + "20" }]}>
@@ -333,7 +394,8 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
             </View>
           )}
 
-          {step === "input" ? (
+          {/* PHONE INPUT */}
+          {step === "phone" && (
             <>
               {mode === "signup" && (
                 <>
@@ -352,6 +414,14 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
                     onChangeText={setEmail} 
                     keyboardType="email-address" 
                   />
+                  <TextInput 
+                    style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.sm }]} 
+                    placeholder="Password" 
+                    placeholderTextColor={theme.textSecondary}
+                    secureTextEntry 
+                    value={password} 
+                    onChangeText={setPassword} 
+                  />
                 </>
               )}
 
@@ -369,15 +439,6 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
                 />
               </View>
 
-              <TextInput 
-                style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.sm }]} 
-                placeholder={mode === "forgot" ? "New Password" : "Password"} 
-                placeholderTextColor={theme.textSecondary}
-                secureTextEntry 
-                value={password} 
-                onChangeText={setPassword} 
-              />
-
               {mode === "login" && (
                 <Pressable onPress={() => setMode("forgot")} style={{ alignSelf: 'flex-end', marginTop: Spacing.sm }}>
                   <ThemedText type="caption" style={{ color: theme.primary }}>Forgot Password?</ThemedText>
@@ -385,14 +446,51 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
               )}
 
               <Button 
-                onPress={handleInitialAction} 
-                disabled={isLoading || phone.length < 9 || (mode === 'signup' && !name)} 
+                onPress={handlePhoneSubmit} 
+                disabled={isLoading || phone.length < 9 || (mode === "signup" && (!name || !email || !password))} 
                 style={{ marginTop: Spacing.lg }}
               >
-                {isLoading ? "Processing..." : mode === "login" ? "Login" : "Continue"}
+                {isLoading ? "Processing..." : "Continue"}
               </Button>
             </>
-          ) : (
+          )}
+
+          {/* PASSWORD INPUT (Login Only) */}
+          {step === "password" && (
+            <>
+              <View style={[styles.phoneDisplay, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+                <ThemedText type="body">{fullPhone}</ThemedText>
+                <Pressable onPress={() => setStep("phone")}>
+                  <Feather name="edit-2" size={16} color={theme.primary} />
+                </Pressable>
+              </View>
+
+              <TextInput 
+                style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.md }]} 
+                placeholder="Password" 
+                placeholderTextColor={theme.textSecondary}
+                secureTextEntry 
+                value={password} 
+                onChangeText={setPassword} 
+                autoFocus
+              />
+
+              <Pressable onPress={() => setMode("forgot")} style={{ alignSelf: 'flex-end', marginTop: Spacing.sm }}>
+                <ThemedText type="caption" style={{ color: theme.primary }}>Forgot Password?</ThemedText>
+              </Pressable>
+
+              <Button 
+                onPress={handlePasswordSubmit} 
+                disabled={isLoading || password.length < 4}
+                style={{ marginTop: Spacing.lg }}
+              >
+                {isLoading ? "Logging in..." : "Login"}
+              </Button>
+            </>
+          )}
+
+          {/* OTP INPUT (Signup/Forgot) */}
+          {step === "otp" && (
             <>
               <TextInput
                 style={[styles.otpInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
@@ -406,8 +504,8 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
               <Button onPress={handleVerifyOTP} disabled={otpCode.length !== 6 || isLoading}>
                 {isLoading ? "Verifying..." : "Confirm OTP"}
               </Button>
-              <Pressable onPress={() => { setStep("input"); setSentCode(null); }} style={styles.skipLink}>
-                <ThemedText type="caption" style={{ color: theme.primary }}>Back to input</ThemedText>
+              <Pressable onPress={() => { setStep("phone"); setSentCode(null); }} style={styles.skipLink}>
+                <ThemedText type="caption" style={{ color: theme.primary }}>Back</ThemedText>
               </Pressable>
             </>
           )}
@@ -419,7 +517,7 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
           </View>
 
           <View style={styles.socialButtons}>
-            <GoogleSignInButton onSuccess={onComplete} onError={setError} onLoadingChange={setIsLoading} theme={theme} />
+            <GoogleSignInButton onSuccess={onComplete} onError={(err) => showAlert("Error", err)} onLoadingChange={setIsLoading} theme={theme} />
             {Platform.OS === "ios" && (
               <Pressable 
                 style={[styles.socialButton, { 
@@ -440,6 +538,14 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
           </View>
         </View>
       </View>
+
+      <AlertModal
+        visible={alertVisible}
+        title={alertTitle}
+        message={alertMessage}
+        onClose={() => setAlertVisible(false)}
+        theme={theme}
+      />
     </KeyboardAwareScrollViewCompat>
   );
 }
@@ -474,11 +580,6 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent' 
   },
   title: { marginBottom: Spacing.lg, textAlign: 'center' },
-  errorBox: { 
-    padding: Spacing.md, 
-    borderRadius: BorderRadius.sm, 
-    marginBottom: Spacing.md 
-  },
   codeHint: { 
     padding: Spacing.md, 
     borderRadius: BorderRadius.sm, 
@@ -509,6 +610,15 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm, 
     borderWidth: 1, 
     fontSize: 16 
+  },
+  phoneDisplay: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    height: Spacing.inputHeight,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
   },
   otpInput: { 
     height: Spacing.inputHeight, 
@@ -544,5 +654,32 @@ const styles = StyleSheet.create({
     alignSelf: "center", 
     marginTop: Spacing.xl, 
     padding: Spacing.sm 
+  },
+  // ✅ Alert Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+  alertBox: {
+    width: '100%',
+    maxWidth: 400,
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  alertHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  closeButton: {
+    padding: Spacing.xs,
   },
 });

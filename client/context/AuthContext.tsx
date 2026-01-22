@@ -14,6 +14,14 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  checkPhone: (phone: string) => Promise<{ 
+    exists: boolean; 
+    firstLogin?: boolean; 
+    isStaff?: boolean;
+    requiresPasswordReset?: boolean;
+    error?: string;
+    message?: string;
+  }>; // ✅ ADD THIS
   login: (phone: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signup: (username: string, password: string, phone?: string) => Promise<{ success: boolean; error?: string }>;
   sendOtp: (
@@ -34,7 +42,7 @@ interface AuthContextType {
   loginWithGoogle: (googleId: string, email?: string, name?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateProfile: (data: { username?: string; phone?: string; name?: string; email?: string }) => Promise<{ success: boolean; error?: string }>;
-  resetFirstLoginPassword: (phone: string, newPassword: string) => Promise<{ success: boolean; error?: string }>; // ✅ ADD THIS LINE
+  resetFirstLoginPassword: (phone: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -62,6 +70,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   };
+
+  const checkPhone = async (phone: string) => {
+  try {
+    const response = await apiRequest("POST", "/api/auth/check-phone", { phone });
+    const data = await response.json();
+    
+    if (response.ok) {
+      return { 
+        exists: data.exists,
+        firstLogin: data.firstLogin,
+        isStaff: data.isStaff,
+        requiresPasswordReset: data.requiresPasswordReset,
+        message: data.message
+      };
+    } else {
+      return { exists: false, error: data.error || "Failed to check phone" };
+    }
+  } catch (error) {
+    return { exists: false, error: "Network error. Please try again." };
+  }
+};
 
   const login = async (phone: string, password: string) => {
     try {
@@ -220,6 +249,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         isAuthenticated: !!user,
+        checkPhone,
         login,
         signup,
         sendOtp,
