@@ -1,19 +1,18 @@
 // components/NotificationAlertProvider.tsx
 import React, { useEffect, useState } from 'react';
-import { Modal, View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { Modal, View, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { ThemedText } from './ThemedText';
 import { useAuth } from '@/context/AuthContext';
-import { useNotifications } from '@/hooks/useNotification';
 
 const ALERT_DISMISSED_KEY = '@notification_alert_dismissed';
 const CHECK_INTERVAL = 10000; // Check every 10 seconds
 
 export function NotificationAlertProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const { registerForPushNotifications } = useNotifications();
   const [showAlert, setShowAlert] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
 
@@ -55,16 +54,28 @@ export function NotificationAlertProvider({ children }: { children: React.ReactN
   }, [user?.id]);
 
   const handleEnableNotifications = async () => {
+    // ✅ Skip on web platform
+    if (Platform.OS === 'web') {
+      Alert.alert('Not Supported', 'Push notifications are not supported on web browsers.');
+      return;
+    }
+
+    if (!Device.isDevice) {
+      Alert.alert('Not Supported', 'Push notifications require a physical device.');
+      return;
+    }
+
     try {
-      await registerForPushNotifications();
-      
-      // Recheck status after attempting to enable
-      const { status } = await Notifications.getPermissionsAsync();
-      
-      if (status === 'granted') {
-        setShowAlert(false);
-        Alert.alert('Success! 🎉', 'Push notifications are now enabled. You\'ll receive important updates.');
-      } else {
+      // Request permissions
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
         Alert.alert(
           'Permission Needed',
           'Please enable notifications in your device settings to receive important updates.',
@@ -76,7 +87,59 @@ export function NotificationAlertProvider({ children }: { children: React.ReactN
             },
           ]
         );
+        return;
       }
+
+      // Get push token
+      const tokenData = await Notifications.getExpoPushTokenAsync({
+        projectId: '113ea7fa-db9e-4380-b05f-dd63a05e5632',
+      });
+      
+      const token = tokenData.data;
+      console.log('✅ Expo Push Token:', token);
+
+      // Save token to backend
+      if (user?.id) {
+        const baseUrl = process.env.EXPO_PUBLIC_DOMAIN;
+        await fetch(`${baseUrl}/api/users/push-token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            token: token,
+          }),
+        });
+        console.log('✅ Token saved to server');
+      }
+
+      // Setup Android channels
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FFD700',
+          sound: 'default',
+        });
+      }
+
+      // Send welcome notification
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Welcome! 🎉",
+          body: "Notifications are now enabled. You'll receive important updates here.",
+          data: { type: 'welcome', userId: user?.id },
+          sound: 'default',
+        },
+        trigger: { 
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 2 
+        },
+      });
+
+      setShowAlert(false);
+      Alert.alert('Success! 🎉', 'Push notifications are now enabled. You\'ll receive important updates.');
+      
     } catch (error) {
       console.error('Error enabling notifications:', error);
       Alert.alert('Error', 'Failed to enable notifications. Please try again.');
@@ -88,6 +151,11 @@ export function NotificationAlertProvider({ children }: { children: React.ReactN
     await AsyncStorage.setItem(ALERT_DISMISSED_KEY, 'true');
     setShowAlert(false);
   };
+
+  // ✅ Don't render alert on web
+  if (Platform.OS === 'web') {
+    return <>{children}</>;
+  }
 
   return (
     <>
