@@ -16,6 +16,7 @@ interface ManualLocation {
   latitude: number;
   longitude: number;
   address: string;
+  label: string;
   isManual: true;
 }
 
@@ -30,10 +31,11 @@ interface LocationContextType {
   errorMessage: string | null;
   isManualLocation: boolean;
   manualAddress: string | null;
-  addressLabel: string | null; // ✅ NEW: Add this
+  addressLabel: string | null;
+  gpsLocationName: string | null;
   requestLocationPermission: () => Promise<boolean>;
   refreshStoreAvailability: () => void;
-  setManualLocation: (location: ManualLocation & { label: string }) => void; // ✅ UPDATED
+  setManualLocation: (location: ManualLocation) => void;
   clearManualLocation: () => void;
   useCurrentLocation: () => Promise<void>;
 }
@@ -41,29 +43,58 @@ interface LocationContextType {
 const LocationContext = createContext<LocationContextType | undefined>(undefined);
 
 export function LocationProvider({ children }: { children: React.ReactNode }) {
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationStatus, setLocationStatus] = useState<"loading" | "granted" | "denied" | "unavailable">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isManualLocation, setIsManualLocation] = useState(false);
   const [manualAddress, setManualAddress] = useState<string | null>(null);
+  const [addressLabel, setAddressLabel] = useState<string | null>(null);
+  const [gpsLocationName, setGpsLocationName] = useState<string | null>(null);
 
   const {
     data: availabilityData,
     isLoading: isCheckingAvailability,
     refetch: refreshStoreAvailability,
   } = useQuery({
-    queryKey: ["/api/stores/available", location?.latitude, location?.longitude],
+    queryKey: ["/api/stores/available", userLocation?.latitude, userLocation?.longitude],
     queryFn: async () => {
-      if (!location) return null;
+      if (!userLocation) return null;
       const url = new URL("/api/stores/available", getApiUrl());
-      url.searchParams.set("lat", String(location.latitude));
-      url.searchParams.set("lng", String(location.longitude));
+      url.searchParams.set("lat", String(userLocation.latitude));
+      url.searchParams.set("lng", String(userLocation.longitude));
       const res = await fetch(url.toString());
       return res.json();
     },
-    enabled: !!location,
+    enabled: !!userLocation,
     staleTime: 30000,
   });
+
+  // Reverse geocode function to get place name from coordinates
+  const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`,
+        { headers: { "User-Agent": "KilatGoApp" } }
+      );
+      const data = await response.json();
+      
+      const address = data.address || {};
+      const locationName = 
+        address.neighbourhood || 
+        address.suburb || 
+        address.village ||
+        address.city_district ||
+        address.city ||
+        address.county ||
+        "Current Location";
+      
+      console.log("📍 Reverse geocoded location:", locationName);
+      return locationName;
+    } catch (error) {
+      console.error("Reverse geocoding error:", error);
+      return "Current Location";
+    }
+  };
 
   const requestLocationPermission = useCallback(async (): Promise<boolean> => {
     try {
@@ -76,13 +107,19 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
             maximumAge: 60000,
           });
         });
-        setLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
+        
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        
+        setUserLocation({ latitude: lat, longitude: lng });
+        
+        const placeName = await reverseGeocode(lat, lng);
+        setGpsLocationName(placeName);
+        
         setLocationStatus("granted");
         setIsManualLocation(false);
         setManualAddress(null);
+        setAddressLabel(null);
         return true;
       }
 
@@ -97,13 +134,18 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         accuracy: Location.Accuracy.Balanced,
       });
 
-      setLocation({
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-      });
+      const lat = currentLocation.coords.latitude;
+      const lng = currentLocation.coords.longitude;
+
+      setUserLocation({ latitude: lat, longitude: lng });
+      
+      const placeName = await reverseGeocode(lat, lng);
+      setGpsLocationName(placeName);
+      
       setLocationStatus("granted");
       setIsManualLocation(false);
       setManualAddress(null);
+      setAddressLabel(null);
       return true;
     } catch (error) {
       console.error("Location error:", error);
@@ -113,27 +155,25 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // New function to set manual location
-const setManualLocationFunc = useCallback((manualLoc: ManualLocation & { label: string }) => {
-  setLocation({
-    latitude: manualLoc.latitude,
-    longitude: manualLoc.longitude,
-  });
-  setIsManualLocation(true);
-  setManualAddress(manualLoc.address);
-  setAddressLabel(manualLoc.label); // ✅ NEW
-  setLocationStatus("granted");
-  setErrorMessage(null);
-}, []);
+  const setManualLocationFunc = useCallback((manualLoc: ManualLocation) => {
+    setUserLocation({
+      latitude: manualLoc.latitude,
+      longitude: manualLoc.longitude,
+    });
+    setIsManualLocation(true);
+    setManualAddress(manualLoc.address);
+    setAddressLabel(manualLoc.label);
+    setGpsLocationName(null);
+    setLocationStatus("granted");
+    setErrorMessage(null);
+  }, []);
 
-  // Clear manual location and return to GPS
- const clearManualLocation = useCallback(() => {
-  setIsManualLocation(false);
-  setManualAddress(null);
-  setAddressLabel(null); // ✅ NEW
-}, []);
+  const clearManualLocation = useCallback(() => {
+    setIsManualLocation(false);
+    setManualAddress(null);
+    setAddressLabel(null);
+  }, []);
 
-  // Use current GPS location
   const useCurrentLocation = useCallback(async () => {
     await requestLocationPermission();
   }, [requestLocationPermission]);
@@ -150,10 +190,15 @@ const setManualLocationFunc = useCallback((manualLoc: ManualLocation & { label: 
                 maximumAge: 300000,
               });
             });
-            setLocation({
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-            });
+            
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            
+            setUserLocation({ latitude: lat, longitude: lng });
+            
+            const placeName = await reverseGeocode(lat, lng);
+            setGpsLocationName(placeName);
+            
             setLocationStatus("granted");
           } catch {
             setLocationStatus("denied");
@@ -170,10 +215,15 @@ const setManualLocationFunc = useCallback((manualLoc: ManualLocation & { label: 
           const currentLocation = await Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.Balanced,
           });
-          setLocation({
-            latitude: currentLocation.coords.latitude,
-            longitude: currentLocation.coords.longitude,
-          });
+          
+          const lat = currentLocation.coords.latitude;
+          const lng = currentLocation.coords.longitude;
+          
+          setUserLocation({ latitude: lat, longitude: lng });
+          
+          const placeName = await reverseGeocode(lat, lng);
+          setGpsLocationName(placeName);
+          
           setLocationStatus("granted");
         } catch {
           setLocationStatus("unavailable");
@@ -183,7 +233,6 @@ const setManualLocationFunc = useCallback((manualLoc: ManualLocation & { label: 
       }
     };
 
-    // Only auto-load GPS if not using manual location
     if (!isManualLocation) {
       checkInitialPermission();
     }
@@ -202,12 +251,11 @@ const setManualLocationFunc = useCallback((manualLoc: ManualLocation & { label: 
   const storeAvailable = !!availabilityData?.available;
   const codAllowed = availabilityData?.codAllowed ?? false;
   const estimatedDeliveryMinutes = availabilityData?.estimatedDeliveryMinutes ?? null;
-  const [addressLabel, setAddressLabel] = useState<string | null>(null);
 
   return (
     <LocationContext.Provider
       value={{
-        location,
+        location: userLocation,
         locationStatus,
         store,
         storeAvailable,
@@ -218,6 +266,7 @@ const setManualLocationFunc = useCallback((manualLoc: ManualLocation & { label: 
         isManualLocation,
         manualAddress,
         addressLabel,
+        gpsLocationName,
         requestLocationPermission,
         refreshStoreAvailability,
         setManualLocation: setManualLocationFunc,
