@@ -1,10 +1,11 @@
+// Replace your entire driver dashboard file with this
+
 import React, { useState } from "react";
 import { View, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Pressable, Alert, Linking, Platform, TextInput, Modal, TouchableOpacity } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { LinearGradient } from 'expo-linear-gradient';
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -367,7 +368,7 @@ export default function DriverDashboardScreen() {
   if (isLoading) {
     return (
       <ThemedView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
+        <ActivityIndicator size="large" color={theme.primary} />
       </ThemedView>
     );
   }
@@ -387,54 +388,45 @@ export default function DriverDashboardScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* ✅ IMPROVED GRADIENT HEADER */}
-      <LinearGradient
-        colors={['#4CAF50', '#45a049']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.headerGradient, { paddingTop: insets.top + 10 }]}
-      >
-        <View style={styles.headerContent}>
+      {/* ✅ CLEAN HEADER - NO GRADIENT, PROPER SPACING */}
+      <View style={[styles.header, { paddingTop: insets.top + 16, backgroundColor: theme.backgroundDefault }]}>
+        <View style={styles.headerTop}>
           <View style={{ flex: 1 }}>
-            <ThemedText style={styles.headerTitle}>Delivery Hub</ThemedText>
+            <ThemedText type="h2" style={{ marginBottom: 4 }}>Delivery Hub</ThemedText>
             <View style={styles.statusRow}>
-              <View style={styles.statusDot} />
-              <ThemedText style={styles.statusText}>Online</ThemedText>
+              <View style={[styles.statusDot, { backgroundColor: theme.success }]} />
+              <ThemedText type="caption" style={{ color: theme.textSecondary, marginLeft: 6 }}>
+                Online & Ready
+              </ThemedText>
             </View>
           </View>
-          
-          {/* ✅ IMPROVED ICON BUTTONS */}
-          <View style={styles.headerButtons}>
+
+          {/* ✅ VISIBLE BUTTONS - PROPER SPACING */}
+          <View style={styles.headerActions}>
             <TouchableOpacity 
-              style={styles.headerButton}
+              style={[styles.iconButton, { backgroundColor: theme.primary }]}
               onPress={() => navigation.navigate('Notifications')}
             >
-              <View style={styles.iconCircle}>
-                <Feather name="bell" size={22} color="#4CAF50" />
-              </View>
-              <ThemedText style={styles.buttonLabel}>Alerts</ThemedText>
+              <Feather name="bell" size={20} color="white" />
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={styles.headerButton}
+              style={[styles.iconButton, { backgroundColor: '#ff4444' }]}
               onPress={handleLogout}
             >
-              <View style={[styles.iconCircle, { backgroundColor: '#ff4444' }]}>
-                <Feather name="log-out" size={22} color="white" />
-              </View>
-              <ThemedText style={styles.buttonLabel}>Logout</ThemedText>
+              <Feather name="log-out" size={20} color="white" />
             </TouchableOpacity>
           </View>
         </View>
-      </LinearGradient>
+      </View>
 
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing.xl }]}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#4CAF50" />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.primary} />}
       >
         <View style={styles.sectionHeader}>
-          <Feather name="truck" size={20} color="#4CAF50" />
+          <Feather name="truck" size={20} color={theme.primary} />
           <ThemedText type="h3" style={styles.sectionTitle}>
             Active Deliveries ({allActiveOrders.length})
           </ThemedText>
@@ -463,7 +455,7 @@ export default function DriverDashboardScreen() {
 
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.xl, marginBottom: 12 }}>
           <View style={styles.sectionHeader}>
-            <Feather name="check-circle" size={20} color="#4CAF50" />
+            <Feather name="check-circle" size={20} color={theme.success} />
             <ThemedText type="h3" style={styles.sectionTitle}>
               Today's Completed ({sortedCompletedOrders.length})
             </ThemedText>
@@ -523,20 +515,16 @@ export default function DriverDashboardScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerGradient: { paddingBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 5 },
-  headerContent: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 0 },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: 'white', marginBottom: 4 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff' },
-  statusText: { fontSize: 14, color: 'rgba(255,255,255,0.9)' },
-  headerButtons: { flexDirection: 'row', gap: 12 },
-  headerButton: { alignItems: 'center' },
-  iconCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  buttonLabel: { fontSize: 11, fontWeight: '600', color: 'white', marginTop: 4 },
+  header: { paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  statusRow: { flexDirection: 'row', alignItems: 'center' },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  headerActions: { flexDirection: 'row', gap: 10 },
+  iconButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 16 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 0 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   sectionTitle: { marginBottom: 0 },
   orderCard: { marginBottom: 12, padding: 16 },
   orderHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },

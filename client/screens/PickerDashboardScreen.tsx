@@ -1,14 +1,15 @@
+// Replace your entire picker dashboard file with this
+
 import React, { useState, useMemo } from "react";
 import { 
   View, StyleSheet, ScrollView, RefreshControl, 
-  Pressable, Switch, TextInput, Modal, Image, TouchableOpacity, ActivityIndicator, Alert 
+  Pressable, TextInput, Modal, Image, TouchableOpacity, ActivityIndicator, Alert 
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from "@react-navigation/native";
-import { LinearGradient } from 'expo-linear-gradient';
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -489,95 +490,85 @@ export default function PickerDashboardScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* ✅ IMPROVED GRADIENT HEADER */}
-      <LinearGradient
-        colors={['#FFD700', '#FFA500']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.headerGradient, { paddingTop: insets.top + 10 }]}
-      >
-        <View style={styles.headerContent}>
+      {/* ✅ CLEAN HEADER - NO GRADIENT, PROPER SPACING */}
+      <View style={[styles.header, { paddingTop: insets.top + 16, backgroundColor: theme.backgroundDefault }]}>
+        <View style={styles.headerTop}>
           <View style={{ flex: 1 }}>
-            <ThemedText style={styles.headerTitle}>Store Operations</ThemedText>
+            <ThemedText type="h2" style={{ marginBottom: 4 }}>Store Ops</ThemedText>
             <View style={styles.storeInfo}>
-              <Feather name="map-pin" size={14} color="rgba(0,0,0,0.7)" />
-              <ThemedText style={styles.storeName}>
+              <Feather name="map-pin" size={14} color={theme.textSecondary} />
+              <ThemedText type="caption" style={{ color: theme.textSecondary, marginLeft: 4 }}>
                 {dashboard?.store?.name || "Loading..."}
               </ThemedText>
             </View>
           </View>
-          
-          {/* ✅ IMPROVED ICON BUTTONS WITH LABELS */}
-          <View style={styles.headerButtons}>
+
+          {/* ✅ VISIBLE BUTTONS - PROPER SPACING */}
+          <View style={styles.headerActions}>
             <TouchableOpacity 
-              style={styles.headerButton}
+              style={[styles.iconButton, { backgroundColor: theme.primary }]}
               onPress={() => navigation.navigate('Notifications')}
             >
-              <View style={styles.iconCircle}>
-                <Feather name="bell" size={22} color="#FFD700" />
-              </View>
-              <ThemedText style={styles.buttonLabel}>Alerts</ThemedText>
+              <Feather name="bell" size={20} color="white" />
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={styles.headerButton}
+              style={[styles.iconButton, { backgroundColor: '#ff4444' }]}
               onPress={handleLogout}
             >
-              <View style={[styles.iconCircle, { backgroundColor: '#ff4444' }]}>
-                <Feather name="log-out" size={22} color="white" />
-              </View>
-              <ThemedText style={styles.buttonLabel}>Logout</ThemedText>
+              <Feather name="log-out" size={20} color="white" />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* ✅ IMPROVED TABS */}
-        <View style={styles.tabContainer}>
+        {/* ✅ TABS - MATCHING YOUR APP STYLE */}
+        <View style={[styles.tabs, { borderBottomColor: theme.border }]}>
           <Pressable 
             onPress={() => setActiveTab("orders")} 
-            style={[styles.tab, activeTab === "orders" && styles.activeTab]}
+            style={[styles.tab, activeTab === "orders" && { borderBottomColor: theme.primary }]}
           >
-            <Feather name="package" size={18} color={activeTab === "orders" ? "#FFD700" : "rgba(0,0,0,0.5)"} />
-            <ThemedText style={[styles.tabText, activeTab === "orders" && styles.activeTabText]}>
+            <Feather name="package" size={18} color={activeTab === "orders" ? theme.primary : theme.textSecondary} />
+            <ThemedText style={[styles.tabText, { color: activeTab === "orders" ? theme.primary : theme.textSecondary }]}>
               Orders
             </ThemedText>
           </Pressable>
           
           <Pressable 
             onPress={() => setActiveTab("inventory")} 
-            style={[styles.tab, activeTab === "inventory" && styles.activeTab]}
+            style={[styles.tab, activeTab === "inventory" && { borderBottomColor: theme.primary }]}
           >
-            <Feather name="box" size={18} color={activeTab === "inventory" ? "#FFD700" : "rgba(0,0,0,0.5)"} />
-            <ThemedText style={[styles.tabText, activeTab === "inventory" && styles.activeTabText]}>
+            <Feather name="box" size={18} color={activeTab === "inventory" ? theme.primary : theme.textSecondary} />
+            <ThemedText style={[styles.tabText, { color: activeTab === "inventory" ? theme.primary : theme.textSecondary }]}>
               Inventory
             </ThemedText>
           </Pressable>
         </View>
-      </LinearGradient>
+      </View>
 
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={invLoading || dashLoading} onRefresh={onRefresh} />}
+        refreshControl={<RefreshControl refreshing={invLoading || dashLoading} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         {activeTab === "inventory" ? (
           <>
-            <View style={styles.searchContainer}>
+            <View style={[styles.searchContainer, { backgroundColor: theme.backgroundTertiary }]}>
               <Feather name="search" size={18} color={theme.textSecondary} />
               <TextInput 
                 placeholder="Find product..." 
+                placeholderTextColor={theme.textSecondary}
                 style={[styles.searchInput, { color: theme.text }]}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
               />
             </View>
 
-            <TouchableOpacity style={styles.addBtn} onPress={() => openEditModal()}>
+            <TouchableOpacity style={[styles.addBtn, { backgroundColor: theme.primary }]} onPress={() => openEditModal()}>
               <Feather name="plus" size={18} color="white" />
               <ThemedText style={styles.addBtnText}>Add Store Item</ThemedText>
             </TouchableOpacity>
 
             {invLoading ? (
-              <ActivityIndicator size="large" color="#FFD700" />
+              <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 40 }} />
             ) : filteredInventory.length > 0 ? (
               <Card style={styles.inventoryListCard}>
                 {filteredInventory.map(item => (
@@ -585,13 +576,16 @@ export default function PickerDashboardScreen() {
                 ))}
               </Card>
             ) : (
-              <View style={styles.centeredContent}><ThemedText>No items found</ThemedText></View>
+              <View style={styles.centeredContent}>
+                <Feather name="inbox" size={50} color={theme.textSecondary} />
+                <ThemedText style={{ marginTop: 10, color: theme.textSecondary }}>No items found</ThemedText>
+              </View>
             )}
           </>
         ) : (
           <View>
             {dashLoading ? (
-              <ActivityIndicator size="large" color="#FFD700" />
+              <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 40 }} />
             ) : ordersToDisplay.length > 0 ? (
               ordersToDisplay.map((order: any) => (
                 <OrderCard 
@@ -604,7 +598,7 @@ export default function PickerDashboardScreen() {
               ))
             ) : (
               <View style={styles.centeredContent}>
-                <Feather name="package" size={50} color="#ccc" />
+                <Feather name="package" size={50} color={theme.textSecondary} />
                 <ThemedText style={{ marginTop: 10, color: theme.textSecondary }}>No active orders</ThemedText>
               </View>
             )}
@@ -612,7 +606,7 @@ export default function PickerDashboardScreen() {
         )}
       </ScrollView>
 
-      {/* Modals remain the same */}
+      {/* Modals */}
       <Modal visible={modalVisible} animationType="slide">
         <ThemedView style={[styles.modalContent, { paddingTop: insets.top + 20 }]}>
           <View style={styles.modalHeader}>
@@ -637,45 +631,45 @@ export default function PickerDashboardScreen() {
               ))}
             </ScrollView>
 
-            <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
+            <TouchableOpacity style={[styles.imagePicker, { backgroundColor: theme.backgroundTertiary }]} onPress={pickImage}>
               {formImage ? (
                 <Image source={{ uri: formImage }} style={styles.fullImage} />
               ) : (
                 <View style={styles.imagePlaceholder}>
-                  <Feather name="camera" size={40} color="#ccc" />
-                  <ThemedText style={{ marginTop: 8, color: '#999' }}>Tap to add image</ThemedText>
+                  <Feather name="camera" size={40} color={theme.textSecondary} />
+                  <ThemedText style={{ marginTop: 8, color: theme.textSecondary }}>Tap to add image</ThemedText>
                 </View>
               )}
             </TouchableOpacity>
 
             <ThemedText style={styles.label}>Product Name *</ThemedText>
-            <TextInput style={[styles.input, { color: theme.text }]} value={formName} onChangeText={setFormName} placeholder="Fresh Milk" />
+            <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} value={formName} onChangeText={setFormName} placeholder="Fresh Milk" placeholderTextColor={theme.textSecondary} />
 
             <ThemedText style={styles.label}>Brand</ThemedText>
-            <TextInput style={[styles.input, { color: theme.text }]} value={formBrand} onChangeText={setFormBrand} placeholder="Brand name" />
+            <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} value={formBrand} onChangeText={setFormBrand} placeholder="Brand name" placeholderTextColor={theme.textSecondary} />
 
             <ThemedText style={styles.label}>Description</ThemedText>
-            <TextInput style={[styles.input, { color: theme.text, height: 60 }]} value={formDescription} onChangeText={setFormDescription} multiline placeholder="Details..." />
+            <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary, height: 60 }]} value={formDescription} onChangeText={setFormDescription} multiline placeholder="Details..." placeholderTextColor={theme.textSecondary} />
 
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Price (Rp) *</ThemedText>
-                <TextInput style={[styles.input, { color: theme.text }]} value={formPrice} onChangeText={setFormPrice} keyboardType="numeric" placeholder="0" />
+                <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} value={formPrice} onChangeText={setFormPrice} keyboardType="numeric" placeholder="0" placeholderTextColor={theme.textSecondary} />
               </View>
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <ThemedText style={styles.label}>Old Price</ThemedText>
-                <TextInput style={[styles.input, { color: theme.text }]} value={formOriginalPrice} onChangeText={setFormOriginalPrice} keyboardType="numeric" placeholder="Optional" />
+                <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} value={formOriginalPrice} onChangeText={setFormOriginalPrice} keyboardType="numeric" placeholder="Optional" placeholderTextColor={theme.textSecondary} />
               </View>
             </View>
 
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Stock *</ThemedText>
-                <TextInput style={[styles.input, { color: theme.text }]} value={formStock} onChangeText={setFormStock} keyboardType="numeric" placeholder="0" />
+                <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} value={formStock} onChangeText={setFormStock} keyboardType="numeric" placeholder="0" placeholderTextColor={theme.textSecondary} />
               </View>
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <ThemedText style={styles.label}>Location</ThemedText>
-                <TextInput style={[styles.input, { color: theme.text }]} value={formLocation} onChangeText={setFormLocation} placeholder="Aisle 1" />
+                <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} value={formLocation} onChangeText={setFormLocation} placeholder="Aisle 1" placeholderTextColor={theme.textSecondary} />
               </View>
             </View>
 
@@ -742,25 +736,19 @@ function InventoryItemRow({ item, onEdit, onDelete }: { item: InventoryItem; onE
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerGradient: { paddingBottom: 0, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 5 },
-  headerContent: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 15 },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#000', marginBottom: 4 },
-  storeInfo: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  storeName: { fontSize: 14, color: 'rgba(0,0,0,0.7)' },
-  headerButtons: { flexDirection: 'row', gap: 12 },
-  headerButton: { alignItems: 'center' },
-  iconCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  buttonLabel: { fontSize: 11, fontWeight: '600', color: '#000', marginTop: 4 },
-  tabContainer: { flexDirection: 'row', backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, gap: 8 },
-  activeTab: { borderBottomWidth: 3, borderBottomColor: '#FFD700' },
-  tabText: { fontSize: 15, color: 'rgba(0,0,0,0.5)', fontWeight: '500' },
-  activeTabText: { color: '#000', fontWeight: 'bold' },
+  header: { paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  storeInfo: { flexDirection: 'row', alignItems: 'center' },
+  headerActions: { flexDirection: 'row', gap: 10 },
+  iconButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  tabs: { flexDirection: 'row', borderBottomWidth: 1 },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, gap: 8, borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  tabText: { fontSize: 15, fontWeight: '600' },
   scrollContent: { padding: 20, paddingBottom: 100 },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 12, paddingHorizontal: 15, marginBottom: 20 },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 15, marginBottom: 20 },
   searchInput: { flex: 1, height: 45, marginLeft: 10 },
-  addBtn: { flexDirection: 'row', padding: 16, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 20, backgroundColor: '#FFD700' },
-  addBtnText: { color: '#000', fontWeight: 'bold', marginLeft: 8 },
+  addBtn: { flexDirection: 'row', padding: 16, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  addBtnText: { color: 'white', fontWeight: 'bold', marginLeft: 8 },
   inventoryListCard: { paddingHorizontal: 10 },
   inventoryRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1 },
   inventoryImg: { width: 45, height: 45, borderRadius: 8, backgroundColor: '#f0f0f0' },
@@ -773,11 +761,11 @@ const styles = StyleSheet.create({
   categoryArea: { marginBottom: 15 },
   categoryChip: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f0f0f0', marginRight: 8 },
   chipText: { fontSize: 13 },
-  imagePicker: { height: 140, backgroundColor: '#f5f5f5', borderRadius: 12, marginBottom: 15, overflow: 'hidden' },
+  imagePicker: { height: 140, borderRadius: 12, marginBottom: 15, overflow: 'hidden' },
   imagePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   fullImage: { width: '100%', height: '100%' },
   label: { fontSize: 13, fontWeight: '700', marginBottom: 4, marginTop: 8 },
-  input: { backgroundColor: '#f5f5f5', padding: 12, borderRadius: 8, marginBottom: 8 },
+  input: { padding: 12, borderRadius: 8, marginBottom: 8 },
   row: { flexDirection: 'row' },
   saveBtn: { padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 25, marginBottom: 40 },
   saveBtnText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
