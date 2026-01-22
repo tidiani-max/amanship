@@ -321,16 +321,16 @@ const availableCategories = useMemo(() => {
         {getLocationDisplayName()}
       </ThemedText>
       {/* ✅ Show GPS badge when using GPS */}
-      {!isManualLocation && gpsLocationName && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-          <View style={[styles.gpsBadge, { backgroundColor: theme.success + "20" }]}>
-            <Feather name="navigation" size={8} color={theme.success} />
-            <ThemedText type="small" style={{ color: theme.success, fontSize: 9, marginLeft: 2 }}>
-              GPS Active
-            </ThemedText>
-          </View>
-        </View>
-      )}
+      {!isManualLocation && gpsLocationName ? (
+  <View style={styles.gpsContainer}>
+    <View style={[styles.gpsBadge, { backgroundColor: theme.success + "20" }]}>
+      <Feather name="navigation" size={8} color={theme.success} />
+      <ThemedText type="small" style={{ color: theme.success, fontSize: 9, marginLeft: 2 }}>
+        GPS Active
+      </ThemedText>
+    </View>
+  </View>
+) : null}
     </View>
     <Feather name="edit-3" size={18} color={theme.primary} />
   </Pressable>
@@ -525,12 +525,17 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(0,0,0,0.05)',
   },
   gpsBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 6,
+  paddingVertical: 2,
+  borderRadius: 4,
+},
+gpsContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginTop: 2,
+},
 });
 
 // yes here
