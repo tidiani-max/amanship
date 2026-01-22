@@ -30,11 +30,11 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "RECORD_AUDIO",
-        "NOTIFICATIONS",
-        "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
-      ],
+  "RECORD_AUDIO",
+  "NOTIFICATIONS",
+  "RECEIVE_BOOT_COMPLETED",
+  "VIBRATE"
+],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#FFD700"
@@ -104,6 +104,7 @@
       "eas": {
         "projectId": "113ea7fa-db9e-4380-b05f-dd63a05e5632"
       }
-    }
+    },
+    "owner": "dioti"
   }
 }
