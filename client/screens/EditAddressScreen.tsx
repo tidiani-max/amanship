@@ -28,7 +28,8 @@ export default function EditAddressScreen() {
     useCurrentLocation, 
     setManualLocation,
     isManualLocation,
-    manualAddress 
+    manualAddress,
+    addressLabel: currentAddressLabel, // ✅ Get current label
   } = useLocation();
   
   const [label, setLabel] = useState("Home");
@@ -105,13 +106,20 @@ export default function EditAddressScreen() {
       return;
     }
 
+    // ✅ Validate label is required
+    if (!label.trim()) {
+      Alert.alert("Required", "Please enter an address label (e.g., Home, Office)");
+      return;
+    }
+
     setLoading(true);
     try {
-      // Set as manual location in context
+      // ✅ Set as manual location in context WITH LABEL
       setManualLocation({
         latitude: parseFloat(selectedLocation.lat),
         longitude: parseFloat(selectedLocation.lng),
         address: selectedLocation.address,
+        label: label.trim(), // ✅ Include the label
         isManual: true,
       });
 
@@ -119,9 +127,9 @@ export default function EditAddressScreen() {
       if (user?.id) {
         await apiRequest("POST", "/api/addresses", {
           userId: user.id,
-          label,
+          label: label.trim(),
           fullAddress: selectedLocation.address,
-          details,
+          details: details.trim() || null,
           latitude: selectedLocation.lat,
           longitude: selectedLocation.lng,
           isDefault: true
@@ -249,19 +257,33 @@ export default function EditAddressScreen() {
 
           {selectedLocation && (
             <>
+              {/* ✅ REQUIRED: Address Label */}
               <View style={styles.inputGroup}>
                 <ThemedText type="caption" style={[styles.label, { color: theme.textSecondary }]}>
-                  Address Label (Optional)
+                  Address Label <ThemedText style={{ color: theme.error }}>*</ThemedText>
                 </ThemedText>
                 <TextInput
-                  style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]}
+                  style={[
+                    styles.input, 
+                    { 
+                      backgroundColor: theme.backgroundDefault, 
+                      borderColor: label.trim() ? theme.border : theme.error, 
+                      color: theme.text 
+                    }
+                  ]}
                   value={label}
                   onChangeText={setLabel}
-                  placeholder="e.g. Home, Office, Friend's House"
+                  placeholder="e.g. Home, Office, Apartment 5B"
                   placeholderTextColor={theme.textSecondary}
                 />
+                {!label.trim() && (
+                  <ThemedText type="small" style={{ color: theme.error, marginTop: 4 }}>
+                    This field is required for drivers to find you
+                  </ThemedText>
+                )}
               </View>
 
+              {/* Optional: Additional Details */}
               <View style={styles.inputGroup}>
                 <ThemedText type="caption" style={[styles.label, { color: theme.textSecondary }]}>
                   Additional Details (Optional)
@@ -271,7 +293,7 @@ export default function EditAddressScreen() {
                   value={details}
                   onChangeText={setDetails}
                   multiline
-                  placeholder="e.g. Blue door, 2nd floor, Building A"
+                  placeholder="e.g. Blue door, 2nd floor, Building A, Gate code: 1234"
                   placeholderTextColor={theme.textSecondary}
                 />
               </View>
@@ -287,7 +309,12 @@ export default function EditAddressScreen() {
               <ThemedText type="caption" style={{ color: theme.success, marginBottom: 2 }}>
                 Current Delivery Address
               </ThemedText>
-              <ThemedText type="body" numberOfLines={2}>
+              {currentAddressLabel && (
+                <ThemedText type="h3" style={{ marginBottom: 4 }}>
+                  {currentAddressLabel}
+                </ThemedText>
+              )}
+              <ThemedText type="body" numberOfLines={2} style={{ color: theme.textSecondary }}>
                 {manualAddress}
               </ThemedText>
             </View>
@@ -306,7 +333,10 @@ export default function EditAddressScreen() {
             },
           ]}
         >
-          <Button onPress={handleApplyAddress} disabled={loading}>
+          <Button 
+            onPress={handleApplyAddress} 
+            disabled={loading || !label.trim()}
+          >
             {loading ? <ActivityIndicator color="#fff" /> : "Apply This Address"}
           </Button>
         </View>
