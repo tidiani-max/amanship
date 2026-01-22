@@ -236,6 +236,52 @@ app.post("/api/auth/login", async (req, res) => {
   });
 });
 
+app.post("/api/auth/check-phone", async (req, res) => {
+  try {
+    const { phone } = req.body;
+    
+    if (!phone) {
+      return res.status(400).json({ error: "Phone number required" });
+    }
+
+    console.log("🔍 Checking phone:", phone);
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.phone, phone))
+      .limit(1);
+
+    if (!user) {
+      console.log("❌ User not found");
+      return res.json({ 
+        exists: false,
+        message: "No account found with this number. Please sign up."
+      });
+    }
+
+    console.log("✅ User found:", user.id, "Role:", user.role, "FirstLogin:", user.firstLogin);
+
+    // Check if it's a staff member who needs to reset password
+    const isStaff = ["picker", "driver"].includes(user.role);
+    const requiresPasswordReset = isStaff && user.firstLogin === true;
+
+    return res.json({
+      exists: true,
+      firstLogin: user.firstLogin || false,
+      isStaff,
+      requiresPasswordReset,
+      message: requiresPasswordReset 
+        ? "Please set your new password" 
+        : "Account found"
+    });
+
+  } catch (error) {
+    console.error("❌ Check phone error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.post("/api/auth/reset-first-login", async (req, res) => {
   try {
     const { phone, newPassword } = req.body;

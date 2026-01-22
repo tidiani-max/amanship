@@ -160,7 +160,7 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
         return;
       }
 
-      // ✅ If staff first login, go to password reset
+      // ✅ If staff first login, go to password reset DIRECTLY
       if (result.requiresPasswordReset) {
         setStep("resetPassword");
         return;
@@ -168,8 +168,21 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
 
       // ✅ Normal user, show password field
       setStep("password");
-    } else {
-      // ✅ Signup/Forgot - send OTP
+    } 
+    else if (mode === "forgot") {
+      // ✅ FORGOT PASSWORD: Send OTP first, THEN ask for new password
+      const result = await sendOtp(fullPhone, "forgot");
+      setIsLoading(false);
+
+      if (result.success) {
+        setSentCode(result.code);
+        setStep("otp");
+      } else {
+        showAlert("Error", result.error || "Unable to send OTP");
+      }
+    }
+    else {
+      // ✅ Signup - send OTP
       const result = await sendOtp(fullPhone, mode);
       setIsLoading(false);
 
@@ -178,8 +191,8 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
         setStep("otp");
       } else {
         showAlert(
-          mode === "signup" ? "Account Exists" : "User Not Found",
-          result.error || "Unable to proceed"
+          "Account Exists",
+          result.error || "This phone is already registered"
         );
       }
     }
@@ -209,6 +222,38 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
   // STEP 3: Verify OTP (Signup/Forgot)
   // ========================================
   const handleVerifyOTP = async () => {
+    if (otpCode.length !== 6) {
+      showAlert("Invalid OTP", "Please enter the 6-digit code");
+      return;
+    }
+
+    // ✅ FOR FORGOT PASSWORD: Verify OTP with new password
+    if (mode === "forgot") {
+      if (!password || password.length < 4) {
+        showAlert("Invalid Password", "Please enter a password (min 4 characters)");
+        return;
+      }
+
+      setIsLoading(true);
+      const result = await verifyOtp(fullPhone, otpCode, {
+        password,
+        mode: "forgot"
+      });
+      setIsLoading(false);
+
+      if (result.success) {
+        showAlert("Success", "Password reset successfully! Please login.");
+        setMode("login");
+        setStep("phone");
+        setPassword("");
+        setOtpCode("");
+      } else {
+        showAlert("Verification Failed", result.error || "Invalid OTP");
+      }
+      return;
+    }
+
+    // ✅ FOR SIGNUP: Verify OTP with all details
     if (!name || !email || !password) {
       showAlert("Missing Information", "Please fill in all fields");
       return;
@@ -222,10 +267,10 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
 
     setIsLoading(true);
     const result = await verifyOtp(fullPhone, otpCode, {
-      name: mode === "signup" ? name : undefined,
-      email: mode === "signup" ? email : undefined,
-      password: (mode === "signup" || mode === "forgot") ? password : undefined,
-      mode
+      name,
+      email,
+      password,
+      mode: "signup"
     });
     setIsLoading(false);
 
@@ -237,7 +282,7 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
   };
 
   // ========================================
-  // STEP 4: Reset Password (First Login)
+  // STEP 4: Reset Password (First Login - NO OTP)
   // ========================================
   const handleResetPassword = async () => {
     if (newPassword.length < 4) {
@@ -255,7 +300,7 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
 
     if (result.success) {
       showAlert("Success", "Password updated! Please login with your new password.");
-      // Reset to login phone step
+      setMode("login");
       setStep("phone");
       setPassword("");
       setNewPassword("");
@@ -289,7 +334,7 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
   };
 
   // ========================================
-  // RENDER: Reset Password Screen
+  // RENDER: Reset Password Screen (for staff first login)
   // ========================================
   if (step === "resetPassword") {
     return (
@@ -385,7 +430,7 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
           <ThemedText type="h2" style={styles.title}>
             {step === "phone" && (mode === "signup" ? "Create Account" : mode === "forgot" ? "Reset Password" : "Welcome Back")}
             {step === "password" && "Enter Password"}
-            {step === "otp" && "Verify Code"}
+            {step === "otp" && (mode === "forgot" ? "Verify & Set Password" : "Verify Code")}
           </ThemedText>
 
           {sentCode && step === "otp" && (
@@ -475,7 +520,7 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
                 autoFocus
               />
 
-              <Pressable onPress={() => setMode("forgot")} style={{ alignSelf: 'flex-end', marginTop: Spacing.sm }}>
+              <Pressable onPress={() => { setMode("forgot"); setStep("phone"); }} style={{ alignSelf: 'flex-end', marginTop: Spacing.sm }}>
                 <ThemedText type="caption" style={{ color: theme.primary }}>Forgot Password?</ThemedText>
               </Pressable>
 
@@ -489,7 +534,7 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
             </>
           )}
 
-          {/* OTP INPUT (Signup/Forgot) */}
+          {/* OTP INPUT */}
           {step === "otp" && (
             <>
               <TextInput
@@ -501,41 +546,58 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
                 onChangeText={setOtpCode}
                 maxLength={6}
               />
-              <Button onPress={handleVerifyOTP} disabled={otpCode.length !== 6 || isLoading}>
-                {isLoading ? "Verifying..." : "Confirm OTP"}
+
+              {/* ✅ FOR FORGOT PASSWORD: Show password field AFTER OTP */}
+              {mode === "forgot" && (
+                <TextInput 
+                  style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginBottom: Spacing.md }]} 
+                  placeholder="New Password" 
+                  placeholderTextColor={theme.textSecondary}
+                  secureTextEntry 
+                  value={password} 
+                  onChangeText={setPassword} 
+                />
+              )}
+
+              <Button onPress={handleVerifyOTP} disabled={otpCode.length !== 6 || isLoading || (mode === "forgot" && password.length < 4)}>
+                {isLoading ? "Verifying..." : mode === "forgot" ? "Reset Password" : "Confirm OTP"}
               </Button>
-              <Pressable onPress={() => { setStep("phone"); setSentCode(null); }} style={styles.skipLink}>
+              <Pressable onPress={() => { setStep("phone"); setSentCode(null); setOtpCode(""); }} style={styles.skipLink}>
                 <ThemedText type="caption" style={{ color: theme.primary }}>Back</ThemedText>
               </Pressable>
             </>
           )}
 
-          <View style={styles.dividerContainer}>
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            <ThemedText type="caption" style={[styles.dividerText, { color: theme.textSecondary }]}>Or continue with</ThemedText>
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-          </View>
+          {step === "phone" && (
+            <>
+              <View style={styles.dividerContainer}>
+                <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                <ThemedText type="caption" style={[styles.dividerText, { color: theme.textSecondary }]}>Or continue with</ThemedText>
+                <View style={[styles.divider, { backgroundColor: theme.border }]} />
+              </View>
 
-          <View style={styles.socialButtons}>
-            <GoogleSignInButton onSuccess={onComplete} onError={(err) => showAlert("Error", err)} onLoadingChange={setIsLoading} theme={theme} />
-            {Platform.OS === "ios" && (
-              <Pressable 
-                style={[styles.socialButton, { 
-                  backgroundColor: colorScheme === 'dark' ? '#fff' : '#000',
-                  borderWidth: 0
-                }]}
-                onPress={handleAppleSignIn}
-              >
-                <Feather name="smartphone" size={20} color={colorScheme === 'dark' ? '#000' : '#fff'} />
-                <ThemedText 
-                  type="body" 
-                  style={[styles.socialButtonText, { color: colorScheme === 'dark' ? '#000' : '#fff' }]}
-                >
-                  Apple
-                </ThemedText>
-              </Pressable>
-            )}
-          </View>
+              <View style={styles.socialButtons}>
+                <GoogleSignInButton onSuccess={onComplete} onError={(err) => showAlert("Error", err)} onLoadingChange={setIsLoading} theme={theme} />
+                {Platform.OS === "ios" && (
+                  <Pressable 
+                    style={[styles.socialButton, { 
+                      backgroundColor: colorScheme === 'dark' ? '#fff' : '#000',
+                      borderWidth: 0
+                    }]}
+                    onPress={handleAppleSignIn}
+                  >
+                    <Feather name="smartphone" size={20} color={colorScheme === 'dark' ? '#000' : '#fff'} />
+                    <ThemedText 
+                      type="body" 
+                      style={[styles.socialButtonText, { color: colorScheme === 'dark' ? '#000' : '#fff' }]}
+                    >
+                      Apple
+                    </ThemedText>
+                  </Pressable>
+                )}
+              </View>
+            </>
+          )}
         </View>
       </View>
 
@@ -655,7 +717,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xl, 
     padding: Spacing.sm 
   },
-  // ✅ Alert Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
