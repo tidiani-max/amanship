@@ -490,20 +490,12 @@ export default function PickerDashboardScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* ✅ CLEAN HEADER - NO GRADIENT, PROPER SPACING */}
-      <View style={[styles.header, { paddingTop: insets.top + 16, backgroundColor: theme.backgroundDefault }]}>
-        <View style={styles.headerTop}>
-          <View style={{ flex: 1 }}>
-            <ThemedText type="h2" style={{ marginBottom: 4 }}>Store Ops</ThemedText>
-            <View style={styles.storeInfo}>
-              <Feather name="map-pin" size={14} color={theme.textSecondary} />
-              <ThemedText type="caption" style={{ color: theme.textSecondary, marginLeft: 4 }}>
-                {dashboard?.store?.name || "Loading..."}
-              </ThemedText>
-            </View>
-          </View>
-
-          {/* ✅ VISIBLE BUTTONS - PROPER SPACING */}
+      {/* ✅ HEADER WITH BUTTONS AT TOP */}
+      <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: theme.backgroundDefault }]}>
+        {/* Top row: Title + Buttons */}
+        <View style={styles.titleRow}>
+          <ThemedText type="h2">Store Ops</ThemedText>
+          
           <View style={styles.headerActions}>
             <TouchableOpacity 
               style={[styles.iconButton, { backgroundColor: theme.primary }]}
@@ -521,7 +513,15 @@ export default function PickerDashboardScreen() {
           </View>
         </View>
 
-        {/* ✅ TABS - MATCHING YOUR APP STYLE */}
+        {/* Store info */}
+        <View style={[styles.storeInfo, { marginTop: 8, marginBottom: 16 }]}>
+          <Feather name="map-pin" size={14} color={theme.textSecondary} />
+          <ThemedText type="caption" style={{ color: theme.textSecondary, marginLeft: 4 }}>
+            {dashboard?.store?.name || "Loading..."}
+          </ThemedText>
+        </View>
+
+        {/* ✅ TABS */}
         <View style={[styles.tabs, { borderBottomColor: theme.border }]}>
           <Pressable 
             onPress={() => setActiveTab("orders")} 
@@ -736,8 +736,8 @@ function InventoryItemRow({ item, onEdit, onDelete }: { item: InventoryItem; onE
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  header: { paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   storeInfo: { flexDirection: 'row', alignItems: 'center' },
   headerActions: { flexDirection: 'row', gap: 10 },
   iconButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },

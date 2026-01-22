@@ -388,20 +388,12 @@ export default function DriverDashboardScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* ✅ CLEAN HEADER - NO GRADIENT, PROPER SPACING */}
-      <View style={[styles.header, { paddingTop: insets.top + 16, backgroundColor: theme.backgroundDefault }]}>
-        <View style={styles.headerTop}>
-          <View style={{ flex: 1 }}>
-            <ThemedText type="h2" style={{ marginBottom: 4 }}>Delivery Hub</ThemedText>
-            <View style={styles.statusRow}>
-              <View style={[styles.statusDot, { backgroundColor: theme.success }]} />
-              <ThemedText type="caption" style={{ color: theme.textSecondary, marginLeft: 6 }}>
-                Online & Ready
-              </ThemedText>
-            </View>
-          </View>
-
-          {/* ✅ VISIBLE BUTTONS - PROPER SPACING */}
+      {/* ✅ HEADER WITH BUTTONS AT TOP */}
+      <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: theme.backgroundDefault, borderBottomWidth: 1, borderBottomColor: theme.border }]}>
+        {/* Top row: Title + Buttons */}
+        <View style={styles.titleRow}>
+          <ThemedText type="h2">Delivery Hub</ThemedText>
+          
           <View style={styles.headerActions}>
             <TouchableOpacity 
               style={[styles.iconButton, { backgroundColor: theme.primary }]}
@@ -417,6 +409,14 @@ export default function DriverDashboardScreen() {
               <Feather name="log-out" size={20} color="white" />
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Status row */}
+        <View style={[styles.statusRow, { marginTop: 8, marginBottom: 16 }]}>
+          <View style={[styles.statusDot, { backgroundColor: theme.success }]} />
+          <ThemedText type="caption" style={{ color: theme.textSecondary, marginLeft: 6 }}>
+            Online & Ready
+          </ThemedText>
         </View>
       </View>
 
@@ -515,8 +515,8 @@ export default function DriverDashboardScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: { paddingHorizontal: 20 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   statusRow: { flexDirection: 'row', alignItems: 'center' },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   headerActions: { flexDirection: 'row', gap: 10 },
