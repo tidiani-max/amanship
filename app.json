@@ -61,11 +61,11 @@
       [
         "expo-build-properties",
         {
-          "android": {
-            "useAndroidX": true,
-            "enableJetifier": true,
-            "compileSdkVersion": 34,
-            "targetSdkVersion": 34,
+           "android": {
+          "useAndroidX": true,
+          "enableJetifier": true,
+          "compileSdkVersion": 35,
+          "targetSdkVersion": 34,
             "extraLines": [
               "configurations.all { resolutionStrategy { force 'androidx.core:core:1.13.1', 'androidx.versionedparcelable:versionedparcelable:1.1.1' } }"
             ],
