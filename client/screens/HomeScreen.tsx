@@ -1,7 +1,3 @@
-// ============================================
-// 1. UPDATE HomeScreen.tsx - Enhanced Version
-// ============================================
-
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Image, TextInput, ActivityIndicator, Dimensions, Animated } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -375,33 +371,33 @@ export default function HomeScreen() {
               </Pressable>
               
               {storesData.map(store => (
-  <Pressable
-    key={store.id}
-    style={[
-      styles.storeChip,
-      { backgroundColor: selectedStore?.id === store.id ? '#d1fae5' : theme.cardBackground }
-    ]}
-    onPress={() => setSelectedStore(store)}  // ← Just this simple line
-  >
-    <Feather 
-      name="map-pin" 
-      size={14} 
-      color={selectedStore?.id === store.id ? "#10b981" : "#6b7280"} 
-    />
-    <ThemedText style={[
-      styles.storeChipText,
-      { color: selectedStore?.id === store.id ? "#10b981" : "#6b7280" }
-    ]}>
-      {store.name}
-    </ThemedText>
-    <ThemedText style={[
-      styles.storeChipDistance,
-      { color: selectedStore?.id === store.id ? "#10b981" : "#9ca3af" }
-    ]}>
-      {store.distance.toFixed(1)}km
-    </ThemedText>
-  </Pressable>
-))}
+                <Pressable
+                  key={store.id}
+                  style={[
+                    styles.storeChip,
+                    { backgroundColor: selectedStore?.id === store.id ? '#d1fae5' : theme.cardBackground }
+                  ]}
+                  onPress={() => setSelectedStore(store)}
+                >
+                  <Feather 
+                    name="map-pin" 
+                    size={14} 
+                    color={selectedStore?.id === store.id ? "#10b981" : "#6b7280"} 
+                  />
+                  <ThemedText style={[
+                    styles.storeChipText,
+                    { color: selectedStore?.id === store.id ? "#10b981" : "#6b7280" }
+                  ]}>
+                    {store.name}
+                  </ThemedText>
+                  <ThemedText style={[
+                    styles.storeChipDistance,
+                    { color: selectedStore?.id === store.id ? "#10b981" : "#9ca3af" }
+                  ]}>
+                    {store.distance.toFixed(1)}km
+                  </ThemedText>
+                </Pressable>
+              ))}
             </ScrollView>
           </View>
         )}
