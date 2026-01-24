@@ -1627,24 +1627,42 @@ app.get("/api/orders", async (req, res) => {
   }
 });
 app.get("/api/orders/:id", async (req, res) => {
-    try {
-      const [orderData] = await db.select().from(orders).where(eq(orders.id, req.params.id)).limit(1);
-      if (!orderData) return res.status(404).json({ error: "Order not found" });
-      const items = await db.select({
-        id: orderItems.id, quantity: orderItems.quantity, priceAtEntry: orderItems.priceAtEntry,
-        productId: orderItems.productId, productName: products.name,
-      }).from(orderItems).leftJoin(products, eq(orderItems.productId, products.id)).where(eq(orderItems.orderId, req.params.id));
-      let driverName = null;
-      if (orderData.driverId) {
-        const driver = await storage.getUser(orderData.driverId);
-        driverName = driver?.username;
-      }
-      res.json({ ...orderData, items, driverName });
-    } catch (error) {
-      console.error("❌ Fetch order error:", error);
-      res.status(500).json({ error: "Failed to fetch order" });
+  try {
+    const [orderData] = await db.select().from(orders).where(eq(orders.id, req.params.id)).limit(1);
+    if (!orderData) return res.status(404).json({ error: "Order not found" });
+    
+    const items = await db.select({
+      id: orderItems.id, 
+      quantity: orderItems.quantity, 
+      priceAtEntry: orderItems.priceAtEntry,
+      productId: orderItems.productId, 
+      productName: products.name,
+      productImage: products.image,
+    }).from(orderItems)
+      .leftJoin(products, eq(orderItems.productId, products.id))
+      .where(eq(orderItems.orderId, req.params.id));
+    
+    let driverName = null;
+    let driverPhone = null;
+    if (orderData.driverId) {
+      const driver = await storage.getUser(orderData.driverId);
+      driverName = driver?.username;
+      driverPhone = driver?.phone;
     }
-  });
+    
+    // ✅ Make sure orderNumber is included
+    res.json({ 
+      ...orderData, 
+      items, 
+      driverName,
+      driverPhone,
+      orderNumber: orderData.orderNumber // Ensure this is returned
+    });
+  } catch (error) {
+    console.error("❌ Fetch order error:", error);
+    res.status(500).json({ error: "Failed to fetch order" });
+  }
+});
 
 // Add this NEW endpoint to your routes.ts
 

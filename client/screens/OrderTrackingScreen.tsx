@@ -15,7 +15,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useLanguage } from "@/context/LanguageContext";
-import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { useQuery } from "@tanstack/react-query";
 import { CallButton } from "@/components/CallButton";
@@ -31,7 +31,6 @@ export default function OrderTrackingScreen() {
   const { orderId } = route.params;
   const { width } = Dimensions.get("window");
 
-  // 1. Fetch Data Hook (Always runs)
   const { data: order, isLoading } = useQuery({
     queryKey: ["order-tracking", orderId],
     queryFn: async () => {
@@ -42,13 +41,10 @@ export default function OrderTrackingScreen() {
     refetchInterval: 5000,
   });
 
-  // 2. Animation Hooks (Must be ABOVE the loading return)
   const pulseScale = useSharedValue(1);
   const riderPosition = useSharedValue(0);
 
-  // 3. Effect Hook (Must be ABOVE the loading return)
   useEffect(() => {
-    // If we don't have order data yet, don't start animations, but the Hook still exists
     if (!order) return;
 
     const s = order.status;
@@ -69,9 +65,8 @@ export default function OrderTrackingScreen() {
     } else {
       riderPosition.value = 0;
     }
-  }, [order?.status]); // Runs whenever order status changes
+  }, [order?.status]);
 
-  // 4. Animated Style Hooks (Must be ABOVE the loading return)
   const pulseAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulseScale.value }],
   }));
@@ -80,7 +75,6 @@ export default function OrderTrackingScreen() {
     left: 20 + riderPosition.value * (width - 80),
   }));
 
-  // 5. NOW we can safely check for loading
   if (isLoading || !order) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.backgroundRoot }]}>
@@ -90,7 +84,6 @@ export default function OrderTrackingScreen() {
     );
   }
 
-  // 6. UI Logic (Only runs if order exists)
   const getUIStatus = () => {
     const s = order.status;
     if (s === "pending" || s === "picking") return "preparing";
@@ -122,9 +115,11 @@ export default function OrderTrackingScreen() {
     }
   };
 
+  // ✅ Only show message button if driver has picked up the order (delivering status)
+  const showMessageButton = order.status === "delivering" && order.driverId;
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-      {/* ... The rest of your JSX code remains exactly the same ... */}
       <View style={[styles.mapContainer, { backgroundColor: theme.backgroundDefault }]}>
         <View style={styles.mapContent}>
           <View style={[styles.storePinContainer, { left: 20 }]}>
@@ -156,7 +151,50 @@ export default function OrderTrackingScreen() {
             <ThemedText type="caption" style={{ color: theme.primary, fontWeight: "600" }}>{getTimeEstimate()}</ThemedText>
           </View>
           <ThemedText type="h3">{getStatusText()}</ThemedText>
-          <ThemedText type="caption" style={{ color: theme.textSecondary }}>Order #{orderId.split('-')[0]}</ThemedText>
+          {/* ✅ Display orderNumber instead of UUID */}
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            Order #{order.orderNumber}
+          </ThemedText>
+        </View>
+
+        {/* ✅ Progress Tracker */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressStep}>
+            <View style={[styles.progressDot, { backgroundColor: theme.success }]}>
+              <Feather name="check" size={12} color="#FFF" />
+            </View>
+            <ThemedText type="small" style={styles.progressLabel}>Confirmed</ThemedText>
+          </View>
+
+          <View style={[styles.progressLine, { 
+            backgroundColor: ["picked_up", "on_the_way", "arriving"].includes(status) 
+              ? theme.success : theme.border 
+          }]} />
+
+          <View style={styles.progressStep}>
+            <View style={[styles.progressDot, { 
+              backgroundColor: ["picked_up", "on_the_way", "arriving"].includes(status)
+                ? theme.success : theme.border 
+            }]}>
+              {["picked_up", "on_the_way", "arriving"].includes(status) && (
+                <Feather name="check" size={12} color="#FFF" />
+              )}
+            </View>
+            <ThemedText type="small" style={styles.progressLabel}>Picked Up</ThemedText>
+          </View>
+
+          <View style={[styles.progressLine, { 
+            backgroundColor: status === "arriving" ? theme.success : theme.border 
+          }]} />
+
+          <View style={styles.progressStep}>
+            <View style={[styles.progressDot, { 
+              backgroundColor: status === "arriving" ? theme.success : theme.border 
+            }]}>
+              {status === "arriving" && <Feather name="check" size={12} color="#FFF" />}
+            </View>
+            <ThemedText type="small" style={styles.progressLabel}>Delivered</ThemedText>
+          </View>
         </View>
 
         <Card style={styles.riderCard}>
@@ -173,13 +211,16 @@ export default function OrderTrackingScreen() {
               <ThemedText type="caption" style={{ color: theme.textSecondary }}>Flash Courier Partner</ThemedText>
             </View>
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Pressable 
-                onPress={() => navigation.navigate("Chat", { orderId: order.id })}
-                style={[styles.actionBtn, { backgroundColor: theme.primary }]}
-              >
-                <Feather name="message-square" size={20} color="#FFFFFF" />
-              </Pressable>
-              <CallButton phoneNumber={order.driverPhone} />
+              {/* ✅ Only show message button if driver has picked up */}
+              {showMessageButton && (
+                <Pressable 
+                  onPress={() => navigation.navigate("Chat", { orderId: order.id })}
+                  style={[styles.actionBtn, { backgroundColor: theme.primary }]}
+                >
+                  <Feather name="message-square" size={20} color="#FFFFFF" />
+                </Pressable>
+              )}
+              {order.driverPhone && <CallButton phoneNumber={order.driverPhone} />}
             </View>
           </View>
         </Card>
@@ -203,6 +244,11 @@ const styles = StyleSheet.create({
   bottomPanel: { flex: 0.45, paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg },
   statusHeader: { alignItems: "center", marginBottom: Spacing.xl },
   statusBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.xs, gap: Spacing.xs, marginBottom: Spacing.sm },
+  progressContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.lg },
+  progressStep: { alignItems: 'center' },
+  progressDot: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  progressLine: { width: 60, height: 2, marginHorizontal: 8 },
+  progressLabel: { fontSize: 10 },
   riderCard: { padding: 12 },
   riderInfo: { flexDirection: "row", alignItems: "center" },
   riderAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },

@@ -11,6 +11,7 @@ import Animated, {
   withSequence,
   withDelay,
 } from "react-native-reanimated";
+import { useQuery } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -33,6 +34,16 @@ export default function OrderSuccessScreen() {
 
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
+
+  // ✅ Fetch order to get orderNumber
+  const { data: order } = useQuery({
+    queryKey: ["order-success", orderId],
+    queryFn: async () => {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}`);
+      if (!response.ok) throw new Error("Order not found");
+      return response.json();
+    },
+  });
 
   useEffect(() => {
     scale.value = withSequence(
@@ -92,7 +103,10 @@ export default function OrderSuccessScreen() {
             <ThemedText type="caption" style={{ color: theme.textSecondary }}>
               {t.orderSuccess.orderId}
             </ThemedText>
-            <ThemedText type="h3">{orderId}</ThemedText>
+            {/* ✅ Display orderNumber instead of UUID */}
+            <ThemedText type="h3">
+              {order?.orderNumber || orderId}
+            </ThemedText>
           </View>
           
           <View style={styles.estimateContainer}>

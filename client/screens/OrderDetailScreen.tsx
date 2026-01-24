@@ -110,9 +110,9 @@ export default function OrderDetailScreen() {
       <View style={styles.header}>
         <ThemedText type="caption" style={{ color: theme.textSecondary }}>ORDER ID</ThemedText>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 }}>
-          <ThemedText type="body" style={{ fontWeight: '700', fontSize: 16 }}>{order.id}</ThemedText>
-          {/* Functional Call Button */}
-          <CallButton phoneNumber={order.storePhone} /> 
+          <ThemedText type="body" style={{ fontWeight: '700', fontSize: 16 }}>
+            {order.orderNumber || order.id}
+          </ThemedText>
         </View>
 
         <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 4 }}>
