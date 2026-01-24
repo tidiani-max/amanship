@@ -1,389 +1,791 @@
-import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Switch, Alert, Platform, ScrollView, Pressable, ViewStyle } from "react-native";
+import React, { useState, useMemo } from "react";
+import { View, StyleSheet, ScrollView, Pressable, Image, TextInput, ActivityIndicator, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Notifications from 'expo-notifications';
+import { useQuery } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
-import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
+import { CartToast } from "@/components/CartToast";
 import { useTheme } from "@/hooks/useTheme";
-import { useAuth } from "@/context/AuthContext";
-import { apiRequest } from "@/lib/query-client";
-import { Spacing } from "@/constants/theme";
-import { useNotifications } from "../hooks/useNotification";
+import { Spacing, BorderRadius } from "@/constants/theme";
+import { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { Category, Product } from "@/types";
+import { useCart } from "@/context/CartContext";
+import { useLocation } from "@/context/LocationContext";
+import { getImageUrl } from "@/lib/image-url";
+import { useLanguage } from "@/context/LanguageContext";
 
+const { width } = Dimensions.get("window");
+const BASE_DELIVERY_MINUTES = 10;
+const SPEED_KM_PER_MIN = 0.5;
 
-const NOTIFICATIONS_KEY = "@kilatgo_notifications";
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-interface NotificationSettings {
-  orderUpdates: boolean;
-  promotions: boolean;
-  deliveryAlerts: boolean;
-  chatMessages: boolean;
-}
-
-const defaultSettings: NotificationSettings = {
-  orderUpdates: true,
-  promotions: false,
-  deliveryAlerts: true,
-  chatMessages: true,
+type UIProduct = Product & {
+  inStock: boolean;
+  stockCount: number;
 };
 
-function SettingRow({
-  icon,
-  title,
-  description,
-  value,
-  onValueChange,
-}: {
+interface APICategory {
+  id: string;
+  name: string;
   icon: string;
-  title: string;
-  description: string;
-  value: boolean;
-  onValueChange: (value: boolean) => void;
-}) {
+  color: string;
+  image: string | null;
+}
+
+interface APIProduct {
+  id: string;
+  name: string;
+  brand: string;
+  price: number;
+  originalPrice: number | null;
+  image: string | null;
+  categoryId: string;
+  description: string | null;
+  nutrition: any;
+  inStock: boolean;
+  stockCount: number;
+}
+
+export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const navigation = useNavigation<NavigationProp>();
+  const { addToCart } = useCart();
+  const { t } = useLanguage();
   
+  const [searchQuery, setSearchQuery] = useState("");
+  const [toastVisible, setToastVisible] = useState(false);
+  const [lastAddedProduct, setLastAddedProduct] = useState<string>("");
+
+  const {
+    locationStatus,
+    store,
+    storeAvailable,
+    estimatedDeliveryMinutes,
+    isCheckingAvailability,
+    requestLocationPermission,
+    isManualLocation,
+    addressLabel,
+    gpsLocationName,
+    location,
+  } = useLocation();
+
+  const getLocationDisplayName = () => {
+    if (isManualLocation && addressLabel) {
+      return addressLabel;
+    }
+    
+    if (gpsLocationName) {
+      return gpsLocationName;
+    }
+    
+    if (store?.name) {
+      return store.name;
+    }
+    
+    return "Detecting location...";
+  };
+
+  const { data, isLoading: categoriesLoading } = useQuery<{ data: APICategory[] }>({
+    queryKey: ["/api/categories"],
+    queryFn: async () => {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/categories`);
+      return res.json();
+    },
+  });
+
+  const apiCategories = data?.data ?? [];
+
+  const latitude = location?.latitude;
+  const longitude = location?.longitude;
+
+  const { data: apiProducts = [], isLoading: productsLoading } = useQuery<APIProduct[]>({
+    queryKey: ["/api/home/products", latitude, longitude],
+    enabled: !!latitude && !!longitude,
+    queryFn: async () => {
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/home/products?lat=${latitude}&lng=${longitude}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch home products");
+      return res.json();
+    },
+  });
+
+  const categories: Category[] = apiCategories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    icon: c.icon,
+    color: c.color,
+    image: c.image || undefined,
+  }));
+
+  const products: UIProduct[] = apiProducts.map((p) => ({
+    id: p.id,
+    name: p.name,
+    brand: p.brand,
+    price: p.price,
+    originalPrice: p.originalPrice || undefined,
+    image: p.image || "",
+    category: p.categoryId,
+    description: p.description || "",
+    nutrition: p.nutrition,
+    stockCount: p.stockCount,
+    inStock: p.stockCount > 0,
+  }));
+
+  const availableCategories = useMemo(() => {
+    const categoryIdsWithProducts = new Set(
+      products.filter(p => p.inStock).map(p => p.category)
+    );
+    return categories.filter(c => categoryIdsWithProducts.has(c.id));
+  }, [categories, products]);
+
+  const filteredProducts = useMemo<UIProduct[]>(() => {
+    if (!searchQuery.trim()) return products;
+    const query = searchQuery.toLowerCase();
+    return products.filter(p => 
+      p.name.toLowerCase().includes(query) || 
+      p.brand.toLowerCase().includes(query)
+    );
+  }, [searchQuery, products]);
+
+  const handleCategoryPress = (category: Category) => navigation.navigate("Category", { category });
+  const handleProductPress = (product: UIProduct) => navigation.navigate("ProductDetail", { product });
+  const formatPrice = (price: number) => `Rp ${price.toLocaleString("id-ID")}`;
+
+  const handleAddToCart = (product: UIProduct) => {
+    if (!product.inStock) return;
+    addToCart(product, 1);
+    setLastAddedProduct(product.name);
+    setToastVisible(true);
+  };
+
+  const adsBanners = [
+    { id: 1, title: "KilatGo Fresh", subtitle: "Premium groceries delivered", color: "#2ecc71", img: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800" },
+    { id: 2, title: "KilatGo Deals", subtitle: "Best prices in town", color: theme.primary, img: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800" },
+    { id: 3, title: "KilatGo Express", subtitle: "Under 15 mins delivery", color: "#f1c40f", img: "https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=800" },
+  ];
+
+  const renderProductCard = (product: UIProduct) => {
+    const hasDiscount = product.originalPrice && product.originalPrice > product.price;
+    const discountPercent = hasDiscount ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) : 0;
+
+    return (
+      <Pressable
+        key={product.id}
+        style={[styles.productCard, { backgroundColor: theme.cardBackground }, !product.inStock && { opacity: 0.6 }]}
+        onPress={() => handleProductPress(product)}
+      >
+        {hasDiscount && product.inStock && (
+          <View style={[styles.discountBadge, { backgroundColor: '#FF3B30' }]}>
+            <ThemedText style={styles.discountText}>-{discountPercent}%</ThemedText>
+          </View>
+        )}
+        <View style={[styles.productImageContainer, { backgroundColor: theme.backgroundDefault }]}>
+          {product.image ? (
+            <Image
+              source={{ uri: getImageUrl(product.image) }}
+              style={styles.productImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <Feather name="package" size={32} color={theme.textSecondary} />
+          )}
+          {!product.inStock && (
+            <View style={styles.outOfStockOverlay}>
+              <ThemedText style={styles.outOfStockText}>OUT OF STOCK</ThemedText>
+            </View>
+          )}
+        </View>
+        <View style={styles.productInfo}>
+          <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
+            {product.name}
+          </ThemedText>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>
+            {product.brand}
+          </ThemedText>
+          <View style={styles.productPriceRow}>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="body" style={{ fontWeight: "700", color: theme.primary, fontSize: 16 }}>
+                {formatPrice(product.price)}
+              </ThemedText>
+              {hasDiscount && (
+                <ThemedText type="small" style={styles.originalPriceText}>
+                  {formatPrice(product.originalPrice!)}
+                </ThemedText>
+              )}
+            </View>
+            <Pressable
+              disabled={!product.inStock}
+              style={[styles.addButton, { backgroundColor: product.inStock ? theme.primary : '#ccc' }]}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleAddToCart(product);
+              }}
+            >
+              <Feather name={product.inStock ? "plus" : "slash"} size={18} color={theme.buttonText} />
+            </Pressable>
+          </View>
+        </View>
+      </Pressable>
+    );
+  };
+
+  const isLoading = categoriesLoading || productsLoading;
+
   return (
-    <View style={styles.settingRow}>
-      <View style={[styles.iconContainer, { backgroundColor: theme.backgroundDefault }]}>
-        <Feather name={icon as any} size={20} color={theme.primary} />
-      </View>
-      <View style={styles.settingInfo}>
-        <ThemedText type="body" style={{ fontWeight: "500" }}>
-          {title}
+    <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+      {/* BACK BUTTON HEADER */}
+      <View style={[
+        styles.backButtonHeader, 
+        { 
+          backgroundColor: theme.backgroundRoot,
+          paddingTop: insets.top + 8,
+        }
+      ]}>
+        <Pressable
+          style={[styles.backButton, { backgroundColor: theme.cardBackground }]}
+          onPress={() => navigation.goBack()}
+        >
+          <Feather name="arrow-left" size={24} color={theme.text} />
+        </Pressable>
+        <ThemedText type="h3" style={{ flex: 1, marginLeft: Spacing.md }}>
+          Home
         </ThemedText>
-        <ThemedText type="small" style={{ color: theme.textSecondary }}>
-          {description}
-        </ThemedText>
       </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ false: theme.border, true: theme.primary + "80" }}
-        thumbColor={value ? theme.primary : theme.backgroundTertiary}
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          paddingTop: Spacing.lg,
+          paddingBottom: tabBarHeight + Spacing.xl + 80,
+        }}
+        scrollIndicatorInsets={{ bottom: insets.bottom }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* SEARCH BAR */}
+        <View style={[styles.searchContainer, { paddingHorizontal: Spacing.lg }]}>
+          <View style={[styles.searchBar, { backgroundColor: theme.backgroundDefault }]}>
+            <Feather name="search" size={20} color={theme.textSecondary} />
+            <TextInput
+              style={[styles.searchInput, { color: theme.text }]}
+              placeholder={t.home.searchPlaceholder}
+              placeholderTextColor={theme.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              clearButtonMode="while-editing"
+            />
+          </View>
+          <Pressable
+            style={[styles.micButton, { backgroundColor: theme.primary }]}
+            onPress={() => navigation.navigate("VoiceOrderModal")}
+          >
+            <Feather name="mic" size={20} color={theme.buttonText} />
+          </Pressable>
+        </View>
+
+        {/* LOCATION SELECTOR BANNER */}
+        <View style={[styles.locationSelector, { backgroundColor: theme.cardBackground }]}>
+          <Pressable 
+            style={styles.locationSelectorButton}
+            onPress={() => navigation.navigate("EditAddress")}
+          >
+            <View style={[styles.locationIcon, { backgroundColor: theme.primary + "20" }]}>
+              <Feather 
+                name={isManualLocation ? "home" : "navigation"}
+                size={16} 
+                color={theme.primary} 
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="caption" style={{ color: theme.textSecondary, fontSize: 11 }}>
+                Delivering to
+              </ThemedText>
+              <ThemedText type="body" numberOfLines={1} style={{ fontWeight: "600" }}>
+                {getLocationDisplayName()}
+              </ThemedText>
+              {!isManualLocation && gpsLocationName && (
+                <View style={styles.gpsContainer}>
+                  <View style={[styles.gpsBadge, { backgroundColor: theme.success + "20" }]}>
+                    <Feather name="navigation" size={8} color={theme.success} />
+                    <ThemedText type="small" style={{ color: theme.success, fontSize: 9, marginLeft: 2 }}>
+                      GPS Active
+                    </ThemedText>
+                  </View>
+                </View>
+              )}
+            </View>
+            <Feather name="edit-3" size={18} color={theme.primary} />
+          </Pressable>
+          
+          {!storeAvailable && location && (
+            <View style={[styles.noStoreWarning, { backgroundColor: theme.warning + "20" }]}>
+              <Feather name="alert-circle" size={14} color={theme.warning} />
+              <ThemedText type="caption" style={{ color: theme.warning, flex: 1 }}>
+                No stores available in this area
+              </ThemedText>
+            </View>
+          )}
+        </View>
+
+        {/* LOCATION / STORE STATUS */}
+        {locationStatus === "denied" ? (
+          <Pressable
+            style={[styles.locationBanner, { backgroundColor: theme.warning + "20" }]}
+            onPress={requestLocationPermission}
+          >
+            <Feather name="map-pin" size={16} color={theme.warning} />
+            <View style={styles.locationBannerText}>
+              <ThemedText type="caption" style={{ fontWeight: "600" }}>
+                {t.home.enableLocationTitle}
+              </ThemedText>
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                {t.home.enableLocationSubtitle}
+              </ThemedText>
+            </View>
+            <Feather name="chevron-right" size={16} color={theme.textSecondary} />
+          </Pressable>
+        ) : storeAvailable && store ? (
+          <View style={styles.storeInfoContainer}>
+            <View style={[styles.deliveryBadge, { backgroundColor: theme.primary }]}>
+              <Feather name="zap" size={16} color={theme.buttonText} />
+              <ThemedText type="caption" style={{ color: theme.buttonText, fontWeight: "600" }}>
+                {estimatedDeliveryMinutes ? `${estimatedDeliveryMinutes}-${t.home.minuteDelivery}` : `15-${t.home.minuteDelivery}`}
+              </ThemedText>
+            </View>
+            <View style={[styles.storeBadge, { backgroundColor: theme.backgroundDefault }]}>
+              <Feather name="map-pin" size={14} color={theme.primary} />
+              <ThemedText type="small" style={{ color: theme.textSecondary }} numberOfLines={1}>
+                {store.name}
+              </ThemedText>
+            </View>
+          </View>
+        ) : isCheckingAvailability ? (
+          <View style={[styles.deliveryBadge, { backgroundColor: theme.backgroundDefault, marginLeft: 20, marginBottom: 10 }]}>
+            <ActivityIndicator size="small" color={theme.primary} />
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+              {t.home.findingStore}
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.primary} />
+          </View>
+        )}
+
+        {/* CATEGORIES - Horizontal Scroll */}
+        {!searchQuery && availableCategories.length > 0 && (
+          <View style={styles.section}>
+            <ThemedText type="h3" style={styles.sectionTitle}>
+              {t.home.categories}
+            </ThemedText>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoriesScroll}
+            >
+              {availableCategories.map((category) => (
+                <Pressable
+                  key={category.id}
+                  style={styles.categoryItemHorizontal}
+                  onPress={() => handleCategoryPress(category)}
+                >
+                  <View style={[styles.categoryIconLarge, { backgroundColor: category.color + "20" }]}>
+                    {category.image ? (
+                      <Image
+                        source={{ uri: getImageUrl(category.image) }}
+                        style={styles.categoryImageLarge}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Feather name={category.icon as any} size={28} color={category.color} />
+                    )}
+                  </View>
+                  <ThemedText type="small" style={styles.categoryLabel} numberOfLines={1}>
+                    {category.name}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* POPULAR ITEMS */}
+        <View style={styles.section}>
+          <ThemedText type="h3" style={styles.sectionTitle}>
+            {searchQuery ? `Results for "${searchQuery}"` : t.home.popularItems}
+          </ThemedText>
+          <View style={styles.productsGrid}>
+            {filteredProducts.slice(0, 4).map(renderProductCard)}
+          </View>
+        </View>
+
+        {/* ADVERTISEMENT BANNERS */}
+        {!searchQuery && (
+          <View style={styles.section}>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.adsScrollContainer}
+            >
+              {adsBanners.map((ad) => (
+                <View key={ad.id} style={[styles.adCard, { backgroundColor: ad.color }]}>
+                  <Image source={{ uri: ad.img }} style={styles.adBackgroundImage} />
+                  <View style={styles.adContent}>
+                    <ThemedText style={styles.adTitle}>{ad.title}</ThemedText>
+                    <ThemedText style={styles.adSubtitle}>{ad.subtitle}</ThemedText>
+                    <View style={styles.adBadge}>
+                      <ThemedText style={styles.adBadgeText}>Shop Now</ThemedText>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ALL PRODUCTS */}
+        <View style={styles.section}>
+          <ThemedText type="h3" style={styles.sectionTitle}>
+            {searchQuery ? "All Matches" : "Explore All Products"}
+          </ThemedText>
+          <View style={styles.productsGrid}>
+            {filteredProducts.length > 0 ? (
+              filteredProducts.map(renderProductCard)
+            ) : (
+              <View style={styles.noResults}>
+                <Feather name="search" size={40} color={theme.textSecondary} style={{ opacity: 0.5 }} />
+                <ThemedText style={{ color: theme.textSecondary, marginTop: 10 }}>
+                  No items found
+                </ThemedText>
+              </View>
+            )}
+          </View>
+        </View>
+      </ScrollView>
+
+      <CartToast
+        visible={toastVisible}
+        productName={lastAddedProduct}
+        onDismiss={() => setToastVisible(false)}
       />
     </View>
   );
 }
 
-export default function NotificationsScreen() {
-  const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
-  const { user } = useAuth();
-  const { registerForPushNotifications } = useNotifications();
-  const [settings, setSettings] = useState<NotificationSettings>(defaultSettings);
-  const [permissionStatus, setPermissionStatus] = useState<string>("unknown");
-  const [pushToken, setPushToken] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadSettings();
-    checkPermissionStatus();
-  }, []);
-
-  const checkPermissionStatus = async () => {
-    const { status } = await Notifications.getPermissionsAsync();
-    setPermissionStatus(status);
-
-    if (status === 'granted') {
-      try {
-        const tokenData = await Notifications.getExpoPushTokenAsync({
-          projectId: '113ea7fa-db9e-4380-b05f-dd63a05e5632',
-        });
-        setPushToken(tokenData.data);
-      } catch (error) {
-        console.error("Failed to get push token:", error);
-      }
-    }
-  };
-
-  const loadSettings = async () => {
-    try {
-      const stored = await AsyncStorage.getItem(NOTIFICATIONS_KEY);
-      if (stored) {
-        setSettings(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error("Failed to load notification settings:", error);
-    }
-  };
-
-  const updateSetting = async (key: keyof NotificationSettings, value: boolean) => {
-    if (value && permissionStatus !== 'granted') {
-      Alert.alert(
-        "Enable Notifications",
-        "To receive notifications, we need your permission.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Enable",
-            onPress: async () => {
-              await registerForPushNotifications();
-              await checkPermissionStatus();
-              await saveSetting(key, value);
-            },
-          },
-        ]
-      );
-      return;
-    }
-
-    await saveSetting(key, value);
-  };
-
-  const saveSetting = async (key: keyof NotificationSettings, value: boolean) => {
-    const newSettings = { ...settings, [key]: value };
-    setSettings(newSettings);
-    
-    try {
-      await AsyncStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(newSettings));
-    } catch (error) {
-      console.error("Failed to save notification settings:", error);
-    }
-  };
-
-  const requestPermissions = async () => {
-    const { status } = await Notifications.requestPermissionsAsync();
-    setPermissionStatus(status);
-
-    if (status !== 'granted') {
-      Alert.alert(
-        "Permission Denied",
-        "You've denied notification permissions. You can enable them in your device settings.",
-        [
-          { text: "OK", style: "default" },
-          {
-            text: "Open Settings",
-            onPress: () => {
-              if (Platform.OS === 'ios') {
-                Notifications.requestPermissionsAsync();
-              }
-            },
-          },
-        ]
-      );
-    } else {
-      await registerForPushNotifications();
-      await checkPermissionStatus();
-      Alert.alert("Success", "Push notifications enabled!");
-    }
-  };
-
-  const testNotification = async () => {
-    if (permissionStatus !== 'granted') {
-      Alert.alert("Error", "Please enable notifications first");
-      return;
-    }
-
-    try {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "Test Notification 📬",
-          body: "Your notifications are working correctly!",
-          data: { test: true },
-        },
-        trigger: { 
-          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-          seconds: 2 
-        },
-      });
-
-      Alert.alert("Success", "Test notification will appear in 2 seconds");
-    } catch (error) {
-      console.error("Failed to send test notification:", error);
-      Alert.alert("Error", "Failed to send test notification");
-    }
-  };
-
-  // ✅ Fixed: Proper type for dynamic styles
-  const getStatusCardStyle = (): ViewStyle => {
-    return {
-      padding: Spacing.lg,
-      marginBottom: Spacing.md,
-      backgroundColor: permissionStatus === 'granted' 
-        ? theme.success + '15' 
-        : theme.warning + '15'
-    };
-  };
-
-  const getInfoCardStyle = (): ViewStyle => {
-    return {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: Spacing.md,
-      marginBottom: Spacing.md,
-      backgroundColor: theme.primary + '10'
-    };
-  };
-
-  return (
-    <ThemedView style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: Spacing.lg,
-            paddingBottom: insets.bottom + Spacing.xl,
-          },
-        ]}
-      >
-        {/* Permission Status Card - ✅ Fixed style */}
-        <Card style={getStatusCardStyle()}>
-          <View style={styles.statusRow}>
-            <Feather 
-              name={permissionStatus === 'granted' ? "check-circle" : "alert-circle"} 
-              size={24} 
-              color={permissionStatus === 'granted' ? theme.success : theme.warning}
-            />
-            <View style={{ flex: 1, marginLeft: Spacing.md }}>
-              <ThemedText type="body" style={{ fontWeight: '600' }}>
-                {permissionStatus === 'granted' ? "Notifications Enabled" : "Notifications Disabled"}
-              </ThemedText>
-              <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 4 }}>
-                {permissionStatus === 'granted' 
-                  ? "You'll receive updates about your orders"
-                  : "Enable to receive order and delivery updates"
-                }
-              </ThemedText>
-            </View>
-          </View>
-
-          {permissionStatus !== 'granted' && (
-            <Pressable 
-              style={[styles.enableButton, { backgroundColor: theme.primary }]}
-              onPress={requestPermissions}
-            >
-              <ThemedText style={{ color: 'white', fontWeight: '600' }}>
-                Enable Notifications
-              </ThemedText>
-            </Pressable>
-          )}
-        </Card>
-
-        {/* Role-Specific Info - ✅ Fixed style */}
-        {user?.role && ['picker', 'driver'].includes(user.role) && (
-          <Card style={getInfoCardStyle()}>
-            <Feather name="info" size={20} color={theme.primary} />
-            <ThemedText type="small" style={{ marginLeft: Spacing.sm, flex: 1, color: theme.textSecondary }}>
-              As a {user.role}, you'll receive instant notifications for new {user.role === 'picker' ? 'orders' : 'deliveries'}
-            </ThemedText>
-          </Card>
-        )}
-
-        {/* Settings Card */}
-        <Card style={styles.card}>
-          {user?.role === 'customer' && (
-            <>
-              <SettingRow
-                icon="package"
-                title="Order Updates"
-                description="Get notified when your order status changes"
-                value={settings.orderUpdates}
-                onValueChange={(value) => updateSetting("orderUpdates", value)}
-              />
-              <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            </>
-          )}
-
-          <SettingRow
-            icon="truck"
-            title="Delivery Alerts"
-            description={user?.role === 'driver' ? "New deliveries available" : "Track your delivery in real-time"}
-            value={settings.deliveryAlerts}
-            onValueChange={(value) => updateSetting("deliveryAlerts", value)}
-          />
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-          <SettingRow
-            icon="message-circle"
-            title="Chat Messages"
-            description="Notifications for new messages"
-            value={settings.chatMessages}
-            onValueChange={(value) => updateSetting("chatMessages", value)}
-          />
-
-          {user?.role === 'customer' && (
-            <>
-              <View style={[styles.divider, { backgroundColor: theme.border }]} />
-              <SettingRow
-                icon="tag"
-                title="Promotions"
-                description="Special offers and discounts"
-                value={settings.promotions}
-                onValueChange={(value) => updateSetting("promotions", value)}
-              />
-            </>
-          )}
-        </Card>
-
-        {/* Test Notification Button */}
-        {permissionStatus === 'granted' && __DEV__ && (
-          <Pressable 
-            style={[styles.testButton, { borderColor: theme.border }]}
-            onPress={testNotification}
-          >
-            <Feather name="send" size={18} color={theme.primary} />
-            <ThemedText style={{ marginLeft: Spacing.sm, color: theme.primary }}>
-              Send Test Notification
-            </ThemedText>
-          </Pressable>
-        )}
-
-        {/* Token Display (Dev Only) */}
-        {__DEV__ && pushToken && (
-          <Card style={styles.debugCard}>
-            <ThemedText type="small" style={{ color: theme.textSecondary, fontFamily: 'monospace' }}>
-              Token: {pushToken.substring(0, 30)}...
-            </ThemedText>
-          </Card>
-        )}
-      </ScrollView>
-    </ThemedView>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollView: { flex: 1 },
-  content: { paddingHorizontal: Spacing.lg },
-  statusRow: { flexDirection: 'row', alignItems: 'center' },
-  enableButton: { 
-    marginTop: Spacing.md, 
-    padding: Spacing.md, 
-    borderRadius: 8, 
-    alignItems: 'center' 
-  },
-  card: { padding: 0, marginBottom: Spacing.md },
-  settingRow: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    padding: Spacing.lg 
-  },
-  iconContainer: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    alignItems: "center", 
-    justifyContent: "center", 
-    marginRight: Spacing.md 
-  },
-  settingInfo: { flex: 1, marginRight: Spacing.md },
-  divider: { height: 1, marginHorizontal: Spacing.lg },
-  testButton: {
+  backButtonHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderRadius: 8,
-    marginTop: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
-  debugCard: { 
-    padding: Spacing.sm, 
-    marginTop: Spacing.md, 
-    backgroundColor: '#f5f5f5' 
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  searchContainer: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    height: 44,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+  },
+  micButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locationSelector: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  locationSelectorButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  locationIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gpsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  gpsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  noStoreWarning: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  locationBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    gap: Spacing.md,
+  },
+  locationBannerText: {
+    flex: 1,
+  },
+  storeInfoContainer: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  deliveryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.xs,
+    gap: Spacing.xs,
+  },
+  storeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.xs,
+    gap: Spacing.xs,
+  },
+  loadingContainer: {
+    padding: Spacing.xxl,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  section: {
+    marginBottom: Spacing.xl,
+  },
+  sectionTitle: {
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  categoriesScroll: {
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.md,
+  },
+  categoryItemHorizontal: {
+    alignItems: "center",
+    width: 80,
+  },
+  categoryIconLarge: {
+    width: 64,
+    height: 64,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing.xs,
+    overflow: "hidden",
+  },
+  categoryImageLarge: {
+    width: 64,
+    height: 64,
+    borderRadius: BorderRadius.md,
+  },
+  categoryLabel: {
+    textAlign: "center",
+    fontSize: 12,
+  },
+  productsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.md,
+  },
+  productCard: {
+    width: width > 1200 ? (width - Spacing.lg * 2) / 5.2 : 
+          width > 900 ? (width - Spacing.lg * 2) / 4.2 : 
+          width > 600 ? (width - Spacing.lg * 2) / 3.2 : 
+          "48%",
+    borderRadius: BorderRadius.md,
+    overflow: "hidden",
+    position: 'relative',
+    marginBottom: Spacing.md,
+  },
+  productImageContainer: {
+    height: 100,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    position: 'relative',
+    backgroundColor: '#f5f5f5',
+  },
+  productImage: {
+    width: "100%",
+    height: "100%",
+  },
+  productInfo: {
+    padding: Spacing.sm,
+  },
+  productName: {
+    marginBottom: 4,
+    fontWeight: '600',
+    fontSize: 13,
+    minHeight: 34,
+  },
+  productPriceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: Spacing.sm,
+  },
+  addButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  originalPriceText: {
+    textDecorationLine: 'line-through',
+    color: '#999',
+    fontSize: 10,
+    marginTop: 2,
+  },
+  discountBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    zIndex: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  discountText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  outOfStockOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  outOfStockText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  noResults: {
+    width: '100%',
+    alignItems: 'center',
+    padding: 40,
+  },
+  adsScrollContainer: {
+    paddingHorizontal: Spacing.lg,
+  },
+  adCard: {
+    width: width - Spacing.lg * 2,
+    height: 160,
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+    marginRight: Spacing.md,
+    position: 'relative',
+  },
+  adBackgroundImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+    opacity: 0.7,
+  },
+  adContent: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    padding: Spacing.lg,
+    justifyContent: 'center',
+  },
+  adTitle: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  adSubtitle: {
+    color: 'white',
+    fontSize: 14,
+    marginTop: 4,
+    opacity: 0.9,
+  },
+  adBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'white',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 12,
+  },
+  adBadgeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: 'black',
   },
 });
