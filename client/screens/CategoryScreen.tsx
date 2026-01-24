@@ -35,7 +35,7 @@ const getResponsiveColumns = (screenWidth: number) => {
   if (screenWidth >= 1200) return 5;
   if (screenWidth >= 900) return 4;
   if (screenWidth >= 600) return 3;
-  return 2; // Mobile always 2 columns
+  return 2;
 };
 
 const getResponsivePadding = (screenWidth: number) => {
@@ -46,7 +46,7 @@ const getResponsivePadding = (screenWidth: number) => {
 
 const getProductCardWidth = (screenWidth: number, columns: number, padding: number) => {
   const totalPadding = padding * 2;
-  const gapSpace = Spacing.sm * (columns - 1);
+  const gapSpace = Spacing.md * (columns - 1);
   return (screenWidth - totalPadding - gapSpace) / columns;
 };
 
@@ -56,6 +56,10 @@ type CategoryRouteProp = RouteProp<RootStackParamList, "Category">;
 type UIProduct = Product & {
   inStock: boolean;
   stockCount: number;
+  storeName?: string;
+  storeDistance?: number;
+  deliveryMinutes?: number;
+  storeId?: string;
 };
 
 interface APIProduct {
@@ -70,6 +74,10 @@ interface APIProduct {
   nutrition: any;
   stockCount: number;
   isAvailable: boolean;
+  storeName?: string;
+  distance?: number;
+  deliveryMinutes?: number;
+  storeId?: string;
 }
 
 export default function CategoryScreen() {
@@ -96,7 +104,7 @@ export default function CategoryScreen() {
   const responsiveColumns = getResponsiveColumns(screenWidth);
   const responsivePadding = getResponsivePadding(screenWidth);
 
-  const { location, estimatedDeliveryMinutes, store } = useLocation();
+  const { location } = useLocation();
   const latitude = location?.latitude;
   const longitude = location?.longitude;
 
@@ -126,9 +134,14 @@ export default function CategoryScreen() {
     nutrition: p.nutrition,
     stockCount: p.stockCount,
     inStock: p.isAvailable && p.stockCount > 0,
+    storeName: p.storeName,
+    storeDistance: p.distance,
+    deliveryMinutes: p.deliveryMinutes,
+    storeId: p.storeId,
   }));
 
-  const formatPrice = (price: number) => `₹${price.toLocaleString("en-IN")}`;
+  // ✅ FORMAT AS INDONESIAN RUPIAH
+  const formatPrice = (price: number) => `Rp ${price.toLocaleString("id-ID")}`;
 
   const handleProductPress = (product: UIProduct) =>
     navigation.navigate("ProductDetail", { product });
@@ -165,7 +178,7 @@ export default function CategoryScreen() {
           </View>
         )}
         
-        <View style={[styles.productImageContainer, { backgroundColor: '#fafafa' }]}>
+        <View style={styles.productImageContainer}>
           {item.image ? (
             <Image
               source={{ uri: getImageUrl(item.image) }}
@@ -186,11 +199,20 @@ export default function CategoryScreen() {
         </View>
 
         <View style={styles.productInfo}>
-          <View style={styles.timerBadge}>
-            <Feather name="clock" size={10} color="#10b981" />
-            <ThemedText style={styles.timerText}>
-              {estimatedDeliveryMinutes || 15} mins
-            </ThemedText>
+          {/* Store and delivery info */}
+          <View style={styles.deliveryInfoRow}>
+            <View style={styles.storeBadge}>
+              <Feather name="map-pin" size={9} color="#059669" />
+              <ThemedText style={styles.storeText} numberOfLines={1}>
+                {item.storeName || "Store"}
+              </ThemedText>
+            </View>
+            <View style={styles.timeBadge}>
+              <Feather name="clock" size={9} color="#10b981" />
+              <ThemedText style={styles.timeText}>
+                {item.deliveryMinutes || 15} min
+              </ThemedText>
+            </View>
           </View>
           
           <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
@@ -248,25 +270,18 @@ export default function CategoryScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-      {/* STICKY DELIVERY HEADER */}
-      {store && (
-        <View style={[styles.stickyHeader, { backgroundColor: theme.primary, top: headerHeight }]}>
-          <Feather name="zap" size={16} color="white" />
-          <ThemedText style={styles.stickyHeaderText}>
-            Delivery in {estimatedDeliveryMinutes || 15} minutes
-          </ThemedText>
-          <View style={styles.stickyHeaderDot} />
-          <Feather name="map-pin" size={12} color="white" />
-          <ThemedText style={styles.stickyHeaderStore} numberOfLines={1}>
-            {store.name}
-          </ThemedText>
-        </View>
-      )}
-
       <View style={[styles.header, { paddingHorizontal: responsivePadding + containerPadding }]}>
         <View style={[styles.categoryBanner, { backgroundColor: category.color + "15" }]}>
           <View style={[styles.categoryIconLarge, { backgroundColor: category.color + "20" }]}>
-            <Feather name={category.icon as any} size={32} color={category.color} />
+            {category.image ? (
+              <Image
+                source={{ uri: getImageUrl(category.image) }}
+                style={styles.categoryImageLarge}
+                resizeMode="cover"
+              />
+            ) : (
+              <Feather name={category.icon as any} size={32} color={category.color} />
+            )}
           </View>
           <View style={{ flex: 1 }}>
             <ThemedText type="h2" style={styles.categoryTitle}>
@@ -284,14 +299,14 @@ export default function CategoryScreen() {
           data={products}
           renderItem={renderProduct}
           keyExtractor={(item) => item.id}
-          key={responsiveColumns} // Force re-render on column change
+          key={responsiveColumns}
           numColumns={responsiveColumns}
           contentContainerStyle={{
             paddingTop: Spacing.md,
             paddingBottom: insets.bottom + Spacing.xl + 80,
-            gap: Spacing.sm,
           }}
-          columnWrapperStyle={{ gap: Spacing.sm }}
+          columnWrapperStyle={{ gap: Spacing.md }}
+          ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyState}>
@@ -314,43 +329,8 @@ export default function CategoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  stickyHeader: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 36,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.md,
-    gap: 6,
-    zIndex: 100,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 4,
-  },
-  stickyHeaderText: {
-    color: 'white',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  stickyHeaderDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: 'white',
-    opacity: 0.6,
-  },
-  stickyHeaderStore: {
-    color: 'white',
-    fontSize: 11,
-    opacity: 0.9,
-    flex: 1,
-  },
   header: {
-    paddingTop: Spacing.lg + 36,
+    paddingTop: Spacing.lg,
     paddingBottom: Spacing.md,
   },
   categoryBanner: {
@@ -359,6 +339,13 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     borderRadius: 16,
     gap: Spacing.md,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.06)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   categoryIconLarge: {
     width: 56,
@@ -366,6 +353,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  categoryImageLarge: {
+    width: 56,
+    height: 56,
   },
   categoryTitle: {
     fontWeight: '800',
@@ -381,20 +373,26 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   productCard: {
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: "hidden",
     position: 'relative',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: 'rgba(0,0,0,0.06)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   productImageContainer: {
-    height: 130,
+    height: 140,
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: '#fafafa',
     overflow: "hidden",
     position: 'relative',
-    padding: Spacing.sm,
+    padding: Spacing.md,
   },
   productImage: {
     width: "100%",
@@ -404,83 +402,100 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
     paddingTop: Spacing.xs,
   },
-  timerBadge: {
+  deliveryInfoRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 10,
+  },
+  storeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: '#d1fae5',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-    gap: 3,
-    marginBottom: 6,
+    gap: 4,
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 7,
+    flex: 1,
   },
-  timerText: {
+  storeText: {
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#065f46',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
+  timeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#d1fae5',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 7,
+  },
+  timeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#065f46',
+  },
   productName: {
-    marginBottom: 3,
-    fontWeight: '600',
-    fontSize: 13,
-    lineHeight: 16,
-    minHeight: 32,
+    marginBottom: 4,
+    fontWeight: '700',
+    fontSize: 14,
+    lineHeight: 17,
+    minHeight: 34,
     color: '#111827',
   },
   brandText: {
     color: '#6b7280',
     fontSize: 11,
-    marginBottom: 6,
+    fontWeight: '500',
+    marginBottom: 8,
   },
   productFooter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 2,
+    marginTop: 4,
   },
   priceText: {
-    fontWeight: '800',
-    fontSize: 16,
+    fontWeight: '900',
+    fontSize: 17,
     color: '#111827',
   },
   addButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 50,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   addButtonText: {
     color: 'white',
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '900',
     letterSpacing: 0.5,
   },
   originalPriceText: {
     textDecorationLine: 'line-through',
     color: '#9ca3af',
-    fontSize: 11,
-    marginTop: 1,
+    fontSize: 12,
+    marginTop: 2,
+    fontWeight: '500',
   },
   discountBadge: {
     position: 'absolute',
-    top: 8,
-    left: 8,
+    top: 10,
+    left: 10,
     zIndex: 10,
     backgroundColor: '#ef4444',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
   discountText: {
     color: 'white',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   outOfStockOverlay: {
     ...StyleSheet.absoluteFillObject,
