@@ -186,8 +186,8 @@ export default function HomeScreen() {
         onPress={() => handleProductPress(product)}
       >
         {hasDiscount && product.inStock && (
-          <View style={[styles.discountBadge, { backgroundColor: theme.error }]}>
-            <ThemedText style={styles.discountText}>{discountPercent}% OFF</ThemedText>
+          <View style={[styles.discountBadge, { backgroundColor: '#FF3B30' }]}>
+            <ThemedText style={styles.discountText}>-{discountPercent}%</ThemedText>
           </View>
         )}
         <View style={[styles.productImageContainer, { backgroundColor: theme.backgroundDefault }]}>
@@ -214,8 +214,8 @@ export default function HomeScreen() {
             {product.brand}
           </ThemedText>
           <View style={styles.productPriceRow}>
-            <View>
-              <ThemedText type="body" style={{ fontWeight: "700", color: theme.primary }}>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="body" style={{ fontWeight: "700", color: theme.primary, fontSize: 16 }}>
                 {formatPrice(product.price)}
               </ThemedText>
               {hasDiscount && (
@@ -232,7 +232,7 @@ export default function HomeScreen() {
                 handleAddToCart(product);
               }}
             >
-              <Feather name={product.inStock ? "plus" : "slash"} size={16} color={theme.buttonText} />
+              <Feather name={product.inStock ? "plus" : "slash"} size={18} color={theme.buttonText} />
             </Pressable>
           </View>
         </View>
@@ -617,19 +617,23 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   productCard: {
-    width: width > 600 ? (width - Spacing.lg * 2 - Spacing.md * 2) / 3 : "47%",
+    width: width > 1200 ? (width - Spacing.lg * 2) / 5.2 : 
+          width > 900 ? (width - Spacing.lg * 2) / 4.2 : 
+          width > 600 ? (width - Spacing.lg * 2) / 3.2 : 
+          "48%",
     borderRadius: BorderRadius.md,
     overflow: "hidden",
     position: 'relative',
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   productImageContainer: {
-    height: 140,
+    height: 100,
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
     position: 'relative',
+    backgroundColor: '#f5f5f5',
   },
   productImage: {
     width: "100%",
@@ -639,40 +643,47 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
   },
   productName: {
-    marginBottom: 2,
-    fontWeight: '500',
-    minHeight: 32,
+    marginBottom: 4,
+    fontWeight: '600',
+    fontSize: 13,
+    minHeight: 34,
   },
   productPriceRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: Spacing.xs,
+    marginTop: Spacing.sm,
   },
   addButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
   originalPriceText: {
     textDecorationLine: 'line-through',
     color: '#999',
-    fontSize: 11,
+    fontSize: 10,
+    marginTop: 2,
   },
   discountBadge: {
     position: 'absolute',
-    top: 5,
-    left: 5,
+    top: 8,
+    left: 8,
     zIndex: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 5,
   },
   discountText: {
     color: 'white',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 'bold',
   },
   outOfStockOverlay: {
