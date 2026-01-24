@@ -22,11 +22,11 @@ const { width } = Dimensions.get("window");
 
 // ===== RESPONSIVE BREAKPOINTS =====
 const getResponsiveColumns = (screenWidth: number) => {
-  if (screenWidth >= 1400) return 6;  // Extra large screens (6 products per row)
-  if (screenWidth >= 1200) return 5;  // Large desktop (5 products per row)
-  if (screenWidth >= 900) return 4;   // Desktop/Tablet landscape (4 products per row)
-  if (screenWidth >= 600) return 3;   // Tablet portrait (3 products per row)
-  return 2; // Mobile (2 products per row)
+  if (screenWidth >= 1400) return 6;
+  if (screenWidth >= 1200) return 5;
+  if (screenWidth >= 900) return 4;
+  if (screenWidth >= 600) return 3;
+  return 2;
 };
 
 const getResponsivePadding = (screenWidth: number) => {
@@ -72,6 +72,14 @@ interface APIStore {
   name: string;
   distance: number;
   deliveryMinutes: number;
+}
+
+interface APICategory {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  image: string | null;
 }
 
 export default function HomeScreen() {
@@ -127,6 +135,17 @@ export default function HomeScreen() {
     if (nearestStore?.name) return nearestStore.name;
     return "Detecting location...";
   };
+
+  // Fetch categories
+  const { data: categoriesData } = useQuery<{ data: APICategory[] }>({
+    queryKey: ["/api/categories"],
+    queryFn: async () => {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/categories`);
+      return res.json();
+    },
+  });
+
+  const apiCategories = categoriesData?.data ?? [];
 
   // Fetch banners
   const { data: bannersData } = useQuery<APIBanner[]>({
@@ -203,6 +222,23 @@ export default function HomeScreen() {
     storeId: p.storeId,
   }));
 
+  // Map categories
+  const categories: Category[] = apiCategories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    icon: c.icon,
+    color: c.color,
+    image: c.image || undefined,
+  }));
+
+  // Filter categories that have products in stock
+  const availableCategories = useMemo(() => {
+    const categoryIdsWithProducts = new Set(
+      products.filter(p => p.inStock).map(p => p.category)
+    );
+    return categories.filter(c => categoryIdsWithProducts.has(c.id));
+  }, [categories, products]);
+
   const filteredProducts = useMemo(() => {
     if (!searchQuery.trim()) return products;
     const query = searchQuery.toLowerCase();
@@ -220,6 +256,10 @@ export default function HomeScreen() {
     addToCart(product, 1);
     setLastAddedProduct(product.name);
     setToastVisible(true);
+  };
+
+  const handleCategoryPress = (category: Category) => {
+    navigation.navigate("Category", { category });
   };
 
   const renderProductCard = (product: UIProduct) => {
@@ -463,6 +503,41 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* ===== CATEGORIES SECTION ===== */}
+        {!searchQuery && availableCategories.length > 0 && (
+          <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
+            <ThemedText type="h3" style={styles.sectionTitle}>Shop by Category</ThemedText>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoriesScroll}
+            >
+              {availableCategories.map((category) => (
+                <Pressable
+                  key={category.id}
+                  style={styles.categoryItem}
+                  onPress={() => handleCategoryPress(category)}
+                >
+                  <View style={[styles.categoryIcon, { backgroundColor: category.color + "15" }]}>
+                    {category.image ? (
+                      <Image
+                        source={{ uri: getImageUrl(category.image) }}
+                        style={styles.categoryImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Feather name={category.icon as any} size={32} color={category.color} />
+                    )}
+                  </View>
+                  <ThemedText type="small" style={styles.categoryLabel} numberOfLines={1}>
+                    {category.name}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* ===== STORE SELECTOR ===== */}
         {storesData.length > 0 && (
           <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
@@ -662,8 +737,43 @@ const styles = StyleSheet.create({
   
   section: { marginBottom: Spacing.xl },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md },
-  sectionTitle: { fontWeight: '900', fontSize: 20, letterSpacing: 0.3 },
+  sectionTitle: { fontWeight: '900', fontSize: 20, letterSpacing: 0.3, marginBottom: Spacing.md },
   productCount: { fontSize: 14, color: '#6b7280', fontWeight: '700' },
+  
+  categoriesScroll: { 
+    gap: Spacing.md, 
+    paddingVertical: 4,
+  },
+  categoryItem: {
+    alignItems: "center",
+    width: 80,
+  },
+  categoryIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing.xs,
+    overflow: "hidden",
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.05)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  categoryImage: {
+    width: 72,
+    height: 72,
+  },
+  categoryLabel: {
+    textAlign: "center",
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+  },
   
   storeChipsContainer: { paddingTop: Spacing.sm, paddingBottom: Spacing.xs },
   storeChip: {
