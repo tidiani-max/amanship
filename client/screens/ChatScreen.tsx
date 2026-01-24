@@ -41,56 +41,54 @@ export default function ChatScreen() {
   });
 
   const sendMessage = useMutation({
-  mutationFn: async ({ content, type = "text" }: { content: string; type?: "text" | "image" }) => {
-    const formData = new FormData();
-    formData.append("orderId", orderId);
-    formData.append("senderId", user?.id || "");
-    formData.append("type", type);
-    
-    if (type === "text") {
-      formData.append("content", content);
-    } else {
-      if (Platform.OS === 'web') {
-        // Fix for Web/Mac: Fetch the blob from the URI first
-        const response = await fetch(content);
-        const blob = await response.blob();
-        formData.append("file", blob, "photo.jpg");
+    mutationFn: async ({ content, type = "text" }: { content: string; type?: "text" | "image" }) => {
+      const formData = new FormData();
+      formData.append("orderId", orderId);
+      formData.append("senderId", user?.id || "");
+      formData.append("type", type);
+      
+      if (type === "text") {
+        formData.append("content", content);
       } else {
-        // For Mobile
-        // @ts-ignore
-        formData.append("file", { 
-          uri: content, 
-          name: 'photo.jpg', 
-          type: 'image/jpeg' 
-        });
+        if (Platform.OS === 'web') {
+          const response = await fetch(content);
+          const blob = await response.blob();
+          formData.append("file", blob, "photo.jpg");
+        } else {
+          // @ts-ignore
+          formData.append("file", { 
+            uri: content, 
+            name: 'photo.jpg', 
+            type: 'image/jpeg' 
+          });
+        }
       }
+
+      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/messages`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText);
+      }
+      return res.json();
+    },
+    onSuccess: async () => {
+      setMessage("");
+      await queryClient.invalidateQueries({ queryKey: ["messages", orderId] });
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    },
+    onError: (error) => {
+      console.error("Upload failed:", error);
+      Alert.alert("Upload Error", "Server rejected the request. check terminal.");
     }
+  });
 
-    const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/messages`, {
-      method: "POST",
-      body: formData,
-      // IMPORTANT: Do NOT set 'Content-Type' header manually when using FormData
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(errorText);
-    }
-    return res.json();
-  },
-  onSuccess: async () => {
-  setMessage("");
-  await queryClient.invalidateQueries({ queryKey: ["messages", orderId] });
-  flatListRef.current?.scrollToEnd({ animated: true });
-},
-
-  onError: (error) => {
-    console.error("Upload failed:", error);
-    Alert.alert("Upload Error", "Server rejected the request. check terminal.");
-  }
-});
-
-const handleCamera = async () => {
+  const handleCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert("Permission Needed", "Allow camera access in settings.");
@@ -101,14 +99,12 @@ const handleCamera = async () => {
       quality: 0.7,
     });
     if (!result.canceled) {
-      // result.assets[0].uri is the correct way to get the path
       sendMessage.mutate({ content: result.assets[0].uri, type: "image" });
     }
   };
 
   const handleGallery = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      // We use the string "images" which is safe for all versions
       mediaTypes: "images" as any, 
       allowsEditing: true,
       quality: 0.7,
@@ -130,63 +126,112 @@ const handleCamera = async () => {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
+      {/* Header */}
       <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.backgroundDefault }]}>
-        <View>
-          <ThemedText type="h3">Order Support</ThemedText>
-          <ThemedText style={{ color: theme.textSecondary, fontSize: 12 }}>ID: {orderId.slice(-6)}</ThemedText>
+        <View style={{ flex: 1 }}>
+          <ThemedText type="h3" numberOfLines={1}>Order Support</ThemedText>
+          <ThemedText style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
+            ID: {orderId.slice(-6)}
+          </ThemedText>
         </View>
-        <Pressable onPress={handleCall} style={[styles.callCircle, { backgroundColor: theme.primary }]}>
+        <Pressable 
+          onPress={handleCall} 
+          style={[styles.callCircle, { backgroundColor: theme.primary }]}
+          android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
+        >
           <Feather name="phone" size={20} color="white" />
         </Pressable>
       </View>
 
+      {/* Messages List */}
       <FlatList
         ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={{ padding: 16 }}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        contentContainerStyle={styles.messagesList}
+        onContentSizeChange={() => {
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }}
         renderItem={({ item }) => {
           const isMe = item.senderId === user?.id;
           return (
-            <View style={[styles.bubble, isMe ? [styles.myBubble, {backgroundColor: theme.primary}] : styles.theirBubble]}>
+            <View style={[
+              styles.bubble, 
+              isMe ? [styles.myBubble, { backgroundColor: theme.primary }] : [styles.theirBubble, { backgroundColor: theme.backgroundDefault }]
+            ]}>
               {item.type === "image" && item.content ? (
-             <Image
-  source={{ uri: item.content.startsWith("http")
-    ? item.content
-    : `${process.env.EXPO_PUBLIC_DOMAIN}${item.content}` }}
-  style={styles.imageMsg}
-
-  resizeMode="cover"
-/>
-
-
+                <Image
+                  source={{ 
+                    uri: item.content.startsWith("http")
+                      ? item.content
+                      : `${process.env.EXPO_PUBLIC_DOMAIN}${item.content}` 
+                  }}
+                  style={styles.imageMsg}
+                  resizeMode="cover"
+                />
               ) : (
-                <ThemedText style={{ color: isMe ? "white" : theme.text }}>{item.content}</ThemedText>
+                <ThemedText style={{ color: isMe ? "white" : theme.text }}>
+                  {item.content}
+                </ThemedText>
               )}
             </View>
           );
         }}
       />
 
+      {/* Input Row */}
       <View style={[styles.inputRow, { backgroundColor: theme.backgroundDefault, borderTopColor: theme.border }]}>
-        <Pressable onPress={handleCamera} style={styles.actionBtn}>
-          <Feather name="camera" size={24} color={theme.primary} />
+        <Pressable 
+          onPress={handleCamera} 
+          style={styles.actionBtn}
+          android_ripple={{ color: theme.primary + '20', borderless: true, radius: 24 }}
+        >
+          <Feather name="camera" size={22} color={theme.primary} />
         </Pressable>
-        <Pressable onPress={handleGallery} style={styles.actionBtn}>
-          <Feather name="image" size={24} color={theme.textSecondary} />
+        <Pressable 
+          onPress={handleGallery} 
+          style={styles.actionBtn}
+          android_ripple={{ color: theme.textSecondary + '20', borderless: true, radius: 24 }}
+        >
+          <Feather name="image" size={22} color={theme.textSecondary} />
         </Pressable>
-        <TextInput
-          style={[styles.input, { backgroundColor: theme.backgroundRoot, color: theme.text }]}
-          placeholder="Message..."
-          value={message}
-          onChangeText={setMessage}
-        />
+        <View style={{ flex: 1 }}>
+          <TextInput
+            style={[
+              styles.input, 
+              { 
+                backgroundColor: theme.backgroundRoot, 
+                color: theme.text,
+                borderColor: theme.border
+              }
+            ]}
+            placeholder="Message..."
+            placeholderTextColor={theme.textSecondary}
+            value={message}
+            onChangeText={setMessage}
+            multiline
+            maxLength={500}
+          />
+        </View>
         <Pressable 
           onPress={() => message.trim() && sendMessage.mutate({ content: message, type: "text" })}
-          style={[styles.sendBtn, { backgroundColor: theme.primary }]}
+          style={[
+            styles.sendBtn, 
+            { 
+              backgroundColor: message.trim() ? theme.primary : theme.textSecondary + '40',
+              opacity: message.trim() ? 1 : 0.5
+            }
+          ]}
+          disabled={!message.trim() || sendMessage.isPending}
+          android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
         >
-          {sendMessage.isPending ? <ActivityIndicator color="white" /> : <Feather name="send" size={18} color="white" />}
+          {sendMessage.isPending ? (
+            <ActivityIndicator color="white" size="small" />
+          ) : (
+            <Feather name="send" size={18} color="white" />
+          )}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -194,25 +239,92 @@ const handleCamera = async () => {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    minHeight: 64
+  },
   callCircle: { 
-    width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
-    // FIX: Using non-deprecated shadow styles
-    elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3
+  },
+  messagesList: {
+    padding: 16,
+    paddingBottom: 8,
+    flexGrow: 1
   },
   bubble: {
-  maxWidth: '80%',
-  padding: 12,
-  borderRadius: 18,
-  marginBottom: 10,
-  minHeight: 40
-},
-
-  myBubble: { alignSelf: 'flex-end', borderBottomRightRadius: 2 },
-  theirBubble: { alignSelf: 'flex-start', backgroundColor: '#E9E9EB', borderBottomLeftRadius: 2 },
-  imageMsg: { width: 200, height: 200, borderRadius: 10 },
-  inputRow: { flexDirection: 'row', padding: 12, alignItems: 'center', borderTopWidth: 1 },
-  actionBtn: { padding: 8 },
-  input: { flex: 1, marginHorizontal: 8, paddingHorizontal: 15, paddingVertical: 8, borderRadius: 25, fontSize: 16 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }
+    maxWidth: '75%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    marginBottom: 8,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2
+  },
+  myBubble: { 
+    alignSelf: 'flex-end', 
+    borderBottomRightRadius: 4 
+  },
+  theirBubble: { 
+    alignSelf: 'flex-start', 
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)'
+  },
+  imageMsg: { 
+    width: 220, 
+    height: 220, 
+    borderRadius: 12 
+  },
+  inputRow: { 
+    flexDirection: 'row', 
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: 'flex-end', 
+    borderTopWidth: 1,
+    minHeight: 60
+  },
+  actionBtn: { 
+    padding: 10,
+    marginBottom: 4
+  },
+  input: { 
+    marginHorizontal: 8,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    borderRadius: 22,
+    fontSize: 15,
+    maxHeight: 100,
+    borderWidth: 1,
+    lineHeight: 20
+  },
+  sendBtn: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    marginBottom: 4,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2
+  }
 });
