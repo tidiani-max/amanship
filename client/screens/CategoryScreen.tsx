@@ -283,6 +283,7 @@ export default function CategoryScreen() {
               <Feather name={category.icon as any} size={32} color={category.color} />
             )}
           </View>
+          <br /><br />
           <View style={{ flex: 1 }}>
             <ThemedText type="h2" style={styles.categoryTitle}>
               {category.name}
