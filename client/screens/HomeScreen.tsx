@@ -65,9 +65,31 @@ export default function HomeScreen() {
   const bannerScrollRef = useRef<ScrollView>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
 
-  const { location, store: nearestStore } = useLocation();
+  const {
+    location,
+    store: nearestStore,
+    storeAvailable,
+    isManualLocation,
+    addressLabel,
+    gpsLocationName,
+  } = useLocation();
+  
   const latitude = location?.latitude;
   const longitude = location?.longitude;
+
+  // Get location display name
+  const getLocationDisplayName = () => {
+    if (isManualLocation && addressLabel) {
+      return addressLabel;
+    }
+    if (gpsLocationName) {
+      return gpsLocationName;
+    }
+    if (nearestStore?.name) {
+      return nearestStore.name;
+    }
+    return "Detecting location...";
+  };
 
   // Fetch banners
   const { data: bannersData } = useQuery<APIBanner[]>({
@@ -113,7 +135,7 @@ export default function HomeScreen() {
       setCurrentBannerIndex((prev) => {
         const next = (prev + 1) % bannersData.length;
         bannerScrollRef.current?.scrollTo({
-          x: next * screenWidth,
+          x: next * (screenWidth - 32),
           animated: true,
         });
         return next;
@@ -250,7 +272,7 @@ export default function HomeScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-      {/* Compact Header */}
+      {/* ===== COMPACT HEADER with Store Info ===== */}
       <View style={[styles.compactHeader, { backgroundColor: theme.cardBackground }]}>
         <View style={styles.headerLeft}>
           {nearestStore && (
@@ -281,35 +303,61 @@ export default function HomeScreen() {
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{
-          paddingTop: Spacing.md,
+          paddingTop: Spacing.lg,
           paddingBottom: tabBarHeight + Spacing.xl + 80,
-          paddingHorizontal: Spacing.md,
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <View style={[styles.searchBar, { backgroundColor: theme.backgroundDefault }]}>
-            <Feather name="search" size={20} color={theme.textSecondary} />
-            <TextInput
-              style={[styles.searchInput, { color: theme.text }]}
-              placeholder="Search for products..."
-              placeholderTextColor={theme.textSecondary}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-          </View>
-          <Pressable
-            style={[styles.micButton, { backgroundColor: theme.primary }]}
-            onPress={() => navigation.navigate("VoiceOrderModal")}
+        {/* ===== LOCATION SELECTOR - User can edit ===== */}
+        <View style={{ paddingHorizontal: Spacing.md, marginBottom: Spacing.lg }}>
+          <Pressable 
+            style={[styles.locationSelector, { backgroundColor: theme.cardBackground }]}
+            onPress={() => navigation.navigate("EditAddress")}
           >
-            <Feather name="mic" size={20} color="white" />
+            <View style={[styles.locationIcon, { backgroundColor: theme.primary + "15" }]}>
+              <Feather 
+                name={isManualLocation ? "home" : "navigation"}
+                size={18} 
+                color={theme.primary} 
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 12 }}>
+                Delivering to
+              </ThemedText>
+              <ThemedText type="body" numberOfLines={1} style={{ fontWeight: "700", fontSize: 15, marginTop: 2 }}>
+                {getLocationDisplayName()}
+              </ThemedText>
+            </View>
+            <Feather name="chevron-down" size={20} color={theme.textSecondary} />
           </Pressable>
         </View>
 
-        {/* Dynamic Banners */}
+        {/* ===== SEARCH BAR - More visible ===== */}
+        <View style={{ paddingHorizontal: Spacing.md, marginBottom: Spacing.xl }}>
+          <View style={styles.searchContainer}>
+            <View style={[styles.searchBar, { backgroundColor: theme.backgroundDefault }]}>
+              <Feather name="search" size={20} color={theme.textSecondary} />
+              <TextInput
+                style={[styles.searchInput, { color: theme.text }]}
+                placeholder="Search products, brands..."
+                placeholderTextColor={theme.textSecondary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </View>
+            <Pressable
+              style={[styles.micButton, { backgroundColor: theme.primary }]}
+              onPress={() => navigation.navigate("VoiceOrderModal")}
+            >
+              <Feather name="mic" size={20} color="white" />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* ===== DYNAMIC BANNERS - More prominent ===== */}
         {bannersData && bannersData.length > 0 && (
-          <View style={styles.bannerSection}>
+          <View style={[styles.bannerSection, { paddingHorizontal: Spacing.md }]}>
             <ScrollView
               ref={bannerScrollRef}
               horizontal
@@ -324,7 +372,7 @@ export default function HomeScreen() {
               {bannersData.map((banner) => (
                 <Pressable key={banner.id} style={[styles.bannerSlide, { width: screenWidth - 32 }]}>
                   <Image 
-                    source={{ uri: getImageUrl(banner.image) }} 
+                    source={{ uri: banner.image }} 
                     style={styles.bannerImage}
                     resizeMode="cover"
                   />
@@ -349,11 +397,15 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Store Selector */}
+        {/* ===== STORE SELECTOR - Clear section ===== */}
         {storesData.length > 0 && (
-          <View style={styles.section}>
+          <View style={[styles.section, { paddingHorizontal: Spacing.md }]}>
             <ThemedText type="h3" style={styles.sectionTitle}>Nearby Stores</ThemedText>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storeChips}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              contentContainerStyle={styles.storeChipsContainer}
+            >
               <Pressable
                 style={[
                   styles.storeChip,
@@ -402,8 +454,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Products Grid */}
-        <View style={styles.section}>
+        {/* ===== PRODUCTS GRID - Clear layout ===== */}
+        <View style={[styles.section, { paddingHorizontal: Spacing.md }]}>
           <View style={styles.sectionHeader}>
             <ThemedText type="h3" style={styles.sectionTitle}>
               {selectedStore ? `${selectedStore.name} Products` : "All Products"}
@@ -416,15 +468,20 @@ export default function HomeScreen() {
           </View>
           
           {productsLoading ? (
-            <ActivityIndicator size="large" color={theme.primary} />
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.primary} />
+              <ThemedText style={{ color: theme.textSecondary, marginTop: 12 }}>
+                Loading products...
+              </ThemedText>
+            </View>
           ) : (
             <View style={styles.productsGrid}>
               {filteredProducts.length > 0 ? (
                 filteredProducts.map(renderProductCard)
               ) : (
                 <View style={styles.noResults}>
-                  <Feather name="search" size={48} color={theme.textSecondary} />
-                  <ThemedText style={{ color: theme.textSecondary, marginTop: 12 }}>
+                  <Feather name="search" size={48} color={theme.textSecondary} style={{ opacity: 0.3 }} />
+                  <ThemedText style={{ color: theme.textSecondary, marginTop: 12, fontSize: 15 }}>
                     No products found
                   </ThemedText>
                 </View>
@@ -444,14 +501,20 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ===== HEADER STYLES =====
   compactHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.md,
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.06)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   headerLeft: {
     flex: 1,
@@ -468,15 +531,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#d1fae5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    gap: 5,
     maxWidth: '100%',
   },
   storeNameSmall: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#065f46',
     flex: 1,
   },
@@ -487,53 +550,86 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   storeMinutesSmall: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '800',
     color: '#059669',
   },
   logoText: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: '900',
     color: '#10b981',
+    letterSpacing: 0.5,
   },
+
+  // ===== LOCATION SELECTOR =====
+  locationSelector: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: 14,
+    gap: Spacing.sm,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.06)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  locationIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // ===== SEARCH BAR =====
   searchContainer: {
     flexDirection: "row",
     gap: Spacing.sm,
-    marginBottom: Spacing.md,
   },
   searchBar: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    height: 48,
-    borderRadius: 12,
+    height: 52,
+    borderRadius: 14,
     paddingHorizontal: Spacing.md,
     gap: Spacing.sm,
-    borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.06)',
+    borderWidth: 2,
+    borderColor: 'rgba(0,0,0,0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
   searchInput: {
     flex: 1,
     fontSize: 15,
+    fontWeight: '500',
   },
   micButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 4,
   },
+
+  // ===== BANNERS =====
   bannerSection: {
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   bannerSlide: {
-    height: 180,
-    borderRadius: 16,
+    height: 200,
+    borderRadius: 18,
     overflow: 'hidden',
     marginRight: 0,
   },
@@ -544,106 +640,125 @@ const styles = StyleSheet.create({
   bannerOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
-    padding: 20,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    padding: 24,
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   bannerTitle: {
     color: 'white',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 4,
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 6,
   },
   bannerSubtitle: {
     color: '#d1fae5',
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 14,
+    fontWeight: '600',
   },
   bannerDots: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 6,
-    marginTop: 12,
+    gap: 8,
+    marginTop: 16,
   },
   dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
+
+  // ===== SECTIONS =====
   section: {
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   sectionTitle: {
-    fontWeight: '800',
-    fontSize: 18,
+    fontWeight: '900',
+    fontSize: 20,
+    letterSpacing: 0.3,
   },
   productCount: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#6b7280',
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  storeChips: {
-    marginTop: 12,
+
+  // ===== STORE CHIPS =====
+  storeChipsContainer: {
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xs,
   },
   storeChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-    borderWidth: 1.5,
+    gap: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 22,
+    marginRight: 10,
+    borderWidth: 2,
     borderColor: 'rgba(0,0,0,0.06)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   storeChipText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
   },
   storeChipDistance: {
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
   },
+
+  // ===== PRODUCTS GRID =====
   productsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: Spacing.sm,
+    gap: Spacing.md,
   },
   productCard: {
     width: '48%',
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: "hidden",
     position: 'relative',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: 'rgba(0,0,0,0.06)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   discountBadge: {
     position: 'absolute',
-    top: 8,
-    left: 8,
+    top: 10,
+    left: 10,
     zIndex: 10,
     backgroundColor: '#ef4444',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
   discountText: {
     color: 'white',
-    fontSize: 10,
-    fontWeight: '800',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   productImageContainer: {
-    height: 130,
+    height: 140,
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: '#fafafa',
-    padding: Spacing.sm,
+    padding: Spacing.md,
   },
   productImage: {
     width: "100%",
@@ -651,81 +766,93 @@ const styles = StyleSheet.create({
   },
   productInfo: {
     padding: Spacing.sm,
+    paddingTop: Spacing.xs,
   },
   deliveryInfoRow: {
     flexDirection: 'row',
     gap: 6,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   storeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
     backgroundColor: '#ecfdf5',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 7,
     flex: 1,
   },
   storeText: {
-    fontSize: 8,
-    fontWeight: '700',
+    fontSize: 9,
+    fontWeight: '800',
     color: '#065f46',
     textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   timeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
     backgroundColor: '#d1fae5',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 7,
   },
   timeText: {
-    fontSize: 8,
-    fontWeight: '700',
+    fontSize: 9,
+    fontWeight: '800',
     color: '#065f46',
   },
   productName: {
-    marginBottom: 3,
-    fontWeight: '600',
-    fontSize: 13,
-    lineHeight: 16,
-    minHeight: 32,
+    marginBottom: 4,
+    fontWeight: '700',
+    fontSize: 14,
+    lineHeight: 17,
+    minHeight: 34,
     color: '#111827',
   },
   brandText: {
     color: '#6b7280',
     fontSize: 11,
-    marginBottom: 6,
+    fontWeight: '500',
+    marginBottom: 8,
   },
   productFooter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 2,
+    marginTop: 4,
   },
   priceText: {
-    fontWeight: '800',
-    fontSize: 16,
+    fontWeight: '900',
+    fontSize: 17,
     color: '#111827',
   },
   addButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   addButtonText: {
     color: 'white',
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   originalPriceText: {
     textDecorationLine: 'line-through',
     color: '#9ca3af',
-    fontSize: 11,
-    marginTop: 1,
+    fontSize: 12,
+    marginTop: 2,
+    fontWeight: '500',
+  },
+
+  // ===== LOADING & EMPTY STATES =====
+  loadingContainer: {
+    padding: Spacing.xxl * 2,
+    alignItems: "center",
+    justifyContent: "center",
   },
   noResults: {
     width: '100%',
