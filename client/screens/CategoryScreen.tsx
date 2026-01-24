@@ -283,15 +283,6 @@ export default function CategoryScreen() {
               <Feather name={category.icon as any} size={32} color={category.color} />
             )}
           </View>
-          <br /><br />
-          <View style={{ flex: 1 }}>
-            <ThemedText type="h2" style={styles.categoryTitle}>
-              {category.name}
-            </ThemedText>
-            <ThemedText style={styles.productCount}>
-              {products.length} {products.length === 1 ? 'product' : 'products'}
-            </ThemedText>
-          </View>
         </View>
       </View>
 
