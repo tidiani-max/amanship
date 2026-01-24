@@ -1045,23 +1045,23 @@ interface HomeProductRow {
 }
 app.get("/api/banners", async (req, res) => {
   try {
-    // For now, return static banners. You can create a banners table later
+    // Static banners - you can easily update these anytime
     const banners = [
       {
         id: "1",
-        image: "/attached_assets/banner1.jpg",
+        image: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800",
         title: "Fresh Groceries Delivered",
         subtitle: "Get 20% off your first order",
       },
       {
         id: "2",
-        image: "/attached_assets/banner2.jpg",
+        image: "https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=800",
         title: "AmanMart Exclusive Deals",
         subtitle: "Save big on daily essentials",
       },
       {
         id: "3",
-        image: "/attached_assets/banner3.jpg",
+        image: "https://images.unsplash.com/photo-1588964895597-cfccd6e2dbf9?w=800",
         title: "Fast Delivery Guarantee",
         subtitle: "15 minutes or it's free",
       },
@@ -1073,6 +1073,9 @@ app.get("/api/banners", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch banners" });
   }
 });
+
+// ✅ BENEFIT: No database table needed, easy to update banners
+// ✅ Just change the URLs above to your own images when ready
 
 // Enhanced /api/home/products - Include store info per product
 app.get("/api/home/products", async (req: Request, res: Response) => {
@@ -1153,6 +1156,10 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to fetch products" });
   }
 });
+
+// Enhanced /api/stores/nearby - Return stores with delivery time
+
+
 
 // Enhanced /api/stores/nearby - Return stores with delivery time
 
