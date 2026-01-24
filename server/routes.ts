@@ -1043,29 +1043,54 @@ interface HomeProductRow {
   storeName: string;
   distance: number;
 }
+app.get("/api/banners", async (req, res) => {
+  try {
+    // For now, return static banners. You can create a banners table later
+    const banners = [
+      {
+        id: "1",
+        image: "/attached_assets/banner1.jpg",
+        title: "Fresh Groceries Delivered",
+        subtitle: "Get 20% off your first order",
+      },
+      {
+        id: "2",
+        image: "/attached_assets/banner2.jpg",
+        title: "AmanMart Exclusive Deals",
+        subtitle: "Save big on daily essentials",
+      },
+      {
+        id: "3",
+        image: "/attached_assets/banner3.jpg",
+        title: "Fast Delivery Guarantee",
+        subtitle: "15 minutes or it's free",
+      },
+    ];
+    
+    res.json(banners);
+  } catch (error) {
+    console.error("❌ Banners error:", error);
+    res.status(500).json({ error: "Failed to fetch banners" });
+  }
+});
+
+// Enhanced /api/home/products - Include store info per product
 app.get("/api/home/products", async (req: Request, res: Response) => {
   try {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
-
-    console.log("🟢 HIT /api/home/products", { lat, lng });
+    const storeId = req.query.storeId as string | undefined;
 
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      console.log("❌ Invalid coordinates:", { lat, lng });
       return res.status(400).json({ error: "Valid lat & lng required" });
     }
 
-    // Check stores first
-    const allStores = await db.select().from(stores);
-    console.log(`📍 Total stores in database: ${allStores.length}`);
-
-    if (allStores.length === 0) {
-      console.log("❌ No stores in database");
-      return res.json([]);
+    let storeFilter = sql``;
+    if (storeId) {
+      storeFilter = sql`AND s.id = ${storeId}`;
     }
 
-    // Convert decimal to float - FIX for the coordinate casting issue
-    const result = await db.execute(sql<HomeProductRow>`
+    const result = await db.execute(sql<any>`
       SELECT
         p.id,
         p.name,
@@ -1089,12 +1114,25 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
               * sin(radians(s.latitude::numeric))
             ))
           )
-        ) AS distance
+        ) AS distance,
+        CEIL(
+          (6371 * acos(
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${lat}::numeric))
+              * cos(radians(s.latitude::numeric))
+              * cos(radians(s.longitude::numeric) - radians(${lng}::numeric))
+              + sin(radians(${lat}::numeric))
+              * sin(radians(s.latitude::numeric))
+            ))
+          ) * 5) + 10
+        )::integer AS "deliveryMinutes"
       FROM stores s
       JOIN store_inventory si ON si.store_id = s.id
       JOIN products p ON p.id = si.product_id
       WHERE
         s.is_active = true
+        AND si.stock_count > 0
+        ${storeFilter}
         AND (
           6371 * acos(
             LEAST(1.0, GREATEST(-1.0,
@@ -1105,63 +1143,20 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
               * sin(radians(s.latitude::numeric))
             ))
           )
-        ) <= 3
+        ) <= 5
       ORDER BY distance ASC;
     `);
 
-    console.log(`✅ Found ${result.rows.length} products from nearby stores`);
-    
-    // Debug logging if no results
-    if (result.rows.length === 0) {
-      const debugStores = await db.execute(sql`
-        SELECT
-          s.id,
-          s.name,
-          s.latitude,
-          s.longitude,
-          s.is_active,
-          (
-            6371 * acos(
-              LEAST(1.0, GREATEST(-1.0,
-                cos(radians(${lat}::numeric))
-                * cos(radians(s.latitude::numeric))
-                * cos(radians(s.longitude::numeric) - radians(${lng}::numeric))
-                + sin(radians(${lat}::numeric))
-                * sin(radians(s.latitude::numeric))
-              ))
-            )
-          ) AS distance
-        FROM stores s
-        WHERE s.is_active = true
-        ORDER BY distance ASC
-        LIMIT 5;
-      `);
-      
-      console.log("🔍 Nearest stores (debug):", debugStores.rows);
-      
-      // Check if any stores have inventory
-      const inventoryCheck = await db.execute(sql`
-        SELECT 
-          s.name as store_name,
-          COUNT(si.id) as inventory_count
-        FROM stores s
-        LEFT JOIN store_inventory si ON si.store_id = s.id
-        WHERE s.is_active = true
-        GROUP BY s.id, s.name;
-      `);
-      console.log("📦 Store inventory counts:", inventoryCheck.rows);
-    }
-    
     res.json(result.rows);
   } catch (error) {
     console.error("❌ /api/home/products error:", error);
-    console.error("Error stack:", error instanceof Error ? error.stack : "Unknown error");
-    res.status(500).json({ 
-      error: "Failed to fetch home products",
-      details: error instanceof Error ? error.message : "Unknown error"
-    });
+    res.status(500).json({ error: "Failed to fetch products" });
   }
 });
+
+// Enhanced /api/stores/nearby - Return stores with delivery time
+
+
 
 app.get("/api/category/products", async (req: Request, res: Response) => {
   try {
@@ -1857,7 +1852,7 @@ res.json({
     }
   });
 
-  app.get("/api/stores/nearby", async (req, res) => {
+app.get("/api/stores/nearby", async (req, res) => {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
 
@@ -1865,20 +1860,64 @@ res.json({
     return res.status(400).json({ error: "Valid lat/lng required" });
   }
 
-  const stores = await getStoresWithAvailability(lat, lng);
+  try {
+    const result = await db.execute(sql`
+      SELECT
+        s.id,
+        s.name,
+        s.address,
+        (
+          6371 * acos(
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${lat}::numeric))
+              * cos(radians(s.latitude::numeric))
+              * cos(radians(s.longitude::numeric) - radians(${lng}::numeric))
+              + sin(radians(${lat}::numeric))
+              * sin(radians(s.latitude::numeric))
+            ))
+          )
+        ) AS distance,
+        CEIL(
+          (6371 * acos(
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${lat}::numeric))
+              * cos(radians(s.latitude::numeric))
+              * cos(radians(s.longitude::numeric) - radians(${lng}::numeric))
+              + sin(radians(${lat}::numeric))
+              * sin(radians(s.latitude::numeric))
+            ))
+          ) * 5) + 10
+        )::integer AS "deliveryMinutes"
+      FROM stores s
+      WHERE
+        s.is_active = true
+        AND (
+          6371 * acos(
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${lat}::numeric))
+              * cos(radians(s.latitude::numeric))
+              * cos(radians(s.longitude::numeric) - radians(${lng}::numeric))
+              + sin(radians(${lat}::numeric))
+              * sin(radians(s.latitude::numeric))
+            ))
+          )
+        ) <= 5
+      ORDER BY distance ASC;
+    `);
 
-  res.json({
-    stores: stores
-      .filter(s => s.distanceKm <= 3)
-      .map(s => ({
+    res.json({
+      stores: result.rows.map((s: any) => ({
         id: s.id,
         name: s.name,
         address: s.address,
-        distanceKm: s.distanceKm,
-        codAllowed: s.codAllowed,
-        isAvailable: s.isAvailable,
+        distance: parseFloat(s.distance),
+        deliveryMinutes: s.deliveryMinutes,
       })),
-  });
+    });
+  } catch (error) {
+    console.error("❌ /api/stores/nearby error:", error);
+    res.status(500).json({ error: "Failed to fetch nearby stores" });
+  }
 });
 
 

@@ -29,6 +29,7 @@ import { useAuth } from "@/context/AuthContext";
 import ChatScreen from "@/screens/ChatScreen";
 
 
+
 export type RootStackParamList = {
   Onboarding: undefined;
   Main: undefined;
@@ -53,6 +54,7 @@ export type RootStackParamList = {
   Notifications: undefined;
   Language: undefined;
   About: undefined;
+  StoreProducts: { store: { id: string; name: string; distance: number } }; // NEW
 };
 
 
