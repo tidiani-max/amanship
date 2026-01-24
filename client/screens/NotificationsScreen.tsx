@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, Switch, Alert, Platform, ScrollView, Pressable, ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from 'expo-notifications';
@@ -73,6 +74,7 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
+  const navigation = useNavigation();
   const { registerForPushNotifications } = useNotifications();
   const [settings, setSettings] = useState<NotificationSettings>(defaultSettings);
   const [permissionStatus, setPermissionStatus] = useState<string>("unknown");
@@ -197,7 +199,6 @@ export default function NotificationsScreen() {
     }
   };
 
-  // ✅ Fixed: Proper type for dynamic styles
   const getStatusCardStyle = (): ViewStyle => {
     return {
       padding: Spacing.lg,
@@ -220,6 +221,20 @@ export default function NotificationsScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      {/* Header with Back Button */}
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.md, borderBottomColor: theme.border }]}>
+        <Pressable 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Feather name="arrow-left" size={24} color={theme.text} />
+        </Pressable>
+        <ThemedText type="h2" style={styles.headerTitle}>
+          Notifications
+        </ThemedText>
+        <View style={styles.headerRight} />
+      </View>
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
@@ -230,7 +245,7 @@ export default function NotificationsScreen() {
           },
         ]}
       >
-        {/* Permission Status Card - ✅ Fixed style */}
+        {/* Permission Status Card */}
         <Card style={getStatusCardStyle()}>
           <View style={styles.statusRow}>
             <Feather 
@@ -263,7 +278,7 @@ export default function NotificationsScreen() {
           )}
         </Card>
 
-        {/* Role-Specific Info - ✅ Fixed style */}
+        {/* Role-Specific Info */}
         {user?.role && ['picker', 'driver'].includes(user.role) && (
           <Card style={getInfoCardStyle()}>
             <Feather name="info" size={20} color={theme.primary} />
@@ -347,6 +362,26 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  backButton: {
+    padding: Spacing.xs,
+    marginLeft: -Spacing.xs,
+  },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  headerRight: {
+    width: 24,
+  },
   scrollView: { flex: 1 },
   content: { paddingHorizontal: Spacing.lg },
   statusRow: { flexDirection: 'row', alignItems: 'center' },
