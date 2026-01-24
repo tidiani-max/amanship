@@ -153,7 +153,7 @@ function OrderCard({
     <Card style={styles.orderCard}>
       <View style={styles.orderHeader}>
         <View>
-          <ThemedText type="h3">Order #{order.orderNumber || order.id.slice(0, 8).toUpperCase()}</ThemedText>
+          <ThemedText type="h3">{order.orderNumber || order.id.slice(0, 8).toUpperCase()}</ThemedText>
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>
             {isDelivered ? "✅ Delivered" : isAtStore ? "📍 Waiting at Store" : "🚚 In Transit"}
           </ThemedText>

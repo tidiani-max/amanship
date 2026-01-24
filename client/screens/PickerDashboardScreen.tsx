@@ -86,7 +86,7 @@ function OrderCard({
       <View style={styles.orderHeader}>
         <View>
           <ThemedText type="h3">
-            Order #{order.orderNumber || order.id.slice(0, 8).toUpperCase()}
+            {order.orderNumber || order.id.slice(0, 8).toUpperCase()}
           </ThemedText>
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>
             Status: <ThemedText type="caption" style={{ color: theme.primary, fontWeight: 'bold' }}>{status.toUpperCase()}</ThemedText>
