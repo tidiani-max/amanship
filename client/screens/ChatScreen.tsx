@@ -135,32 +135,7 @@ export default function ChatScreen() {
     >
       <View style={{ flex: 1 }}>
         {/* Fixed Header with Safe Area */}
-        <View style={[
-          styles.header, 
-          { 
-            borderBottomColor: theme.border, 
-            backgroundColor: theme.cardBackground,
-            paddingTop: insets.top + 16,
-          }
-        ]}>
-          <Pressable 
-            onPress={() => navigation.goBack()} 
-            style={styles.backButton}
-          >
-            <Feather name="arrow-left" size={24} color={theme.text} />
-          </Pressable>
-          
-          {/* Fixed: Give proper width constraints for text container */}
-         
-          
-          <Pressable 
-            onPress={handleCall} 
-            style={[styles.callCircle, { backgroundColor: theme.primary }]}
-            android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
-          >
-            <Feather name="phone" size={20} color="white" />
-          </Pressable>
-        </View>
+       
 
         {/* Messages List */}
         <FlatList
