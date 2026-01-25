@@ -65,10 +65,6 @@ export default function LocationScreen() {
         <Button onPress={handleAllowLocation}>
           Allow Location Access
         </Button>
-        
-        <Button variant="text" onPress={handleSkip} style={styles.skipButton}>
-          Enter Address Manually
-        </Button>
       </View>
     </ThemedView>
   );
