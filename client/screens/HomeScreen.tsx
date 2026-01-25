@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image, TextInput, ActivityIndicator, Dimensions, Animated } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Image, TextInput, ActivityIndicator, Dimensions, Animated, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -248,7 +248,6 @@ export default function HomeScreen() {
     );
   }, [searchQuery, products]);
 
-  // ✅ FORMAT AS INDONESIAN RUPIAH
   const formatPrice = (price: number) => `Rp ${price.toLocaleString("id-ID")}`;
 
   const handleAddToCart = (product: UIProduct) => {
@@ -360,31 +359,39 @@ export default function HomeScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-      {/* ===== HEADER ===== */}
-      <View style={[styles.compactHeader, { backgroundColor: theme.cardBackground }]}>
-        <View style={styles.headerLeft}>
-          {nearestStore && (
-            <View style={styles.storeInfoCompact}>
-              <Feather name="navigation" size={12} color="#10b981" />
-              <ThemedText style={styles.storeNameSmall} numberOfLines={1}>
-                {nearestStore.name}
-              </ThemedText>
-              <View style={styles.storeDot} />
-              <ThemedText style={styles.storeMinutesSmall}>
-                {storesData[0]?.deliveryMinutes || 15}min
-              </ThemedText>
-            </View>
-          )}
-        </View>
-        
-        <View style={styles.headerCenter}>
-          <ThemedText style={styles.logoText}>KilatGo</ThemedText>
-        </View>
-        
-        <View style={styles.headerRight}>
-          <Pressable onPress={() => navigation.navigate("Notifications")}>
-            <Feather name="bell" size={20} color={theme.text} />
-          </Pressable>
+      {/* ===== FIXED HEADER ===== */}
+      <View style={[
+        styles.compactHeader, 
+        { 
+          backgroundColor: theme.cardBackground,
+          paddingTop: insets.top + 8,
+        }
+      ]}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
+            {nearestStore && (
+              <View style={styles.storeInfoCompact}>
+                <Feather name="navigation" size={12} color="#10b981" />
+                <ThemedText style={styles.storeNameSmall} numberOfLines={1}>
+                  {nearestStore.name}
+                </ThemedText>
+                <View style={styles.storeDot} />
+                <ThemedText style={styles.storeMinutesSmall}>
+                  {storesData[0]?.deliveryMinutes || 15}min
+                </ThemedText>
+              </View>
+            )}
+          </View>
+          
+          <View style={styles.headerCenter}>
+            <ThemedText style={styles.logoText}>KilatGo</ThemedText>
+          </View>
+          
+          <View style={styles.headerRight}>
+            <Pressable onPress={() => navigation.navigate("Notifications")}>
+              <Feather name="bell" size={20} color={theme.text} />
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -643,11 +650,6 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   compactHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.06)',
     shadowColor: '#000',
@@ -655,6 +657,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
+    zIndex: 1000,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
   },
   headerLeft: { flex: 1 },
   headerCenter: { flex: 1, alignItems: 'center' },

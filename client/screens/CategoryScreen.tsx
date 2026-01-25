@@ -29,7 +29,7 @@ import { CartToast } from "@/components/CartToast";
 
 const { width } = Dimensions.get("window");
 
-// Responsive breakpoints
+// ===== RESPONSIVE BREAKPOINTS =====
 const getResponsiveColumns = (screenWidth: number) => {
   if (screenWidth >= 1400) return 6;
   if (screenWidth >= 1200) return 5;
@@ -270,6 +270,7 @@ export default function CategoryScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+      {/* ===== CATEGORY HEADER BANNER ===== */}
       <View style={[styles.header, { paddingHorizontal: responsivePadding + containerPadding }]}>
         <View style={[styles.categoryBanner, { backgroundColor: category.color + "15" }]}>
           <View style={[styles.categoryIconLarge, { backgroundColor: category.color + "20" }]}>
@@ -280,12 +281,22 @@ export default function CategoryScreen() {
                 resizeMode="cover"
               />
             ) : (
-              <Feather name={category.icon as any} size={32} color={category.color} />
+              <Feather name={category.icon as any} size={40} color={category.color} />
             )}
+          </View>
+          
+          <View style={{ flex: 1 }}>
+            <ThemedText type="h2" style={styles.categoryTitle}>
+              {category.name}
+            </ThemedText>
+            <ThemedText style={styles.productCount}>
+              {products.length} {products.length === 1 ? 'product' : 'products'}
+            </ThemedText>
           </View>
         </View>
       </View>
 
+      {/* ===== PRODUCTS GRID ===== */}
       <View style={[styles.productsGrid, { paddingHorizontal: responsivePadding + containerPadding }]}>
         <FlatList
           data={products}
@@ -322,44 +333,52 @@ export default function CategoryScreen() {
 
 const styles = StyleSheet.create({
   header: {
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.md,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.lg,
   },
   categoryBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.md,
-    borderRadius: 16,
+    padding: Spacing.lg,
+    borderRadius: 18,
     gap: Spacing.md,
-    borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.06)',
+    borderWidth: 2,
+    borderColor: 'rgba(0,0,0,0.08)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
   },
   categoryIconLarge: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 72,
+    height: 72,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.5)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
   categoryImageLarge: {
-    width: 56,
-    height: 56,
+    width: 72,
+    height: 72,
   },
   categoryTitle: {
-    fontWeight: '800',
-    fontSize: 22,
-    marginBottom: 2,
+    fontWeight: '900',
+    fontSize: 24,
+    marginBottom: 4,
+    letterSpacing: 0.3,
   },
   productCount: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#6b7280',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   productsGrid: {
     flex: 1,
