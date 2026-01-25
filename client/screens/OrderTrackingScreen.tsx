@@ -1,12 +1,13 @@
 // app/screens/OrderTrackingScreen.tsx
-// Real-time animated map with driver movement tracking
+// REAL MAP with live driver tracking like Uber/Grab
 
 import React, { useEffect, useState, useRef } from "react";
-import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Animated, Easing } from "react-native";
+import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
+import { WebView } from "react-native-webview";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
@@ -17,8 +18,7 @@ import { CallButton } from "@/components/CallButton";
 
 type OrderTrackingRouteProp = RouteProp<RootStackParamList, "OrderTracking">;
 
-const MAP_WIDTH = 350;
-const MAP_HEIGHT = 200;
+const { width, height } = Dimensions.get("window");
 
 export default function OrderTrackingScreen() {
   const navigation = useNavigation<any>();
@@ -26,10 +26,10 @@ export default function OrderTrackingScreen() {
   const { theme } = useTheme();
   const route = useRoute<OrderTrackingRouteProp>();
   const { orderId } = route.params;
+  const webViewRef = useRef<WebView>(null);
 
-  // Animation values
-  const driverPosition = useRef(new Animated.Value(0)).current;
-  const pulseScale = useRef(new Animated.Value(1)).current;
+  const [storeLocation, setStoreLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [customerLocation, setCustomerLocation] = useState<{lat: number, lng: number} | null>(null);
 
   // Fetch order details
   const { data: order, isLoading: orderLoading } = useQuery({
@@ -37,7 +37,29 @@ export default function OrderTrackingScreen() {
     queryFn: async () => {
       const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}`);
       if (!response.ok) throw new Error("Order not found");
-      return response.json();
+      const data = await response.json();
+      
+      // Get customer location from order
+      if (data.customerLat && data.customerLng) {
+        setCustomerLocation({
+          lat: parseFloat(data.customerLat),
+          lng: parseFloat(data.customerLng)
+        });
+      }
+      
+      // Get store location
+      if (data.storeId) {
+        const storeRes = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/stores/${data.storeId}`);
+        const storeData = await storeRes.json();
+        if (storeData.latitude && storeData.longitude) {
+          setStoreLocation({
+            lat: parseFloat(storeData.latitude),
+            lng: parseFloat(storeData.longitude)
+          });
+        }
+      }
+      
+      return data;
     },
     refetchInterval: 5000,
   });
@@ -53,40 +75,22 @@ export default function OrderTrackingScreen() {
     enabled: order?.status === "delivering",
   });
 
-  // Animate driver position when location updates
+  // Update map when driver location changes
   useEffect(() => {
-    if (!driverData?.hasLocation) return;
-
-    const distance = driverData.distance || 5;
-    const maxDistance = 5; // 5km max display range
-    
-    // Calculate position (0 = store, 1 = customer)
-    const progress = Math.max(0, Math.min(1, ((maxDistance - distance) / maxDistance)));
-
-    // Smooth animation to new position
-    Animated.spring(driverPosition, {
-      toValue: progress,
-      friction: 10,
-      tension: 40,
-      useNativeDriver: false,
-    }).start();
-
-    // Pulse animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseScale, {
-          toValue: 1.3,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseScale, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, [driverData?.location, driverData?.distance]);
+    if (driverData?.hasLocation && webViewRef.current) {
+      const updateScript = `
+        if (window.updateDriverLocation) {
+          window.updateDriverLocation(
+            ${driverData.location.latitude},
+            ${driverData.location.longitude},
+            ${driverData.location.heading || 0}
+          );
+        }
+        true;
+      `;
+      webViewRef.current.injectJavaScript(updateScript);
+    }
+  }, [driverData?.location]);
 
   if (orderLoading || !order) {
     return (
@@ -138,80 +142,145 @@ export default function OrderTrackingScreen() {
   const showMessageButton = order.status === "delivering" && order.driverId;
   const hasDriverLocation = driverData?.hasLocation && driverData.location;
 
-  // Calculate driver position for animation
-  const driverLeft = driverPosition.interpolate({
-    inputRange: [0, 1],
-    outputRange: [30, MAP_WIDTH - 70],
-  });
-
-  const driverTop = driverPosition.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [MAP_HEIGHT / 2, MAP_HEIGHT / 2 - 20, MAP_HEIGHT / 2],
-  });
+  // Create HTML for the map
+  const mapHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { width: 100%; height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    // Initialize map
+    const customerLat = ${customerLocation?.lat || 13.7563};
+    const customerLng = ${customerLocation?.lng || 100.5018};
+    const storeLat = ${storeLocation?.lat || 13.7563};
+    const storeLng = ${storeLocation?.lng || 100.5018};
+    
+    const map = L.map('map').setView([customerLat, customerLng], 14);
+    
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    
+    // Store marker (orange)
+    const storeIcon = L.divIcon({
+      html: '<div style="background: #f59e0b; width: 40px; height: 40px; border-radius: 50%; border: 3px solid white; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg></div>',
+      className: 'custom-icon',
+      iconSize: [40, 40],
+      iconAnchor: [20, 20]
+    });
+    L.marker([storeLat, storeLng], { icon: storeIcon }).addTo(map)
+      .bindPopup('<b>Store Location</b>');
+    
+    // Customer marker (green)
+    const customerIcon = L.divIcon({
+      html: '<div style="background: #10b981; width: 40px; height: 40px; border-radius: 50%; border: 3px solid white; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></div>',
+      className: 'custom-icon',
+      iconSize: [40, 40],
+      iconAnchor: [20, 20]
+    });
+    L.marker([customerLat, customerLng], { icon: customerIcon }).addTo(map)
+      .bindPopup('<b>Your Location</b>');
+    
+    // Driver marker (will be updated)
+    let driverMarker = null;
+    let routeLine = null;
+    
+    // Function to update driver location (called from React Native)
+    window.updateDriverLocation = function(lat, lng, heading) {
+      if (!driverMarker) {
+        // Create driver marker with bike icon
+        const driverIcon = L.divIcon({
+          html: '<div style="background: #ef4444; width: 50px; height: 50px; border-radius: 50%; border: 4px solid white; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(239,68,68,0.5); transform: rotate(' + heading + 'deg);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M5 12L2 20h20l-3-8"></path><path d="M12 12V4"></path><circle cx="12" cy="12" r="2"></circle></svg></div>',
+          className: 'driver-icon',
+          iconSize: [50, 50],
+          iconAnchor: [25, 25]
+        });
+        driverMarker = L.marker([lat, lng], { icon: driverIcon }).addTo(map);
+        
+        // Add pulsing circle around driver
+        const pulseCircle = L.circle([lat, lng], {
+          color: '#ef4444',
+          fillColor: '#ef4444',
+          fillOpacity: 0.2,
+          radius: 50
+        }).addTo(map);
+        
+        // Animate pulse
+        setInterval(() => {
+          pulseCircle.setRadius(pulseCircle.getRadius() === 50 ? 100 : 50);
+        }, 1000);
+      } else {
+        // Update existing marker
+        driverMarker.setLatLng([lat, lng]);
+        const iconHtml = driverMarker.getElement();
+        if (iconHtml) {
+          iconHtml.querySelector('div').style.transform = 'rotate(' + heading + 'deg)';
+        }
+      }
+      
+      // Draw route line
+      if (routeLine) {
+        map.removeLayer(routeLine);
+      }
+      routeLine = L.polyline([
+        [lat, lng],
+        [customerLat, customerLng]
+      ], {
+        color: '#10b981',
+        weight: 4,
+        opacity: 0.7,
+        dashArray: '10, 10'
+      }).addTo(map);
+      
+      // Fit map to show all markers
+      const bounds = L.latLngBounds([
+        [storeLat, storeLng],
+        [lat, lng],
+        [customerLat, customerLng]
+      ]);
+      map.fitBounds(bounds, { padding: [50, 50] });
+    };
+    
+    // Initial fit
+    const initialBounds = L.latLngBounds([
+      [storeLat, storeLng],
+      [customerLat, customerLng]
+    ]);
+    map.fitBounds(initialBounds, { padding: [50, 50] });
+  </script>
+</body>
+</html>
+  `;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-      {/* Animated Map */}
-      <View style={[styles.mapContainer, { backgroundColor: theme.backgroundDefault }]}>
-        <View style={[styles.mapWrapper, { backgroundColor: '#f9fafb' }]}>
-          {/* Background Grid Lines */}
-          <View style={styles.gridLine} />
-          <View style={[styles.gridLine, { top: MAP_HEIGHT * 2 / 3 }]} />
-          
-          {/* Road Path */}
-          <View style={[styles.road, { backgroundColor: '#d1d5db' }]} />
-          <View style={[styles.roadLine, { backgroundColor: theme.primary }]} />
-          
-          {/* Store Pin */}
-          <View style={[styles.storePin, { backgroundColor: '#f59e0b' }]}>
-            <Feather name="shopping-bag" size={16} color="#fff" />
+      {/* Real Map View */}
+      <View style={styles.mapContainer}>
+        {storeLocation && customerLocation ? (
+          <WebView
+            ref={webViewRef}
+            source={{ html: mapHTML }}
+            style={styles.map}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+          />
+        ) : (
+          <View style={[styles.centered, { backgroundColor: theme.backgroundDefault }]}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <ThemedText style={{ marginTop: 10 }}>Loading map...</ThemedText>
           </View>
-          
-          {/* Destination Pin */}
-          <View style={[styles.destinationPin, { backgroundColor: '#10b981' }]}>
-            <Feather name="home" size={16} color="#fff" />
-          </View>
-          
-          {/* Animated Driver */}
-          {hasDriverLocation && (
-            <Animated.View
-              style={[
-                styles.driverContainer,
-                {
-                  left: driverLeft,
-                  top: driverTop,
-                },
-              ]}
-            >
-              {/* Pulse Effect */}
-              <Animated.View
-                style={[
-                  styles.driverPulse,
-                  {
-                    transform: [{ scale: pulseScale }],
-                    backgroundColor: theme.primary + '30',
-                  },
-                ]}
-              />
-              {/* Driver Icon */}
-              <View style={[styles.driverIcon, { backgroundColor: theme.primary }]}>
-                <Feather name="navigation" size={18} color="#fff" />
-              </View>
-            </Animated.View>
-          )}
-        </View>
-
-        {/* Map Labels */}
-        <View style={styles.mapLabels}>
-          <View style={styles.mapLabel}>
-            <View style={[styles.labelDot, { backgroundColor: '#f59e0b' }]} />
-            <ThemedText type="small">Store</ThemedText>
-          </View>
-          <View style={styles.mapLabel}>
-            <View style={[styles.labelDot, { backgroundColor: '#10b981' }]} />
-            <ThemedText type="small">Your Location</ThemedText>
-          </View>
-        </View>
+        )}
 
         {/* GPS Accuracy Badge */}
         {hasDriverLocation && driverData.location.accuracy && (
@@ -357,127 +426,11 @@ export default function OrderTrackingScreen() {
 const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   mapContainer: { 
-    flex: 0.4, 
-    justifyContent: "center", 
-    alignItems: "center",
+    flex: 0.5, 
     position: 'relative',
-    paddingVertical: 20,
   },
-  mapWrapper: {
-    width: MAP_WIDTH,
-    height: MAP_HEIGHT,
-    position: 'relative',
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  gridLine: {
-    position: 'absolute',
-    top: MAP_HEIGHT / 3,
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: '#e5e7eb',
-  },
-  road: {
-    position: 'absolute',
-    top: MAP_HEIGHT / 2 - 10,
-    left: 0,
-    right: 0,
-    height: 20,
-  },
-  roadLine: {
-    position: 'absolute',
-    top: MAP_HEIGHT / 2 - 2,
-    left: 30,
-    right: 30,
-    height: 4,
-    borderRadius: 2,
-  },
-  storePin: {
-    position: 'absolute',
-    left: 10,
-    top: MAP_HEIGHT / 2 - 20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  destinationPin: {
-    position: 'absolute',
-    right: 10,
-    top: MAP_HEIGHT / 2 - 20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  driverContainer: {
-    position: 'absolute',
-    width: 50,
-    height: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: -25,
-    marginTop: -25,
-  },
-  driverPulse: {
-    position: 'absolute',
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-  },
-  driverIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 6,
-  },
-  mapLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: MAP_WIDTH,
-    marginTop: 12,
-  },
-  mapLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  labelDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#fff',
+  map: {
+    flex: 1,
   },
   accuracyBadge: {
     position: 'absolute',
@@ -512,7 +465,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   accuracyText: { fontSize: 12, fontWeight: '600', color: '#065f46' },
-  bottomPanel: { flex: 0.6 },
+  bottomPanel: { flex: 0.5 },
   statusHeader: { alignItems: "center", marginBottom: Spacing.xl },
   statusBadge: { 
     flexDirection: "row", 
