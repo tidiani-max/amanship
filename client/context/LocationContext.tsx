@@ -252,28 +252,29 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const codAllowed = Boolean(availabilityData?.codAllowed);
   const estimatedDeliveryMinutes = availabilityData?.estimatedDeliveryMinutes ? Number(availabilityData.estimatedDeliveryMinutes) : null;
 
+  // Ensure all values are properly typed before rendering
+  const contextValue: LocationContextType = {
+    location: userLocation,
+    locationStatus,
+    store,
+    storeAvailable,
+    codAllowed,
+    estimatedDeliveryMinutes,
+    isCheckingAvailability,
+    errorMessage,
+    isManualLocation,
+    manualAddress,
+    addressLabel,
+    gpsLocationName,
+    requestLocationPermission,
+    refreshStoreAvailability,
+    setManualLocation: setManualLocationFunc,
+    clearManualLocation,
+    useCurrentLocation,
+  };
+
   return (
-    <LocationContext.Provider
-      value={{
-        location: userLocation,
-        locationStatus,
-        store,
-        storeAvailable,
-        codAllowed,
-        estimatedDeliveryMinutes,
-        isCheckingAvailability,
-        errorMessage,
-        isManualLocation,
-        manualAddress,
-        addressLabel,
-        gpsLocationName,
-        requestLocationPermission,
-        refreshStoreAvailability,
-        setManualLocation: setManualLocationFunc,
-        clearManualLocation,
-        useCurrentLocation,
-      }}
-    >
+    <LocationContext.Provider value={contextValue}>
       {children}
     </LocationContext.Provider>
   );
