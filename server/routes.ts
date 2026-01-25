@@ -2150,6 +2150,30 @@ app.get("/api/stores/nearby", async (req, res) => {
   }
 });
 
+app.get("/api/stores/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`🔍 Fetching store: ${id}`);
+    
+    const [store] = await db
+      .select()
+      .from(stores)
+      .where(eq(stores.id, id))
+      .limit(1);
+    
+    if (!store) {
+      console.log(`❌ Store not found: ${id}`);
+      return res.status(404).json({ error: "Store not found" });
+    }
+    
+    console.log(`✅ Store found: ${store.name}`);
+    res.json(store);
+  } catch (error) {
+    console.error("❌ Get store error:", error);
+    res.status(500).json({ error: "Failed to fetch store" });
+  }
+});
+
 
   // ==================== 13. ADMIN ====================
  // Add these routes to your server/routes.ts file
