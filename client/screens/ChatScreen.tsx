@@ -140,7 +140,7 @@ export default function ChatScreen() {
           { 
             borderBottomColor: theme.border, 
             backgroundColor: theme.cardBackground,
-            paddingTop: insets.top + 12,
+            paddingTop: insets.top + 16,
           }
         ]}>
           <Pressable 
@@ -152,9 +152,11 @@ export default function ChatScreen() {
           
           {/* Fixed: Give proper width constraints for text container */}
           <View style={styles.headerTextContainer}>
-            <ThemedText type="h3" numberOfLines={1}>Order Support</ThemedText>
+            <ThemedText type="h3" numberOfLines={1} style={{ flexShrink: 1 }}>
+              Order Support
+            </ThemedText>
             <ThemedText 
-              style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}
+              style={{ color: theme.textSecondary, fontSize: 12, marginTop: 4 }}
               numberOfLines={1}
             >
               ID: {orderId.slice(-6)}
@@ -279,10 +281,9 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   header: { 
     flexDirection: 'row', 
-    alignItems: 'center', 
+    alignItems: 'flex-end',
     paddingHorizontal: 16,
     paddingBottom: 16,
-    minHeight: 80,
     borderBottomWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -299,7 +300,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
     marginRight: 12,
-    minHeight: 44,
+    paddingBottom: 2,
   },
   callCircle: { 
     width: 44, 
