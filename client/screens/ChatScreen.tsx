@@ -281,7 +281,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     alignItems: 'center', 
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 16,
+    minHeight: 80,
     borderBottomWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -298,7 +299,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
     marginRight: 12,
-    justifyContent: 'center',
+    minHeight: 44,
   },
   callCircle: { 
     width: 44, 
