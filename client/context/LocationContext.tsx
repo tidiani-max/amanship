@@ -89,7 +89,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         "Current Location";
       
       console.log("📍 Reverse geocoded location:", locationName);
-      return locationName;
+      return String(locationName); // Ensure it's always a string
     } catch (error) {
       console.error("Reverse geocoding error:", error);
       return "Current Location";
@@ -114,7 +114,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         setUserLocation({ latitude: lat, longitude: lng });
         
         const placeName = await reverseGeocode(lat, lng);
-        setGpsLocationName(placeName);
+        setGpsLocationName(placeName || "Current Location");
         
         setLocationStatus("granted");
         setIsManualLocation(false);
@@ -140,7 +140,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       setUserLocation({ latitude: lat, longitude: lng });
       
       const placeName = await reverseGeocode(lat, lng);
-      setGpsLocationName(placeName);
+      setGpsLocationName(placeName || "Current Location");
       
       setLocationStatus("granted");
       setIsManualLocation(false);
@@ -161,8 +161,8 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       longitude: manualLoc.longitude,
     });
     setIsManualLocation(true);
-    setManualAddress(manualLoc.address);
-    setAddressLabel(manualLoc.label);
+    setManualAddress(manualLoc.address || "Manual Address");
+    setAddressLabel(manualLoc.label || "Selected Location");
     setGpsLocationName(null);
     setLocationStatus("granted");
     setErrorMessage(null);
@@ -197,7 +197,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
             setUserLocation({ latitude: lat, longitude: lng });
             
             const placeName = await reverseGeocode(lat, lng);
-            setGpsLocationName(placeName);
+            setGpsLocationName(placeName || "Current Location");
             
             setLocationStatus("granted");
           } catch {
@@ -222,7 +222,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
           setUserLocation({ latitude: lat, longitude: lng });
           
           const placeName = await reverseGeocode(lat, lng);
-          setGpsLocationName(placeName);
+          setGpsLocationName(placeName || "Current Location");
           
           setLocationStatus("granted");
         } catch {
@@ -238,19 +238,19 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isManualLocation]);
 
-  const store: StoreInfo | null = availabilityData?.available
+  const store: StoreInfo | null = availabilityData?.available && availabilityData?.store
     ? {
-        id: availabilityData.store.id,
-        name: availabilityData.store.name,
-        address: availabilityData.store.address,
-        distanceKm: availabilityData.store.distanceKm,
-        codAllowed: availabilityData.store.codAllowed,
+        id: String(availabilityData.store.id || ''),
+        name: String(availabilityData.store.name || 'Store'),
+        address: String(availabilityData.store.address || ''),
+        distanceKm: Number(availabilityData.store.distanceKm) || 0,
+        codAllowed: Boolean(availabilityData.store.codAllowed),
       }
     : null;
 
-  const storeAvailable = !!availabilityData?.available;
-  const codAllowed = availabilityData?.codAllowed ?? false;
-  const estimatedDeliveryMinutes = availabilityData?.estimatedDeliveryMinutes ?? null;
+  const storeAvailable = Boolean(availabilityData?.available);
+  const codAllowed = Boolean(availabilityData?.codAllowed);
+  const estimatedDeliveryMinutes = availabilityData?.estimatedDeliveryMinutes ? Number(availabilityData.estimatedDeliveryMinutes) : null;
 
   return (
     <LocationContext.Provider

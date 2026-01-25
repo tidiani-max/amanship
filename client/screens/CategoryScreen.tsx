@@ -120,25 +120,28 @@ export default function CategoryScreen() {
     },
   });
 
-  const products: UIProduct[] = apiProducts.map((p) => ({
-    id: p.id,
-    name: p.name,
-    brand: p.brand,
-    price: p.price,
-    originalPrice: p.originalPrice || undefined,
-    image: p.image || "",
-    category: p.categoryId,
-    description: p.description || "",
-    nutrition: p.nutrition,
-    stockCount: p.stockCount,
-    inStock: p.isAvailable && p.stockCount > 0,
-    storeName: p.storeName,
-    storeDistance: p.distance,
-    deliveryMinutes: p.deliveryMinutes,
-    storeId: p.storeId,
-  }));
+const products: UIProduct[] = (apiProducts || []).map((p) => ({
+  id: String(p.id || ''),
+  name: String(p.name || 'Product'),
+  brand: String(p.brand || 'Brand'),
+  price: Number(p.price) || 0,
+  originalPrice: p.originalPrice ? Number(p.originalPrice) : undefined,
+  image: p.image ? String(p.image) : "",
+  category: String(p.categoryId || ''),
+  description: p.description ? String(p.description) : "",
+  nutrition: p.nutrition,
+  stockCount: Number(p.stockCount) || 0,
+  inStock: p.isAvailable && Number(p.stockCount) > 0,
+  storeName: p.storeName ? String(p.storeName) : undefined,
+  storeDistance: p.distance ? Number(p.distance) : undefined,
+  deliveryMinutes: p.deliveryMinutes ? Number(p.deliveryMinutes) : undefined,
+  storeId: p.storeId ? String(p.storeId) : undefined,
+}));
 
-  const formatPrice = (price: number) => `Rp ${price.toLocaleString("id-ID")}`;
+const formatPrice = (price: number): string => {
+  const safePrice = Number(price) || 0;
+  return `Rp ${safePrice.toLocaleString("id-ID")}`;
+};
 
   const handleProductPress = (product: UIProduct) =>
     navigation.navigate("ProductDetail", { product });
@@ -150,109 +153,108 @@ export default function CategoryScreen() {
     setToastVisible(true);
   };
 
-  const renderProduct = ({ item }: { item: UIProduct }) => {
-    const hasDiscount = item.originalPrice && item.originalPrice > item.price;
-    const discountPercent = hasDiscount 
-      ? Math.round(((item.originalPrice! - item.price) / item.originalPrice!) * 100) 
-      : 0;
-    
-    const maxWidth = screenWidth > 1600 ? 1600 : screenWidth;
-    const effectiveWidth = screenWidth > maxWidth ? maxWidth : screenWidth;
-    const cardWidth = getProductCardWidth(effectiveWidth, responsiveColumns, responsivePadding);
+const renderProduct = ({ item }: { item: UIProduct }) => {
+  const hasDiscount = item.originalPrice && item.originalPrice > item.price;
+  const discountPercent = hasDiscount 
+    ? Math.round(((item.originalPrice! - item.price) / item.originalPrice!) * 100) 
+    : 0;
+  
+  const maxWidth = screenWidth > 1600 ? 1600 : screenWidth;
+  const effectiveWidth = screenWidth > maxWidth ? maxWidth : screenWidth;
+  const cardWidth = getProductCardWidth(effectiveWidth, responsiveColumns, responsivePadding);
 
-    return (
-      <Pressable
-        style={[
-          styles.productCard,
-          { 
-            backgroundColor: theme.cardBackground,
-            width: cardWidth,
-          },
-          !item.inStock && { opacity: 0.5 }
-        ]}
-        onPress={() => handleProductPress(item)}
-      >
-        {hasDiscount && item.inStock && (
-          <View style={styles.discountBadge}>
-            <ThemedText style={styles.discountText}>{discountPercent}% OFF</ThemedText>
+  return (
+    <Pressable
+      style={[
+        styles.productCard,
+        { 
+          backgroundColor: theme.cardBackground,
+          width: cardWidth,
+        },
+        !item.inStock && { opacity: 0.5 }
+      ]}
+      onPress={() => handleProductPress(item)}
+    >
+      {hasDiscount && item.inStock && (
+        <View style={styles.discountBadge}>
+          <ThemedText style={styles.discountText}>{String(discountPercent)}% OFF</ThemedText>
+        </View>
+      )}
+      
+      <View style={styles.productImageContainer}>
+        {item.image ? (
+          <Image
+            source={{ uri: getImageUrl(item.image) }}
+            style={styles.productImage}
+            resizeMode="contain"
+          />
+        ) : (
+          <Feather name="package" size={40} color="#d1d5db" />
+        )}
+
+        {!item.inStock && (
+          <View style={styles.outOfStockOverlay}>
+            <View style={styles.outOfStockBadge}>
+              <ThemedText style={styles.outOfStockText}>OUT OF STOCK</ThemedText>
+            </View>
           </View>
         )}
+      </View>
+
+      <View style={styles.productInfo}>
+        <View style={styles.deliveryInfoRow}>
+          <View style={styles.storeBadge}>
+            <Feather name="map-pin" size={9} color="#059669" />
+            <ThemedText style={styles.storeText} numberOfLines={1}>
+              {String(item.storeName || "Store")}
+            </ThemedText>
+          </View>
+          <View style={styles.timeBadge}>
+            <Feather name="clock" size={9} color="#10b981" />
+            <ThemedText style={styles.timeText}>
+              {String(item.deliveryMinutes || 15)} min
+            </ThemedText>
+          </View>
+        </View>
         
-        <View style={styles.productImageContainer}>
-          {item.image ? (
-            <Image
-              source={{ uri: getImageUrl(item.image) }}
-              style={styles.productImage}
-              resizeMode="contain"
-            />
-          ) : (
-            <Feather name="package" size={40} color="#d1d5db" />
-          )}
+        <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
+          {String(item.name || 'Product')}
+        </ThemedText>
+        
+        <ThemedText type="small" style={styles.brandText} numberOfLines={1}>
+          {String(item.brand || 'Brand')}
+        </ThemedText>
 
-          {!item.inStock && (
-            <View style={styles.outOfStockOverlay}>
-              <View style={styles.outOfStockBadge}>
-                <ThemedText style={styles.outOfStockText}>OUT OF STOCK</ThemedText>
-              </View>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.productInfo}>
-          {/* Store and delivery info */}
-          <View style={styles.deliveryInfoRow}>
-            <View style={styles.storeBadge}>
-              <Feather name="map-pin" size={9} color="#059669" />
-              <ThemedText style={styles.storeText} numberOfLines={1}>
-                {item.storeName || "Store"}
+        <View style={styles.productFooter}>
+          <View style={{ flex: 1 }}>
+            <ThemedText type="body" style={styles.priceText}>
+              {formatPrice(item.price)}
+            </ThemedText>
+            {hasDiscount && (
+              <ThemedText type="small" style={styles.originalPriceText}>
+                {formatPrice(item.originalPrice!)}
               </ThemedText>
-            </View>
-            <View style={styles.timeBadge}>
-              <Feather name="clock" size={9} color="#10b981" />
-              <ThemedText style={styles.timeText}>
-                {item.deliveryMinutes || 15} min
-              </ThemedText>
-            </View>
+            )}
           </View>
-          
-          <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
-            {item.name}
-          </ThemedText>
-          
-          <ThemedText type="small" style={styles.brandText} numberOfLines={1}>
-            {item.brand}
-          </ThemedText>
 
-          <View style={styles.productFooter}>
-            <View style={{ flex: 1 }}>
-              <ThemedText type="body" style={styles.priceText}>
-                {formatPrice(item.price)}
-              </ThemedText>
-              {hasDiscount && (
-                <ThemedText type="small" style={styles.originalPriceText}>
-                  {formatPrice(item.originalPrice!)}
-                </ThemedText>
-              )}
-            </View>
-
-            <Pressable
-              disabled={!item.inStock}
-              style={[
-                styles.addButton,
-                { backgroundColor: item.inStock ? theme.primary : '#e5e7eb' }
-              ]}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleAddToCart(item);
-              }}
-            >
-              <ThemedText style={styles.addButtonText}>ADD</ThemedText>
-            </Pressable>
-          </View>
+          <Pressable
+            disabled={!item.inStock}
+            style={[
+              styles.addButton,
+              { backgroundColor: item.inStock ? theme.primary : '#e5e7eb' }
+            ]}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleAddToCart(item);
+            }}
+          >
+            <ThemedText style={styles.addButtonText}>ADD</ThemedText>
+          </Pressable>
         </View>
-      </Pressable>
-    );
-  };
+      </View>
+    </Pressable>
+  );
+};
 
   if (isLoading) {
     return (
@@ -306,8 +308,11 @@ export default function CategoryScreen() {
           
           <View style={{ flex: 1 }}>
             <ThemedText type="h2" style={styles.categoryTitle}>
-              {category.name}
-            </ThemedText>
+  {String(category.name || 'Category')}
+</ThemedText>
+<ThemedText style={styles.productCount}>
+  {String(products.length)} {products.length === 1 ? 'product' : 'products'}
+</ThemedText>
             <ThemedText style={styles.productCount}>
               {products.length} {products.length === 1 ? 'product' : 'products'}
             </ThemedText>
