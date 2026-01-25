@@ -9,7 +9,6 @@ import {
   Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
@@ -18,7 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { useLanguage } from "@/context/LanguageContext";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Product } from "@/types";
 import { useCart } from "@/context/CartContext";
@@ -82,7 +81,6 @@ interface APIProduct {
 
 export default function CategoryScreen() {
   const insets = useSafeAreaInsets();
-  const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const { t } = useLanguage();
   const navigation = useNavigation<NavigationProp>();
@@ -140,7 +138,6 @@ export default function CategoryScreen() {
     storeId: p.storeId,
   }));
 
-  // ✅ FORMAT AS INDONESIAN RUPIAH
   const formatPrice = (price: number) => `Rp ${price.toLocaleString("id-ID")}`;
 
   const handleProductPress = (product: UIProduct) =>
@@ -158,7 +155,10 @@ export default function CategoryScreen() {
     const discountPercent = hasDiscount 
       ? Math.round(((item.originalPrice! - item.price) / item.originalPrice!) * 100) 
       : 0;
-    const cardWidth = getProductCardWidth(screenWidth, responsiveColumns, responsivePadding);
+    
+    const maxWidth = screenWidth > 1600 ? 1600 : screenWidth;
+    const effectiveWidth = screenWidth > maxWidth ? maxWidth : screenWidth;
+    const cardWidth = getProductCardWidth(effectiveWidth, responsiveColumns, responsivePadding);
 
     return (
       <Pressable
@@ -270,8 +270,27 @@ export default function CategoryScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-      {/* ===== CATEGORY HEADER BANNER ===== */}
-      <View style={[styles.header, { paddingHorizontal: responsivePadding + containerPadding }]}>
+      {/* ===== FIXED HEADER WITH SAFE AREA ===== */}
+      <View style={[
+        styles.headerContainer,
+        { 
+          backgroundColor: theme.cardBackground,
+          paddingTop: insets.top + 12,
+        }
+      ]}>
+        <Pressable 
+          onPress={() => navigation.goBack()} 
+          style={styles.backButton}
+        >
+          <Feather name="arrow-left" size={24} color={theme.text} />
+        </Pressable>
+        <ThemedText type="h3" style={{ flex: 1, marginLeft: 12 }}>
+          {category.name}
+        </ThemedText>
+      </View>
+
+      {/* ===== CATEGORY BANNER ===== */}
+      <View style={[styles.bannerSection, { paddingHorizontal: responsivePadding + containerPadding }]}>
         <View style={[styles.categoryBanner, { backgroundColor: category.color + "15" }]}>
           <View style={[styles.categoryIconLarge, { backgroundColor: category.color + "20" }]}>
             {category.image ? (
@@ -297,7 +316,7 @@ export default function CategoryScreen() {
       </View>
 
       {/* ===== PRODUCTS GRID ===== */}
-      <View style={[styles.productsGrid, { paddingHorizontal: responsivePadding + containerPadding }]}>
+      <View style={{ flex: 1, paddingHorizontal: containerPadding }}>
         <FlatList
           data={products}
           renderItem={renderProduct}
@@ -305,6 +324,7 @@ export default function CategoryScreen() {
           key={responsiveColumns}
           numColumns={responsiveColumns}
           contentContainerStyle={{
+            paddingHorizontal: responsivePadding,
             paddingTop: Spacing.md,
             paddingBottom: insets.bottom + Spacing.xl + 80,
           }}
@@ -332,9 +352,26 @@ export default function CategoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingTop: Spacing.xl,
-    paddingBottom: Spacing.lg,
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+    zIndex: 1000,
+  },
+  backButton: {
+    padding: 4,
+  },
+  bannerSection: {
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.md,
   },
   categoryBanner: {
     flexDirection: 'row',
@@ -379,9 +416,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
     fontWeight: '700',
-  },
-  productsGrid: {
-    flex: 1,
   },
   productCard: {
     borderRadius: 16,

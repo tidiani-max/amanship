@@ -3,7 +3,8 @@ import {
   View, StyleSheet, FlatList, TextInput, Pressable, 
   KeyboardAvoidingView, Platform, Linking, Image, Alert, ActivityIndicator 
 } from "react-native";
-import { useRoute, RouteProp } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from 'expo-image-picker';
@@ -18,6 +19,8 @@ export default function ChatScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const route = useRoute<ChatRouteProp>();
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { orderId } = route.params;
   const [message, setMessage] = useState("");
   const queryClient = useQueryClient();
@@ -123,116 +126,143 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView 
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
     >
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.backgroundDefault }]}>
-        <View style={{ flex: 1 }}>
-          <ThemedText type="h3" numberOfLines={1}>Order Support</ThemedText>
-          <ThemedText style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
-            ID: {orderId.slice(-6)}
-          </ThemedText>
+      <View style={{ flex: 1 }}>
+        {/* Fixed Header with Safe Area */}
+        <View style={[
+          styles.header, 
+          { 
+            borderBottomColor: theme.border, 
+            backgroundColor: theme.cardBackground,
+            paddingTop: insets.top + 12,
+          }
+        ]}>
+          <Pressable 
+            onPress={() => navigation.goBack()} 
+            style={styles.backButton}
+          >
+            <Feather name="arrow-left" size={24} color={theme.text} />
+          </Pressable>
+          
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <ThemedText type="h3" numberOfLines={1}>Order Support</ThemedText>
+            <ThemedText style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
+              ID: {orderId.slice(-6)}
+            </ThemedText>
+          </View>
+          
+          <Pressable 
+            onPress={handleCall} 
+            style={[styles.callCircle, { backgroundColor: theme.primary }]}
+            android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
+          >
+            <Feather name="phone" size={20} color="white" />
+          </Pressable>
         </View>
-        <Pressable 
-          onPress={handleCall} 
-          style={[styles.callCircle, { backgroundColor: theme.primary }]}
-          android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
-        >
-          <Feather name="phone" size={20} color="white" />
-        </Pressable>
-      </View>
 
-      {/* Messages List */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.messagesList}
-        onContentSizeChange={() => {
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-        }}
-        renderItem={({ item }) => {
-          const isMe = item.senderId === user?.id;
-          return (
-            <View style={[
-              styles.bubble, 
-              isMe ? [styles.myBubble, { backgroundColor: theme.primary }] : [styles.theirBubble, { backgroundColor: theme.backgroundDefault }]
-            ]}>
-              {item.type === "image" && item.content ? (
-                <Image
-                  source={{ 
-                    uri: item.content.startsWith("http")
-                      ? item.content
-                      : `${process.env.EXPO_PUBLIC_DOMAIN}${item.content}` 
-                  }}
-                  style={styles.imageMsg}
-                  resizeMode="cover"
-                />
-              ) : (
-                <ThemedText style={{ color: isMe ? "white" : theme.text }}>
-                  {item.content}
-                </ThemedText>
-              )}
-            </View>
-          );
-        }}
-      />
+        {/* Messages List */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={[
+            styles.messagesList,
+            { paddingBottom: insets.bottom + 8 }
+          ]}
+          onContentSizeChange={() => {
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 100);
+          }}
+          renderItem={({ item }) => {
+            const isMe = item.senderId === user?.id;
+            return (
+              <View style={[
+                styles.bubble, 
+                isMe ? [styles.myBubble, { backgroundColor: theme.primary }] : [styles.theirBubble, { backgroundColor: theme.backgroundDefault }]
+              ]}>
+                {item.type === "image" && item.content ? (
+                  <Image
+                    source={{ 
+                      uri: item.content.startsWith("http")
+                        ? item.content
+                        : `${process.env.EXPO_PUBLIC_DOMAIN}${item.content}` 
+                    }}
+                    style={styles.imageMsg}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <ThemedText style={{ color: isMe ? "white" : theme.text }}>
+                    {item.content}
+                  </ThemedText>
+                )}
+              </View>
+            );
+          }}
+        />
 
-      {/* Input Row */}
-      <View style={[styles.inputRow, { backgroundColor: theme.backgroundDefault, borderTopColor: theme.border }]}>
-        <Pressable 
-          onPress={handleCamera} 
-          style={styles.actionBtn}
-          android_ripple={{ color: theme.primary + '20', borderless: true, radius: 24 }}
-        >
-          <Feather name="camera" size={22} color={theme.primary} />
-        </Pressable>
-        <Pressable 
-          onPress={handleGallery} 
-          style={styles.actionBtn}
-          android_ripple={{ color: theme.textSecondary + '20', borderless: true, radius: 24 }}
-        >
-          <Feather name="image" size={22} color={theme.textSecondary} />
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <TextInput
+        {/* Input Row with Safe Area */}
+        <View style={[
+          styles.inputRow, 
+          { 
+            backgroundColor: theme.cardBackground, 
+            borderTopColor: theme.border,
+            paddingBottom: insets.bottom + 8,
+          }
+        ]}>
+          <Pressable 
+            onPress={handleCamera} 
+            style={styles.actionBtn}
+            android_ripple={{ color: theme.primary + '20', borderless: true, radius: 24 }}
+          >
+            <Feather name="camera" size={22} color={theme.primary} />
+          </Pressable>
+          <Pressable 
+            onPress={handleGallery} 
+            style={styles.actionBtn}
+            android_ripple={{ color: theme.textSecondary + '20', borderless: true, radius: 24 }}
+          >
+            <Feather name="image" size={22} color={theme.textSecondary} />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <TextInput
+              style={[
+                styles.input, 
+                { 
+                  backgroundColor: theme.backgroundRoot, 
+                  color: theme.text,
+                  borderColor: theme.border
+                }
+              ]}
+              placeholder="Message..."
+              placeholderTextColor={theme.textSecondary}
+              value={message}
+              onChangeText={setMessage}
+              multiline
+              maxLength={500}
+            />
+          </View>
+          <Pressable 
+            onPress={() => message.trim() && sendMessage.mutate({ content: message, type: "text" })}
             style={[
-              styles.input, 
+              styles.sendBtn, 
               { 
-                backgroundColor: theme.backgroundRoot, 
-                color: theme.text,
-                borderColor: theme.border
+                backgroundColor: message.trim() ? theme.primary : theme.textSecondary + '40',
+                opacity: message.trim() ? 1 : 0.5
               }
             ]}
-            placeholder="Message..."
-            placeholderTextColor={theme.textSecondary}
-            value={message}
-            onChangeText={setMessage}
-            multiline
-            maxLength={500}
-          />
+            disabled={!message.trim() || sendMessage.isPending}
+            android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
+          >
+            {sendMessage.isPending ? (
+              <ActivityIndicator color="white" size="small" />
+            ) : (
+              <Feather name="send" size={18} color="white" />
+            )}
+          </Pressable>
         </View>
-        <Pressable 
-          onPress={() => message.trim() && sendMessage.mutate({ content: message, type: "text" })}
-          style={[
-            styles.sendBtn, 
-            { 
-              backgroundColor: message.trim() ? theme.primary : theme.textSecondary + '40',
-              opacity: message.trim() ? 1 : 0.5
-            }
-          ]}
-          disabled={!message.trim() || sendMessage.isPending}
-          android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
-        >
-          {sendMessage.isPending ? (
-            <ActivityIndicator color="white" size="small" />
-          ) : (
-            <Feather name="send" size={18} color="white" />
-          )}
-        </Pressable>
       </View>
     </KeyboardAvoidingView>
   );
@@ -241,12 +271,19 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   header: { 
     flexDirection: 'row', 
-    justifyContent: 'space-between', 
     alignItems: 'center', 
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    minHeight: 64
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+    zIndex: 1000,
+  },
+  backButton: {
+    padding: 4,
   },
   callCircle: { 
     width: 44, 
@@ -262,7 +299,7 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     padding: 16,
-    paddingBottom: 8,
+    paddingTop: 16,
     flexGrow: 1
   },
   bubble: {
@@ -295,10 +332,14 @@ const styles = StyleSheet.create({
   inputRow: { 
     flexDirection: 'row', 
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingTop: 12,
     alignItems: 'flex-end', 
     borderTopWidth: 1,
-    minHeight: 60
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 3,
   },
   actionBtn: { 
     padding: 10,
@@ -307,9 +348,10 @@ const styles = StyleSheet.create({
   input: { 
     marginHorizontal: 8,
     paddingHorizontal: 16,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
     borderRadius: 22,
     fontSize: 15,
+    minHeight: 44,
     maxHeight: 100,
     borderWidth: 1,
     lineHeight: 20
