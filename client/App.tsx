@@ -18,9 +18,9 @@ import { LocationProvider } from "@/context/LocationContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { OnboardingProvider } from "@/context/OnboardingContext";
-import { NotificationAlertProvider } from "@/components/NotificationAlertProvider"; // ✅ ADD THIS
+import { NotificationAlertProvider } from "@/components/NotificationAlertProvider";
 
-// ✅ Configure notification handler BEFORE app renders
+// Configure notification handler BEFORE app renders
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -31,20 +31,22 @@ Notifications.setNotificationHandler({
   }),
 });
 
-function SeedDataOnMount() {
+// Hook to seed data on mount
+function useSeedData() {
   useEffect(() => {
-    apiRequest("POST", "/api/seed").catch(() => {});
+    apiRequest("POST", "/api/seed").catch((error) => {
+      console.error("Seed data error:", error);
+    });
   }, []);
-  return null;
 }
 
-// ✅ NEW: Clear notification alert flag on app start
-function ClearAlertFlag() {
+// Hook to clear notification alert flag on app start
+function useClearAlertFlag() {
   useEffect(() => {
     const clearFlag = async () => {
       try {
         await AsyncStorage.removeItem('@notification_alert_dismissed');
-        console.log('✅ Notification alert flag cleared - alert will show if needed');
+        console.log('✅ Notification alert flag cleared');
       } catch (error) {
         console.error('❌ Error clearing alert flag:', error);
       }
@@ -52,8 +54,29 @@ function ClearAlertFlag() {
     
     clearFlag();
   }, []);
-  
-  return null;
+}
+
+// Main App Component
+function AppContent() {
+  // Use hooks instead of separate components
+  useSeedData();
+  useClearAlertFlag();
+
+  return (
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={styles.root}>
+        <KeyboardProvider>
+          <NotificationAlertProvider>
+            <NavigationContainer>
+              <RootStackNavigator />
+            </NavigationContainer>
+          </NotificationAlertProvider>
+          
+          <StatusBar style="auto" />
+        </KeyboardProvider>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
+  );
 }
 
 export default function App() {
@@ -65,23 +88,7 @@ export default function App() {
             <LanguageProvider>
               <CartProvider>
                 <LocationProvider>
-                  <SeedDataOnMount />
-                  <ClearAlertFlag /> {/* ✅ ADD THIS */}
-                  
-                  <SafeAreaProvider>
-                    <GestureHandlerRootView style={styles.root}>
-                      <KeyboardProvider>
-                        {/* ✅ WRAP NavigationContainer with NotificationAlertProvider */}
-                        <NotificationAlertProvider>
-                          <NavigationContainer>
-                            <RootStackNavigator />
-                          </NavigationContainer>
-                        </NotificationAlertProvider>
-                        
-                        <StatusBar style="auto" />
-                      </KeyboardProvider>
-                    </GestureHandlerRootView>
-                  </SafeAreaProvider>
+                  <AppContent />
                 </LocationProvider>
               </CartProvider>
             </LanguageProvider>
