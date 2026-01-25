@@ -100,6 +100,8 @@ export default function ChatScreen() {
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       quality: 0.7,
+      // Fix for Android: disable editing UI to avoid the missing controls issue
+      ...(Platform.OS === 'android' && { allowsEditing: false })
     });
     if (!result.canceled) {
       sendMessage.mutate({ content: result.assets[0].uri, type: "image" });
@@ -111,6 +113,8 @@ export default function ChatScreen() {
       mediaTypes: "images" as any, 
       allowsEditing: true,
       quality: 0.7,
+      // Fix for Android: disable editing UI to avoid the missing controls issue
+      ...(Platform.OS === 'android' && { allowsEditing: false })
     });
     if (!result.canceled) {
       sendMessage.mutate({ content: result.assets[0].uri, type: "image" });
@@ -146,9 +150,13 @@ export default function ChatScreen() {
             <Feather name="arrow-left" size={24} color={theme.text} />
           </Pressable>
           
-          <View style={{ flex: 1, marginLeft: 12 }}>
+          {/* Fixed: Give proper width constraints for text container */}
+          <View style={styles.headerTextContainer}>
             <ThemedText type="h3" numberOfLines={1}>Order Support</ThemedText>
-            <ThemedText style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
+            <ThemedText 
+              style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}
+              numberOfLines={1}
+            >
               ID: {orderId.slice(-6)}
             </ThemedText>
           </View>
@@ -285,6 +293,13 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 4,
   },
+  // Fixed: Proper container for header text with flex and margin
+  headerTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 12,
+    justifyContent: 'center',
+  },
   callCircle: { 
     width: 44, 
     height: 44, 
@@ -295,7 +310,8 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
-    shadowRadius: 3
+    shadowRadius: 3,
+    flexShrink: 0,
   },
   messagesList: {
     padding: 16,
