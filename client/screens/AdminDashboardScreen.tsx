@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Pressable,
   TextInput,
+  Platform,
   Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,6 +22,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useLanguage } from "@/context/LanguageContext";
 import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
+
 
 // ---------------------- HELPERS ----------------------
 const formatCurrency = (amount: number) => {
@@ -912,29 +914,26 @@ const deleteStoreMutation = useMutation({
     }
   };
 
-const handleStoreDelete = (storeToDelete: StoreData) => {
-  console.log("handleStoreDelete called for store:", storeToDelete.id);
-  
-  Alert.alert(
-    "Delete Store",
-    `Are you sure you want to delete ${storeToDelete.name}? This will deactivate the store.`,
-    [
-      { 
-        text: "Cancel", 
-        style: "cancel",
-        onPress: () => console.log("Delete cancelled")
-      },
-      { 
-        text: "Delete", 
-        style: "destructive",
-        onPress: () => {
-          console.log("Delete confirmed, calling mutation for:", storeToDelete.id);
-          deleteStoreMutation.mutate(storeToDelete.id);
-        }
+const confirmAction = (title: string, message: string, onConfirm: () => void) => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${title}\n\n${message}`)) {
+        onConfirm();
       }
-    ]
-  );
-};
+    } else {
+      Alert.alert(title, message, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: onConfirm }
+      ]);
+    }
+  };
+
+ const handleStoreDelete = (storeToDelete: StoreData) => {
+    confirmAction(
+      "Delete Store",
+      `Delete ${storeToDelete.name}? This will deactivate the store.`,
+      () => deleteStoreMutation.mutate(storeToDelete.id)
+    );
+  };
 
 
 
@@ -951,24 +950,12 @@ const handleStoreDelete = (storeToDelete: StoreData) => {
   };
 
 const handleStaffDelete = (storeId: string, staffId: string, staffName?: string) => {
-  console.log("handleStaffDelete called for:", staffId);
-  
-  Alert.alert(
-    "Remove Staff",
-    `Are you sure you want to remove ${staffName || "this staff member"} from the store?`,
-    [
-      { text: "Cancel", style: "cancel" },
-      { 
-        text: "Remove", 
-        style: "destructive",
-        onPress: () => {
-          console.log("Staff delete confirmed:", staffId);
-          deleteStaffMutation.mutate({ storeId, staffId });
-        }
-      }
-    ]
-  );
-};
+    confirmAction(
+      "Remove Staff",
+      `Remove ${staffName || "this staff member"}?`,
+      () => deleteStaffMutation.mutate({ storeId, staffId })
+    );
+  };
 
   const handleToggleStatus = (userId: string, currentStatus: string) => {
     const nextStatus = currentStatus === "online" ? "offline" : "online";
