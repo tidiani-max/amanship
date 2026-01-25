@@ -326,21 +326,19 @@ function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: 
           </Pressable>
 
           {store && onDelete && (
-            <Pressable
-              style={[styles.deleteButton, { backgroundColor: theme.error + "20", borderWidth: 1, borderColor: theme.error }]}
-              onPress={() => {
-                console.log("🔴 Modal delete button pressed for store:", store.id);
-                if (onDelete) {
-                  console.log("🔴 Calling onDelete function");
-                  onDelete();
-                } else {
-                  console.error("❌ onDelete is undefined!");
-                }
-              }}
-            >
-              <ThemedText type="button" style={{ color: theme.error }}>Delete Store</ThemedText>
-            </Pressable>
-          )}
+  <Pressable
+    style={[styles.deleteButton, { backgroundColor: theme.error + "20", borderWidth: 1, borderColor: theme.error }]}
+    onPress={() => {
+      console.log("🔴 Modal delete button pressed for store:", store.id);
+      if (onDelete) {
+        console.log("🔴 Calling onDelete function");
+        onDelete(); // This will now call handleStoreDelete with the store already set
+      }
+    }}
+  >
+    <ThemedText type="button" style={{ color: theme.error }}>Delete Store</ThemedText>
+  </Pressable>
+)}
         </KeyboardAwareScrollViewCompat>
       </Card>
     </View>
@@ -792,33 +790,33 @@ export default function AdminDashboardScreen() {
     },
   });
 
-  const deleteStoreMutation = useMutation({
-    mutationFn: async (id: string) => {
-      console.log("🗑️ Delete mutation started for store:", id);
-      const response = await apiRequest("DELETE", `/api/admin/stores/${id}`);
-      
-      console.log("Delete response status:", response.status);
-      const responseData = await response.json();
-      console.log("Delete response data:", responseData);
-      
-      if (!response.ok) {
-        console.error("Delete error response:", responseData);
-        throw new Error(responseData.error || "Failed to delete store");
-      }
-      return responseData;
-    },
-    onSuccess: (data) => {
-      console.log("✅ Store deleted successfully:", data);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
-      setShowStoreModal(false);
-      setSelectedStore(null);
-      Alert.alert("Success", "Store deactivated successfully");
-    },
-    onError: (error: Error) => {
-      console.error("❌ Delete store mutation error:", error);
-      Alert.alert("Error", error.message);
-    },
-  });
+const deleteStoreMutation = useMutation({
+  mutationFn: async (id: string) => {
+    console.log("🗑️ Delete mutation started for store:", id);
+    const response = await apiRequest("DELETE", `/api/admin/stores/${id}`);
+    
+    console.log("Delete response status:", response.status);
+    const responseData = await response.json();
+    console.log("Delete response data:", responseData);
+    
+    if (!response.ok) {
+      console.error("Delete error response:", responseData);
+      throw new Error(responseData.error || "Failed to delete store");
+    }
+    return responseData;
+  },
+  onSuccess: (data) => {
+    console.log("✅ Store deleted successfully:", data);
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
+    setShowStoreModal(false);
+    setSelectedStore(null);
+    Alert.alert("Success", "Store deactivated successfully");
+  },
+  onError: (error: Error) => {
+    console.error("❌ Delete store mutation error:", error);
+    Alert.alert("Error", error.message);
+  },
+});
 
   // ---------------------- STAFF MUTATIONS ----------------------
   const addStaffMutation = useMutation({
@@ -914,34 +912,31 @@ export default function AdminDashboardScreen() {
     }
   };
 
-  const handleStoreDelete = () => {
-    if (!selectedStore) {
-      console.error("No store selected for deletion");
-      return;
-    }
-    
-    console.log("handleStoreDelete called for store:", selectedStore.id);
-    
-    Alert.alert(
-      "Delete Store",
-      `Are you sure you want to delete ${selectedStore.name}? This will deactivate the store.`,
-      [
-        { 
-          text: "Cancel", 
-          style: "cancel",
-          onPress: () => console.log("Delete cancelled")
-        },
-        { 
-          text: "Delete", 
-          style: "destructive",
-          onPress: () => {
-            console.log("Delete confirmed, calling mutation for:", selectedStore.id);
-            deleteStoreMutation.mutate(selectedStore.id);
-          }
+const handleStoreDelete = (storeToDelete: StoreData) => {
+  console.log("handleStoreDelete called for store:", storeToDelete.id);
+  
+  Alert.alert(
+    "Delete Store",
+    `Are you sure you want to delete ${storeToDelete.name}? This will deactivate the store.`,
+    [
+      { 
+        text: "Cancel", 
+        style: "cancel",
+        onPress: () => console.log("Delete cancelled")
+      },
+      { 
+        text: "Delete", 
+        style: "destructive",
+        onPress: () => {
+          console.log("Delete confirmed, calling mutation for:", storeToDelete.id);
+          deleteStoreMutation.mutate(storeToDelete.id);
         }
-      ]
-    );
-  };
+      }
+    ]
+  );
+};
+
+
 
   const handleStaffSubmit = (data: any) => {
     if (selectedStaff) {
@@ -955,25 +950,25 @@ export default function AdminDashboardScreen() {
     }
   };
 
-  const handleStaffDelete = (staffId: string) => {
-    console.log("handleStaffDelete called for:", staffId);
-    
-    Alert.alert(
-      "Remove Staff",
-      "Are you sure you want to remove this staff member from the store?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Remove", 
-          style: "destructive",
-          onPress: () => {
-            console.log("Staff delete confirmed:", staffId);
-            deleteStaffMutation.mutate({ storeId: currentStoreId, staffId });
-          }
+const handleStaffDelete = (storeId: string, staffId: string, staffName?: string) => {
+  console.log("handleStaffDelete called for:", staffId);
+  
+  Alert.alert(
+    "Remove Staff",
+    `Are you sure you want to remove ${staffName || "this staff member"} from the store?`,
+    [
+      { text: "Cancel", style: "cancel" },
+      { 
+        text: "Remove", 
+        style: "destructive",
+        onPress: () => {
+          console.log("Staff delete confirmed:", staffId);
+          deleteStaffMutation.mutate({ storeId, staffId });
         }
-      ]
-    );
-  };
+      }
+    ]
+  );
+};
 
   const handleToggleStatus = (userId: string, currentStatus: string) => {
     const nextStatus = currentStatus === "online" ? "offline" : "online";
@@ -1134,34 +1129,35 @@ export default function AdminDashboardScreen() {
           </View>
 
           {stores.map((store) => (
-            <StoreCard
-              key={store.id}
-              store={store}
-              onEdit={() => {
-                setSelectedStore(store);
-                setShowStoreModal(true);
-              }}
-              onDelete={() => {
-                console.log("StoreCard onDelete triggered for:", store.id);
-                setSelectedStore(store);
-                handleStoreDelete();
-              }}
-              onAddStaff={() => {
-                setCurrentStoreId(store.id);
-                setSelectedStaff(null);
-                setShowStaffModal(true);
-              }}
-              onEditStaff={(staff) => {
-                setCurrentStoreId(store.id);
-                setSelectedStaff(staff);
-                setShowStaffModal(true);
-              }}
-              onDeleteStaff={(staffId) => {
-                setCurrentStoreId(store.id);
-                handleStaffDelete(staffId);
-              }}
-              onToggleStatus={handleToggleStatus}
-            />
+ <StoreCard
+  key={store.id}
+  store={store}
+  onEdit={() => {
+    setSelectedStore(store);
+    setShowStoreModal(true);
+  }}
+  onDelete={() => {
+    console.log("StoreCard onDelete triggered for:", store.id);
+    handleStoreDelete(store); // Pass the store directly
+  }}
+  onAddStaff={() => {
+    setCurrentStoreId(store.id);
+    setSelectedStaff(null);
+    setShowStaffModal(true);
+  }}
+  onEditStaff={(staff) => {
+    setCurrentStoreId(store.id);
+    setSelectedStaff(staff);
+    setShowStaffModal(true);
+  }}
+  onDeleteStaff={(staffId) => {
+    const staffMember = store.staff.find(s => s.id === staffId);
+    const staffName = staffMember?.user?.name || staffMember?.user?.username || "this staff member";
+    handleStaffDelete(store.id, staffId, staffName);
+  }}
+  onToggleStatus={handleToggleStatus}
+/>
+
           ))}
 
           {stores.length === 0 && (
@@ -1183,30 +1179,33 @@ export default function AdminDashboardScreen() {
       </ScrollView>
 
       <StoreModal
-        visible={showStoreModal}
-        store={selectedStore}
-        onClose={() => {
-          setShowStoreModal(false);
-          setSelectedStore(null);
-        }}
-        onSubmit={handleStoreSubmit}
-        onDelete={selectedStore ? handleStoreDelete : undefined}
-        isLoading={isSubmitting}
-      />
+  visible={showStoreModal}
+  store={selectedStore}
+  onClose={() => {
+    setShowStoreModal(false);
+    setSelectedStore(null);
+  }}
+  onSubmit={handleStoreSubmit}
+  onDelete={selectedStore ? () => handleStoreDelete(selectedStore) : undefined}
+  isLoading={isSubmitting}
+/>
 
       <StaffModal
-        visible={showStaffModal}
-        storeId={currentStoreId}
-        storeName={stores.find(s => s.id === currentStoreId)?.name || ""}
-        staff={selectedStaff}
-        onClose={() => {
-          setShowStaffModal(false);
-          setSelectedStaff(null);
-        }}
-        onSubmit={handleStaffSubmit}
-        onDelete={selectedStaff ? () => handleStaffDelete(selectedStaff.id) : undefined}
-        isLoading={isSubmitting}
-      />
+  visible={showStaffModal}
+  storeId={currentStoreId}
+  storeName={stores.find(s => s.id === currentStoreId)?.name || ""}
+  staff={selectedStaff}
+  onClose={() => {
+    setShowStaffModal(false);
+    setSelectedStaff(null);
+  }}
+  onSubmit={handleStaffSubmit}
+  onDelete={selectedStaff ? () => {
+    const staffName = selectedStaff.user?.name || selectedStaff.user?.username || "this staff member";
+    handleStaffDelete(currentStoreId, selectedStaff.id, staffName);  // ✅ CORRECT - passing all 3 args
+  } : undefined}
+  isLoading={isSubmitting}
+/>
     </ThemedView>
   );
 }
