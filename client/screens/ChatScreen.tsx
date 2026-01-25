@@ -151,17 +151,7 @@ export default function ChatScreen() {
           </Pressable>
           
           {/* Fixed: Give proper width constraints for text container */}
-          <View style={styles.headerTextContainer}>
-            <ThemedText type="h3" numberOfLines={1} style={{ flexShrink: 1 }}>
-              Order Support
-            </ThemedText>
-            <ThemedText 
-              style={{ color: theme.textSecondary, fontSize: 12, marginTop: 4 }}
-              numberOfLines={1}
-            >
-              ID: {orderId.slice(-6)}
-            </ThemedText>
-          </View>
+         
           
           <Pressable 
             onPress={handleCall} 
