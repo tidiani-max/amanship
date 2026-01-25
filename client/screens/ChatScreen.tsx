@@ -135,7 +135,19 @@ export default function ChatScreen() {
     >
       <View style={{ flex: 1 }}>
         {/* Fixed Header with Safe Area */}
-       
+        <View style={[
+          styles.header, 
+          { 
+            borderBottomColor: theme.border, 
+            backgroundColor: theme.cardBackground,
+            paddingTop: insets.top + 16,
+          }
+        ]}>
+          
+          
+          {/* Fixed: Give proper width constraints for text container */}
+         
+        </View>
 
         {/* Messages List */}
         <FlatList
