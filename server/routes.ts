@@ -1007,6 +1007,45 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 function toRad(degrees: number): number {
   return degrees * (Math.PI / 180);
 }
+
+app.get("/api/geocode/reverse", async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+    
+    if (!lat || !lng) {
+      return res.status(400).json({ error: "lat and lng required" });
+    }
+
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`,
+      { headers: { "User-Agent": "KilatGoApp" } }
+    );
+    
+    const data = await response.json();
+    
+    const address = data.address || {};
+    const locationName = 
+      address.neighbourhood || 
+      address.suburb || 
+      address.village ||
+      address.city_district ||
+      address.city ||
+      address.county ||
+      "Current Location";
+    
+    res.json({ 
+      locationName: String(locationName),
+      fullAddress: data.display_name 
+    });
+  } catch (error) {
+    console.error("Geocoding error:", error);
+    res.json({ 
+      locationName: "Current Location",
+      fullAddress: "Location unavailable"
+    });
+  }
+});
+
 app.post("/api/driver/location/update", async (req, res) => {
   try {
     const { driverId, orderId, latitude, longitude, heading, speed, accuracy } = req.body;

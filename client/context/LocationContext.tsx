@@ -76,26 +76,14 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     staleTime: 30000,
   });
 
-  // Reverse geocode function
+  // Reverse geocode function (using server to avoid CORS)
   const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`,
-        { headers: { "User-Agent": "KilatGoApp" } }
+        `${getApiUrl()}/api/geocode/reverse?lat=${lat}&lng=${lng}`
       );
       const data = await response.json();
-      
-      const address = data.address || {};
-      const locationName = 
-        address.neighbourhood || 
-        address.suburb || 
-        address.village ||
-        address.city_district ||
-        address.city ||
-        address.county ||
-        "Current Location";
-      
-      return String(locationName);
+      return String(data.locationName || "Current Location");
     } catch (error) {
       console.error("Reverse geocoding error:", error);
       return "Current Location";
