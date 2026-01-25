@@ -13,6 +13,7 @@ import express, { Express } from 'express';
 import fs from "fs";
 import path from 'path';
 import multer from "multer";
+import { driverLocations } from "../shared/schema";
 
 // ✅ IMPORT NOTIFICATION FUNCTIONS (removed local duplicate)
 import { 
@@ -821,6 +822,7 @@ return res.status(200).json(taken);
 
 
   // ==================== 5. DRIVER ROUTES ====================
+
 console.log("🚗 Registering driver routes...");
 
 app.get("/api/driver/dashboard", async (req, res) => {
@@ -986,7 +988,189 @@ app.put("/api/driver/orders/:id/status", async (req, res) => {
   }
 });
 
-  // ==================== 6. CATEGORIES ====================
+
+
+// neew routes
+
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Radius of Earth in km
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function toRad(degrees: number): number {
+  return degrees * (Math.PI / 180);
+}
+app.post("/api/driver/location/update", async (req, res) => {
+  try {
+    const { driverId, orderId, latitude, longitude, heading, speed, accuracy } = req.body;
+
+    if (!driverId || !latitude || !longitude) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Verify driver is assigned to this order
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(and(
+        eq(orders.id, orderId),
+        eq(orders.driverId, driverId),
+        eq(orders.status, "delivering")
+      ))
+      .limit(1);
+
+    if (!order) {
+      return res.status(403).json({ error: "Not authorized or order not active" });
+    }
+
+    // Save location update
+    const [location] = await db
+      .insert(driverLocations)
+      .values({
+        driverId,
+        orderId,
+        latitude: String(latitude),
+        longitude: String(longitude),
+        heading: heading ? String(heading) : null,
+        speed: speed ? String(speed) : null,
+        accuracy: accuracy ? String(accuracy) : null,
+      })
+      .returning();
+
+    // Calculate ETA based on distance and speed
+    const customerLat = parseFloat(order.customerLat || "0");
+    const customerLng = parseFloat(order.customerLng || "0");
+    const driverLat = parseFloat(latitude);
+    const driverLng = parseFloat(longitude);
+
+    const distance = calculateDistance(driverLat, driverLng, customerLat, customerLng);
+    const avgSpeed = speed ? parseFloat(speed) : 5; // Default 5 m/s if no speed data
+    const etaMinutes = Math.ceil((distance * 1000) / (avgSpeed * 60)); // Convert km to meters, then to minutes
+
+    // Update order with ETA
+    await db
+      .update(orders)
+      .set({ 
+        estimatedArrival: new Date(Date.now() + etaMinutes * 60000),
+        actualDistance: String(distance)
+      })
+      .where(eq(orders.id, orderId));
+
+    res.json({ 
+      success: true, 
+      etaMinutes,
+      distance: distance.toFixed(2)
+    });
+  } catch (error) {
+    console.error("❌ Location update error:", error);
+    res.status(500).json({ error: "Failed to update location" });
+  }
+});
+
+// 📍 Customer: Get driver's latest location
+app.get("/api/driver/location/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    // Get the order
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    if (!order.driverId) {
+      return res.json({ 
+        hasDriver: false,
+        message: "No driver assigned yet"
+      });
+    }
+
+    // Get latest driver location
+    const locations = await db
+      .select()
+      .from(driverLocations)
+      .where(eq(driverLocations.orderId, orderId))
+      .orderBy(sql`${driverLocations.timestamp} DESC`)
+      .limit(1);
+
+    if (!locations.length) {
+      return res.json({ 
+        hasDriver: true,
+        driverId: order.driverId,
+        hasLocation: false,
+        message: "Driver location not available yet"
+      });
+    }
+
+    const location = locations[0];
+
+    // Calculate distance to customer
+    const customerLat = parseFloat(order.customerLat || "0");
+    const customerLng = parseFloat(order.customerLng || "0");
+    const driverLat = parseFloat(location.latitude);
+    const driverLng = parseFloat(location.longitude);
+
+    const distance = calculateDistance(driverLat, driverLng, customerLat, customerLng);
+
+    res.json({
+      hasDriver: true,
+      hasLocation: true,
+      driverId: order.driverId,
+      location: {
+        latitude: parseFloat(location.latitude),
+        longitude: parseFloat(location.longitude),
+        heading: location.heading ? parseFloat(location.heading) : null,
+        speed: location.speed ? parseFloat(location.speed) : null,
+        accuracy: location.accuracy ? parseFloat(location.accuracy) : null,
+        timestamp: location.timestamp,
+      },
+      distance: parseFloat(distance.toFixed(2)),
+      estimatedArrival: order.estimatedArrival,
+    });
+  } catch (error) {
+    console.error("❌ Get driver location error:", error);
+    res.status(500).json({ error: "Failed to get location" });
+  }
+});
+
+// 🗺️ Get route history for order
+app.get("/api/driver/route/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const route = await db
+      .select()
+      .from(driverLocations)
+      .where(eq(driverLocations.orderId, orderId))
+      .orderBy(sql`${driverLocations.timestamp} ASC`);
+
+    const coordinates = route.map(loc => ({
+      latitude: parseFloat(loc.latitude),
+      longitude: parseFloat(loc.longitude),
+      timestamp: loc.timestamp,
+    }));
+
+    res.json({ coordinates });
+  } catch (error) {
+    console.error("❌ Get route error:", error);
+    res.status(500).json({ error: "Failed to get route" });
+  }
+});
+
+
+// ==================== 6. CATEGORIES ====================
   console.log("📂 Registering category routes...");
   
  app.get("/api/categories", async (req, res) => {

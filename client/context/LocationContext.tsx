@@ -33,11 +33,15 @@ interface LocationContextType {
   manualAddress: string | null;
   addressLabel: string | null;
   gpsLocationName: string | null;
+  accuracy: number | null; // GPS accuracy in meters
+  heading: number | null; // Direction user/driver is facing
   requestLocationPermission: () => Promise<boolean>;
   refreshStoreAvailability: () => void;
   setManualLocation: (location: ManualLocation) => void;
   clearManualLocation: () => void;
   useCurrentLocation: () => Promise<void>;
+  startContinuousTracking: () => void; // For drivers
+  stopContinuousTracking: () => void;
 }
 
 const LocationContext = createContext<LocationContextType | undefined>(undefined);
@@ -50,6 +54,9 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const [manualAddress, setManualAddress] = useState<string | null>(null);
   const [addressLabel, setAddressLabel] = useState<string | null>(null);
   const [gpsLocationName, setGpsLocationName] = useState<string | null>(null);
+  const [accuracy, setAccuracy] = useState<number | null>(null);
+  const [heading, setHeading] = useState<number | null>(null);
+  const [locationSubscription, setLocationSubscription] = useState<Location.LocationSubscription | null>(null);
 
   const {
     data: availabilityData,
@@ -69,7 +76,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     staleTime: 30000,
   });
 
-  // Reverse geocode function to get place name from coordinates
+  // Reverse geocode function
   const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
     try {
       const response = await fetch(
@@ -88,14 +95,14 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         address.county ||
         "Current Location";
       
-      console.log("📍 Reverse geocoded location:", locationName);
-      return String(locationName); // Ensure it's always a string
+      return String(locationName);
     } catch (error) {
       console.error("Reverse geocoding error:", error);
       return "Current Location";
     }
   };
 
+  // ===== HIGH ACCURACY LOCATION REQUEST =====
   const requestLocationPermission = useCallback(async (): Promise<boolean> => {
     try {
       if (Platform.OS === "web") {
@@ -103,8 +110,8 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
             enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 60000,
+            timeout: 15000,
+            maximumAge: 0, // Force fresh location
           });
         });
         
@@ -112,9 +119,11 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         const lng = position.coords.longitude;
         
         setUserLocation({ latitude: lat, longitude: lng });
+        setAccuracy(position.coords.accuracy);
+        setHeading(position.coords.heading);
         
         const placeName = await reverseGeocode(lat, lng);
-        setGpsLocationName(placeName || "Current Location");
+        setGpsLocationName(placeName);
         
         setLocationStatus("granted");
         setIsManualLocation(false);
@@ -130,22 +139,28 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
 
+      // ✅ REQUEST HIGHEST ACCURACY POSSIBLE
       const currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+        accuracy: Location.Accuracy.BestForNavigation, // Highest accuracy
       });
 
       const lat = currentLocation.coords.latitude;
       const lng = currentLocation.coords.longitude;
 
       setUserLocation({ latitude: lat, longitude: lng });
+      setAccuracy(currentLocation.coords.accuracy);
+      setHeading(currentLocation.coords.heading || null);
       
       const placeName = await reverseGeocode(lat, lng);
-      setGpsLocationName(placeName || "Current Location");
+      setGpsLocationName(placeName);
       
       setLocationStatus("granted");
       setIsManualLocation(false);
       setManualAddress(null);
       setAddressLabel(null);
+      
+      console.log("📍 GPS Accuracy:", currentLocation.coords.accuracy, "meters");
+      
       return true;
     } catch (error) {
       console.error("Location error:", error);
@@ -155,14 +170,72 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // ===== CONTINUOUS TRACKING (For Drivers) =====
+  const startContinuousTracking = useCallback(async () => {
+    try {
+      console.log("🚗 Starting continuous location tracking...");
+      
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        console.error("❌ Location permission denied");
+        return;
+      }
+
+      // Subscribe to location updates
+      const subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 3000, // Update every 3 seconds
+          distanceInterval: 10, // Or every 10 meters moved
+        },
+        (location) => {
+          const { latitude, longitude, heading, speed, accuracy } = location.coords;
+          
+          setUserLocation({ latitude, longitude });
+          setAccuracy(accuracy);
+          setHeading(heading || null);
+          
+          console.log("📍 Location update:", {
+            lat: latitude.toFixed(6),
+            lng: longitude.toFixed(6),
+            accuracy: accuracy?.toFixed(1),
+            speed: speed?.toFixed(1),
+          });
+        }
+      );
+
+      setLocationSubscription(subscription);
+      console.log("✅ Continuous tracking started");
+    } catch (error) {
+      console.error("❌ Failed to start tracking:", error);
+    }
+  }, []);
+
+  const stopContinuousTracking = useCallback(() => {
+    if (locationSubscription) {
+      locationSubscription.remove();
+      setLocationSubscription(null);
+      console.log("🛑 Continuous tracking stopped");
+    }
+  }, [locationSubscription]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (locationSubscription) {
+        locationSubscription.remove();
+      }
+    };
+  }, [locationSubscription]);
+
   const setManualLocationFunc = useCallback((manualLoc: ManualLocation) => {
     setUserLocation({
       latitude: manualLoc.latitude,
       longitude: manualLoc.longitude,
     });
     setIsManualLocation(true);
-    setManualAddress(manualLoc.address || "Manual Address");
-    setAddressLabel(manualLoc.label || "Selected Location");
+    setManualAddress(manualLoc.address);
+    setAddressLabel(manualLoc.label);
     setGpsLocationName(null);
     setLocationStatus("granted");
     setErrorMessage(null);
@@ -178,6 +251,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     await requestLocationPermission();
   }, [requestLocationPermission]);
 
+  // Initial permission check
   useEffect(() => {
     const checkInitialPermission = async () => {
       if (Platform.OS === "web") {
@@ -185,9 +259,9 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
           try {
             const position = await new Promise<GeolocationPosition>((resolve, reject) => {
               navigator.geolocation.getCurrentPosition(resolve, reject, {
-                enableHighAccuracy: false,
-                timeout: 5000,
-                maximumAge: 300000,
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 60000,
               });
             });
             
@@ -195,9 +269,10 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
             const lng = position.coords.longitude;
             
             setUserLocation({ latitude: lat, longitude: lng });
+            setAccuracy(position.coords.accuracy);
             
             const placeName = await reverseGeocode(lat, lng);
-            setGpsLocationName(placeName || "Current Location");
+            setGpsLocationName(placeName);
             
             setLocationStatus("granted");
           } catch {
@@ -213,16 +288,17 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       if (status === "granted") {
         try {
           const currentLocation = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
+            accuracy: Location.Accuracy.BestForNavigation,
           });
           
           const lat = currentLocation.coords.latitude;
           const lng = currentLocation.coords.longitude;
           
           setUserLocation({ latitude: lat, longitude: lng });
+          setAccuracy(currentLocation.coords.accuracy);
           
           const placeName = await reverseGeocode(lat, lng);
-          setGpsLocationName(placeName || "Current Location");
+          setGpsLocationName(placeName);
           
           setLocationStatus("granted");
         } catch {
@@ -252,7 +328,6 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const codAllowed = Boolean(availabilityData?.codAllowed);
   const estimatedDeliveryMinutes = availabilityData?.estimatedDeliveryMinutes ? Number(availabilityData.estimatedDeliveryMinutes) : null;
 
-  // Ensure all values are properly typed before rendering
   const contextValue: LocationContextType = {
     location: userLocation,
     locationStatus,
@@ -266,11 +341,15 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     manualAddress,
     addressLabel,
     gpsLocationName,
+    accuracy,
+    heading,
     requestLocationPermission,
     refreshStoreAvailability,
     setManualLocation: setManualLocationFunc,
     clearManualLocation,
     useCurrentLocation,
+    startContinuousTracking,
+    stopContinuousTracking,
   };
 
   return (
