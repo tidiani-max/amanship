@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import { View, StyleSheet, ScrollView, ActivityIndicator, Linking, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRoute, RouteProp } from "@react-navigation/native";
+import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
@@ -11,11 +12,13 @@ import { Spacing } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type OrderTrackingRouteProp = RouteProp<RootStackParamList, "OrderTracking">;
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function OrderTrackingScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const route = useRoute<OrderTrackingRouteProp>();
+  const navigation = useNavigation<NavigationProp>();
   const orderId = route.params.orderId;
 
   const [driverLocation, setDriverLocation] = useState({ lat: 13.7548, lng: 100.4990 });
@@ -94,8 +97,13 @@ export default function OrderTrackingScreen() {
   };
 
   const handleChatDriver = () => {
-    // Navigate to chat screen (implement based on your navigation)
-    Alert.alert("Chat", "Chat feature coming soon");
+    if (order?.id) {
+      navigation.navigate("Chat", { 
+        orderId: order.id
+      });
+    } else {
+      Alert.alert("Chat Unavailable", "Order information not available");
+    }
   };
 
   if (isLoading) {
