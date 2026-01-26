@@ -115,6 +115,14 @@ export default function OrderTrackingScreen() {
   const orderNumber = orderData?.orderNumber || "Loading...";
   const deliveryPin = orderData?.deliveryPin || "****";
   
+  console.log('📋 Order Data:', {
+    orderNumber,
+    deliveryPin,
+    driverName,
+    driverPhone,
+    fullOrderData: orderData
+  });
+  
   // Calculate ETA from estimatedArrival timestamp
   const estimatedMinutes = orderData?.estimatedArrival 
     ? Math.max(1, Math.ceil((new Date(orderData.estimatedArrival).getTime() - Date.now()) / 60000))
@@ -443,17 +451,24 @@ export default function OrderTrackingScreen() {
             <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>{driverPhone}</p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: '50%',
-              backgroundColor: '#1E88E5',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
+            <button 
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '50%',
+                backgroundColor: '#1E88E5',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              onClick={() => {
+                // Navigate to chat - adjust based on your routing setup
+                const chatUrl = `/chat?orderId=${orderId}`;
+                window.location.href = chatUrl;
+              }}
+            >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
