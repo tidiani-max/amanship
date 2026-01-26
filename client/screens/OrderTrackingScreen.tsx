@@ -22,38 +22,47 @@ export default function OrderTrackingScreen() {
   const [loading, setLoading] = useState(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // DEMO: Replace with actual orderId from navigation params
-  const orderId = "demo-order-id";
+  // Get orderId from URL params (React Router)
+  const urlParams = new URLSearchParams(window.location.search);
+  const orderId = urlParams.get('orderId') || 'demo-order-id';
 
   // Fetch order details
   useEffect(() => {
     const fetchOrderData = async () => {
       try {
-        const response = await fetch(`/api/orders/${orderId}`);
+        const baseUrl = process.env.EXPO_PUBLIC_DOMAIN || '';
+        const response = await fetch(`${baseUrl}/api/orders/${orderId}`);
+        if (!response.ok) throw new Error('Failed to fetch order');
+        
         const data = await response.json();
         setOrderData(data);
         
-        // Set customer location from order
-        if (data.customerLat && data.customerLng) {
-          // Update customer location state if needed
-        }
+        console.log('📦 Order loaded:', data);
         setLoading(false);
       } catch (error) {
         console.error("Failed to fetch order:", error);
         setLoading(false);
       }
     };
-    fetchOrderData();
+    
+    if (orderId && orderId !== 'demo-order-id') {
+      fetchOrderData();
+    } else {
+      setLoading(false);
+    }
   }, [orderId]);
 
   // Poll driver location
   useEffect(() => {
-    if (!orderId) return;
+    if (!orderId || orderId === 'demo-order-id') return;
 
     const pollDriverLocation = async () => {
       try {
-        const response = await fetch(`/api/driver/location/${orderId}`);
+        const baseUrl = process.env.EXPO_PUBLIC_DOMAIN || '';
+        const response = await fetch(`${baseUrl}/api/driver/location/${orderId}`);
         const data = await response.json();
+
+        console.log('📍 Driver location update:', data);
 
         if (data.hasLocation && data.location) {
           setDriverLocation({
@@ -90,6 +99,35 @@ export default function OrderTrackingScreen() {
     }
   }, [driverLocation, heading]);
 
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f9fafb' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚚</div>
+          <div style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937' }}>Loading order details...</div>
+        </div>
+      </div>
+    );
+  }
+
+  const driverName = orderData?.driverName || "Driver";
+  const driverPhone = orderData?.driverPhone || "N/A";
+  const orderNumber = orderData?.orderNumber || "Loading...";
+  const deliveryPin = orderData?.deliveryPin || "****";
+  
+  // Calculate ETA from estimatedArrival timestamp
+  const estimatedMinutes = orderData?.estimatedArrival 
+    ? Math.max(1, Math.ceil((new Date(orderData.estimatedArrival).getTime() - Date.now()) / 60000))
+    : 5;
+
+  // Use actual customer coordinates from order
+  const actualCustomerLat = orderData?.customerLat 
+    ? parseFloat(orderData.customerLat) 
+    : customerLocation.lat;
+  const actualCustomerLng = orderData?.customerLng 
+    ? parseFloat(orderData.customerLng) 
+    : customerLocation.lng;
+
   const mapHTML = `
 <!DOCTYPE html>
 <html>
@@ -123,8 +161,8 @@ export default function OrderTrackingScreen() {
 <body>
   <div id="map"></div>
   <script>
-    const customerLat = ${customerLocation.lat};
-    const customerLng = ${customerLocation.lng};
+    const customerLat = ${actualCustomerLat};
+    const customerLng = ${actualCustomerLng};
     
     const map = L.map('map', {
       zoomControl: false,
@@ -234,25 +272,6 @@ export default function OrderTrackingScreen() {
 </body>
 </html>
   `;
-
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f9fafb' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚚</div>
-          <div style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937' }}>Loading order details...</div>
-        </div>
-      </div>
-    );
-  }
-
-  const driverName = orderData?.driverName || "Alex Rider";
-  const driverPhone = orderData?.driverPhone || "+62 812-3456-7890";
-  const orderNumber = orderData?.orderNumber || "#12345";
-  const deliveryPin = orderData?.deliveryPin || "5789";
-  const estimatedMinutes = orderData?.estimatedArrival 
-    ? Math.ceil((new Date(orderData.estimatedArrival).getTime() - Date.now()) / 60000)
-    : Math.floor(Math.random() * 4) + 5;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f9fafb' }}>
