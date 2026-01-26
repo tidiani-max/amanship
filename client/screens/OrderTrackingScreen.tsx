@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
-import { View, StyleSheet, ScrollView, ActivityIndicator, Linking, Pressable, Alert, Animated, Dimensions, Platform } from "react-native";
+import React, { useEffect, useState, useRef } from "react";
+import { View, StyleSheet, ScrollView, ActivityIndicator, Linking, Pressable, Alert, Animated, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
+import { WebView } from 'react-native-webview'; // ADD THIS IMPORT
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
@@ -19,87 +20,13 @@ const isSmallDevice = SCREEN_WIDTH < 375;
 const isMediumDevice = SCREEN_WIDTH >= 375 && SCREEN_WIDTH < 768;
 const isTablet = SCREEN_WIDTH >= 768;
 
-// ==================== SIMPLE MAP COMPONENT FOR MOBILE ====================
-function SimpleMapView({ driverLat, driverLng, customerLat, customerLng, showRoute, theme }: any) {
-  const pulseAnim = React.useRef(new Animated.Value(1)).current;
-  
-  React.useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.2,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, []);
-
-  // Calculate simple distance
-  const distance = Math.sqrt(
-    Math.pow(driverLat - customerLat, 2) + Math.pow(driverLng - customerLng, 2)
-  ) * 111; // Rough km conversion
-
-  return (
-    <View style={[styles.mapContainer, { backgroundColor: theme.backgroundDefault }]}>
-      {/* Simple visual representation */}
-      <View style={styles.mapContent}>
-        {/* Customer Location */}
-        <View style={[styles.locationMarker, { top: '70%', left: '60%' }]}>
-          <View style={[styles.customerPin, { backgroundColor: theme.primary }]}>
-            <Feather name="home" size={24} color="white" />
-          </View>
-          <ThemedText type="small" style={{ marginTop: 4, fontWeight: '600' }}>Your Location</ThemedText>
-        </View>
-
-        {/* Driver Location */}
-        <Animated.View style={[
-          styles.locationMarker, 
-          { 
-            top: '30%', 
-            left: '40%',
-            transform: [{ scale: pulseAnim }]
-          }
-        ]}>
-          <View style={[styles.driverPin, { backgroundColor: theme.warning }]}>
-            <Feather name="truck" size={24} color="white" />
-          </View>
-          <ThemedText type="small" style={{ marginTop: 4, fontWeight: '600' }}>Driver</ThemedText>
-        </Animated.View>
-
-        {/* Route Line */}
-        {showRoute && (
-          <View style={styles.routeLineContainer}>
-            <View style={[styles.routeLine, { backgroundColor: theme.warning }]} />
-          </View>
-        )}
-
-        {/* Distance Badge */}
-        <View style={[styles.mapBadge, { backgroundColor: 'white', borderColor: theme.border }]}>
-          <Feather name="navigation" size={16} color={theme.primary} />
-          <ThemedText type="small" style={{ fontWeight: '600', marginLeft: 8 }}>
-            ~{distance.toFixed(1)} km away
-          </ThemedText>
-        </View>
-      </View>
-    </View>
-  );
-}
-
 // ==================== PICKING ANIMATION COMPONENT ====================
 function PickingAnimation() {
   const { theme } = useTheme();
-  const moveAnim = React.useRef(new Animated.Value(0)).current;
-  const rotateAnim = React.useRef(new Animated.Value(0)).current;
+  const moveAnim = useRef(new Animated.Value(0)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
 
-  React.useEffect(() => {
+  useEffect(() => {
     const moveAnimation = Animated.loop(
       Animated.sequence([
         Animated.timing(moveAnim, {
@@ -202,10 +129,10 @@ function PickingAnimation() {
 // ==================== PACKING ANIMATION COMPONENT ====================
 function PackingAnimation() {
   const { theme } = useTheme();
-  const scaleAnim = React.useRef(new Animated.Value(1)).current;
-  const rotateAnim = React.useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
 
-  React.useEffect(() => {
+  useEffect(() => {
     const scaleAnimation = Animated.loop(
       Animated.sequence([
         Animated.timing(scaleAnim, {
@@ -280,9 +207,9 @@ function PackingAnimation() {
 // ==================== WAITING FOR DRIVER COMPONENT ====================
 function WaitingForDriver() {
   const { theme } = useTheme();
-  const pulseAnim = React.useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  React.useEffect(() => {
+  useEffect(() => {
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -338,6 +265,8 @@ export default function OrderTrackingScreen() {
 
   const [driverLocation, setDriverLocation] = useState({ lat: 13.7548, lng: 100.4990 });
   const [customerLocation] = useState({ lat: 13.7563, lng: 100.5018 });
+  const [heading, setHeading] = useState(45);
+  const webViewRef = useRef<WebView>(null); // CHANGED FROM HTMLIFrameElement
 
   const fetchWithErrorHandling = async (url: string) => {
     try {
@@ -396,6 +325,9 @@ export default function OrderTrackingScreen() {
         lat: locationData.location.latitude,
         lng: locationData.location.longitude,
       });
+      if (locationData.location.heading) {
+        setHeading(locationData.location.heading);
+      }
     }
   }, [locationData]);
 
@@ -406,10 +338,27 @@ export default function OrderTrackingScreen() {
           lat: prev.lat + (Math.random() - 0.5) * 0.0005,
           lng: prev.lng + (Math.random() - 0.5) * 0.0005
         }));
+        setHeading(prev => (prev + 15) % 360);
       }, 3000);
       return () => clearInterval(interval);
     }
   }, [locationData, order?.status]);
+
+  // UPDATED: Send messages to WebView instead of iframe
+  useEffect(() => {
+    if (webViewRef.current && (order?.status === "delivering" || order?.status === "packed")) {
+      const message = JSON.stringify({
+        type: 'updateDriver',
+        lat: driverLocation.lat,
+        lng: driverLocation.lng,
+        heading: heading
+      });
+      webViewRef.current.injectJavaScript(`
+        window.postMessage(${message}, '*');
+        true;
+      `);
+    }
+  }, [driverLocation, heading, order?.status]);
 
   const handleCallDriver = () => {
     if (order?.driverPhone) {
@@ -468,6 +417,172 @@ export default function OrderTrackingScreen() {
   const showDriverContact = isDelivering && order.driverId;
   const showMap = isPacked || isDelivering || isDelivered;
   const showRoute = isDelivering || isDelivered;
+
+  const mapHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { width: 100%; height: 100vh; }
+    .leaflet-container { background: #f5f5f5; }
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 0.6; }
+      50% { transform: scale(1.3); opacity: 0.3; }
+      100% { transform: scale(1); opacity: 0.6; }
+    }
+    .pulse-ring {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 215, 0, 0.3);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+      top: -5px;
+      left: -5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    const customerLat = ${customerLocation.lat};
+    const customerLng = ${customerLocation.lng};
+    const showRoute = ${showRoute};
+    
+    const map = L.map('map', {
+      zoomControl: false,
+      attributionControl: false
+    }).setView([customerLat, customerLng], 15);
+    
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19
+    }).addTo(map);
+    
+    const customerIcon = L.divIcon({
+      html: \`
+        <div style="position: relative; width: 40px; height: 48px;">
+          <div style="
+            background: #1E88E5; 
+            width: 40px; 
+            height: 40px; 
+            border-radius: 50% 50% 50% 0; 
+            transform: rotate(-45deg);
+            border: 4px solid white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="white" style="transform: rotate(45deg);">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+          </div>
+        </div>
+      \`,
+      className: '',
+      iconSize: [40, 48],
+      iconAnchor: [20, 48]
+    });
+    L.marker([customerLat, customerLng], { icon: customerIcon }).addTo(map);
+    
+    let driverMarker = null;
+    let routeLine = null;
+
+    function updateDriverLocation(lat, lng, heading) {
+      const driverPos = [lat, lng];
+      const customerPos = [customerLat, customerLng];
+
+      if (!driverMarker) {
+        const driverIcon = L.divIcon({
+          html: \`
+            <div style="position: relative; width: 50px; height: 50px;">
+              <div class="pulse-ring"></div>
+              <div id="driver-icon" style="
+                position: absolute;
+                width: 50px;
+                height: 50px;
+                transform: rotate(\${heading}deg);
+                transition: transform 0.5s ease;
+              ">
+                <svg width="50" height="50" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="22" fill="#FFD700" stroke="white" stroke-width="4"/>
+                  <g transform="translate(50, 50)">
+                    <circle cx="-8" cy="8" r="4" fill="#333"/>
+                    <circle cx="8" cy="8" r="4" fill="#333"/>
+                    <rect x="-10" y="0" width="20" height="6" rx="2" fill="#333"/>
+                    <rect x="-2" y="-8" width="4" height="10" rx="2" fill="#666"/>
+                  </g>
+                </svg>
+              </div>
+            </div>
+          \`,
+          className: '',
+          iconSize: [50, 50],
+          iconAnchor: [25, 25]
+        });
+        driverMarker = L.marker(driverPos, { icon: driverIcon }).addTo(map);
+      } else {
+        driverMarker.setLatLng(driverPos);
+        const icon = document.getElementById('driver-icon');
+        if (icon) {
+          icon.style.transform = 'rotate(' + heading + 'deg)';
+        }
+      }
+
+      if (showRoute) {
+        if (routeLine) map.removeLayer(routeLine);
+        routeLine = L.polyline([driverPos, customerPos], {
+          color: '#FFD700',
+          weight: 6,
+          opacity: 0.9,
+          smoothFactor: 1
+        }).addTo(map);
+        const bounds = L.latLngBounds([driverPos, customerPos]);
+        map.fitBounds(bounds, { padding: [80, 80], maxZoom: 16 });
+      } else {
+        if (routeLine) {
+          map.removeLayer(routeLine);
+          routeLine = null;
+        }
+        const bounds = L.latLngBounds([driverPos, customerPos]);
+        map.fitBounds(bounds, { padding: [100, 100], maxZoom: 14 });
+      }
+    }
+    
+    // UPDATED: Listen for React Native WebView messages
+    window.addEventListener('message', function(event) {
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data && data.type === 'updateDriver') {
+          updateDriverLocation(data.lat, data.lng, data.heading);
+        }
+      } catch (e) {
+        console.error('Error parsing message:', e);
+      }
+    });
+    
+    // Also listen for postMessage (iOS compatibility)
+    document.addEventListener('message', function(event) {
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data && data.type === 'updateDriver') {
+          updateDriverLocation(data.lat, data.lng, data.heading);
+        }
+      } catch (e) {
+        console.error('Error parsing message:', e);
+      }
+    });
+    
+    updateDriverLocation(${driverLocation.lat}, ${driverLocation.lng}, ${heading});
+  </script>
+</body>
+</html>
+  `;
 
   const estimatedMinutes = locationData?.distance ? Math.ceil(locationData.distance * 3) : "5-8";
   const horizontalPadding = isSmallDevice ? 16 : isTablet ? 40 : 24;
@@ -542,40 +657,6 @@ export default function OrderTrackingScreen() {
               <View style={styles.timeline}>
                 <TimelineItem icon="check" iconColor={theme.success} title="Confirmed" subtitle="Completed" isCompleted theme={theme} />
                 <TimelineConnector color={theme.success} />
-                <TimelineItem icon="loader" iconColor={theme.primary} title="Picking" subtitle="In progress..." isActive showSpinner theme={theme} />
-                <TimelineConnector color={theme.border} />
-                <TimelineItem icon="package" iconColor={theme.border} title="Packed" subtitle="Pending..." theme={theme} />
-                <TimelineConnector color={theme.border} />
-                <TimelineItem icon="truck" iconColor={theme.border} title="Delivering" subtitle="Pending..." theme={theme} />
-              </View>
-            </Card>
-          </View>
-        </ScrollView>
-      </View>
-    );
-  }
-
-  if (isPacking) {
-    return (
-      <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-        <ScrollView contentContainerStyle={{ 
-          paddingTop: insets.top + verticalPadding, 
-          paddingBottom: insets.bottom + verticalPadding,
-          paddingHorizontal: horizontalPadding,
-        }}>
-          <View style={{ maxWidth: isTablet ? 700 : '100%', alignSelf: 'center', width: '100%' }}>
-            <PackingAnimation />
-            
-            <Card style={styles.infoCard}>
-              <View style={{ alignItems: 'center', marginBottom: 16 }}>
-                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  Order #{order.orderNumber || order.id.slice(0, 8)}
-                </ThemedText>
-              </View>
-              
-              <View style={styles.timeline}>
-                <TimelineItem icon="check" iconColor={theme.success} title="Confirmed" subtitle="Completed" isCompleted theme={theme} />
-                <TimelineConnector color={theme.success} />
                 <TimelineItem icon="check" iconColor={theme.success} title="Picked" subtitle="Completed" isCompleted theme={theme} />
                 <TimelineConnector color={theme.primary} />
                 <TimelineItem icon="package" iconColor={theme.primary} title="Packing" subtitle="In progress..." isActive showSpinner theme={theme} />
@@ -592,14 +673,21 @@ export default function OrderTrackingScreen() {
   if (isPacked) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-        <SimpleMapView 
-          driverLat={driverLocation.lat}
-          driverLng={driverLocation.lng}
-          customerLat={customerLocation.lat}
-          customerLng={customerLocation.lng}
-          showRoute={false}
-          theme={theme}
-        />
+        <View style={{ height: isTablet ? '60%' : '50%' }}>
+          <WebView
+            ref={webViewRef}
+            source={{ html: mapHTML }}
+            style={{ flex: 1 }}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            startInLoadingState={true}
+            renderLoading={() => (
+              <View style={styles.mapLoadingContainer}>
+                <ActivityIndicator size="large" color={theme.primary} />
+              </View>
+            )}
+          />
+        </View>
 
         <ScrollView
           style={[styles.bottomPanel, { backgroundColor: theme.backgroundDefault }]}
@@ -636,14 +724,47 @@ export default function OrderTrackingScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-      <SimpleMapView 
-        driverLat={driverLocation.lat}
-        driverLng={driverLocation.lng}
-        customerLat={customerLocation.lat}
-        customerLng={customerLocation.lng}
-        showRoute={showRoute}
-        theme={theme}
-      />
+      <View style={{ height: isTablet ? '60%' : '50%' }}>
+        <WebView
+          ref={webViewRef}
+          source={{ html: mapHTML }}
+          style={{ flex: 1 }}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          startInLoadingState={true}
+          renderLoading={() => (
+            <View style={styles.mapLoadingContainer}>
+              <ActivityIndicator size="large" color={theme.primary} />
+            </View>
+          )}
+        />
+        
+        {isDelivering && locationData?.hasLocation && (
+          <View style={[styles.badge, { 
+            left: isTablet ? 24 : 16, 
+            bottom: isTablet ? 24 : 16,
+            backgroundColor: 'white' 
+          }]}>
+            <Feather name="navigation" size={14} color="#10b981" />
+            <ThemedText type="small" style={{ fontWeight: '600', color: '#065f46' }}>
+              GPS: ±{locationData.location.accuracy?.toFixed(0) || 12}m
+            </ThemedText>
+          </View>
+        )}
+        
+        {isDelivering && locationData?.distance && (
+          <View style={[styles.badge, { 
+            right: isTablet ? 24 : 16, 
+            bottom: isTablet ? 24 : 16,
+            backgroundColor: 'white' 
+          }]}>
+            <Feather name="navigation" size={14} color="#1E88E5" />
+            <ThemedText type="small" style={{ fontWeight: '600', color: '#1E88E5' }}>
+              {locationData.distance.toFixed(1)} km
+            </ThemedText>
+          </View>
+        )}
+      </View>
 
       <ScrollView
         style={[styles.bottomPanel, { backgroundColor: theme.backgroundDefault }]}
@@ -827,6 +948,17 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   
+  mapLoadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  
   centerText: {
     textAlign: 'center',
   },
@@ -943,79 +1075,20 @@ const styles = StyleSheet.create({
     marginLeft: 15,
   },
   
-  mapContainer: {
-    height: isTablet ? '60%' : '50%',
-    position: 'relative',
-  },
-  mapContent: {
-    flex: 1,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  locationMarker: {
+  badge: {
     position: 'absolute',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  customerPin: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: 'white',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  driverPin: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: 'white',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  routeLineContainer: {
-    position: 'absolute',
-    top: '30%',
-    left: '40%',
-    width: '25%',
-    height: '45%',
-    transform: [{ rotate: '35deg' }],
-    zIndex: 1,
-  },
-  routeLine: {
-    width: 4,
-    height: '100%',
-    borderRadius: 2,
-  },
-  mapBadge: {
-    position: 'absolute',
-    bottom: 20,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
     borderRadius: 20,
-    borderWidth: 1,
+    padding: 8,
+    paddingHorizontal: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  
   bottomPanel: {
     flex: 1,
     borderTopLeftRadius: 24,
