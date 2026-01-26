@@ -143,7 +143,8 @@ export default function OrderTrackingScreen() {
   const hasDriverLocation = driverData?.hasLocation && driverData.location;
 
   // Create HTML for the map
-const mapHTML = `
+// Create HTML for the map
+  const mapHTML = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -153,172 +154,100 @@ const mapHTML = `
   <style>
     body { margin: 0; padding: 0; }
     #map { width: 100%; height: 100vh; }
-    .leaflet-container { background: #f5f5f5; }
+    .leaflet-container { background: #f0f2f5; }
+    
+    /* Animation for the driver's path ripple */
     @keyframes pulse {
-      0% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.4; transform: scale(1.5); }
-      100% { opacity: 1; transform: scale(1); }
+      0% { transform: scale(0.5); opacity: 0.8; }
+      100% { transform: scale(2.5); opacity: 0; }
     }
-    .pulse-ring {
-      animation: pulse 2s ease-in-out infinite;
+    .pulse-effect {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      background: rgba(30, 136, 229, 0.3);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <script>
-    // Initialize map
     const customerLat = ${customerLocation?.lat || 13.7563};
     const customerLng = ${customerLocation?.lng || 100.5018};
-    const storeLat = ${storeLocation?.lat || 13.7563};
-    const storeLng = ${storeLocation?.lng || 100.5018};
     
     const map = L.map('map', {
-      zoomControl: true,
+      zoomControl: false,
       attributionControl: false
-    }).setView([customerLat, customerLng], 14);
+    }).setView([customerLat, customerLng], 15);
     
-    // Add OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      className: 'map-tiles'
-    }).addTo(map);
+    // Light-themed tiles for a clean delivery app look
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
     
-    // Store marker (green pin with store icon)
-    const storeIcon = L.divIcon({
-      html: \`
-        <div style="position: relative;">
-          <div style="background: #00B14F; width: 32px; height: 32px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="white" style="transform: rotate(45deg);">
-              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
-              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
-            </svg>
-          </div>
-        </div>
-      \`,
-      className: 'store-marker',
-      iconSize: [32, 40],
-      iconAnchor: [16, 32]
-    });
-    L.marker([storeLat, storeLng], { icon: storeIcon }).addTo(map);
-    
-    // Customer marker (blue pin with house icon)
+    // CUSTOMER ICON (Destination)
     const customerIcon = L.divIcon({
       html: \`
-        <div style="position: relative;">
-          <div style="background: #1E88E5; width: 36px; height: 36px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 3px 12px rgba(30,136,229,0.4); display: flex; align-items: center; justify-content: center;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="white" style="transform: rotate(45deg);">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-              <polyline points="9 22 9 12 15 12 15 22"></polyline>
-            </svg>
-          </div>
+        <div style="background: #1E88E5; width: 34px; height: 34px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+          </svg>
         </div>
       \`,
-      className: 'customer-marker',
-      iconSize: [36, 44],
-      iconAnchor: [18, 36]
+      className: '',
+      iconSize: [34, 34],
+      iconAnchor: [17, 17]
     });
     L.marker([customerLat, customerLng], { icon: customerIcon }).addTo(map);
     
-    // Driver marker with Grab-style design
     let driverMarker = null;
     let routeLine = null;
-    let routeBorder = null;
-    
-    // Function to update driver location (called from React Native)
+
+    // UPDATE FUNCTION
     window.updateDriverLocation = function(lat, lng, heading = 0) {
+      const driverPos = [lat, lng];
+      const customerPos = [customerLat, customerLng];
+
       if (!driverMarker) {
-        // Create driver marker - Grab-style with motorcycle icon
-        const driverIcon = L.divIcon({
+        // DRIVER ICON (Motorcycle)
+        const motorIcon = L.divIcon({
           html: \`
-            <div style="position: relative; width: 60px; height: 60px;">
-              <!-- Outer pulse ring -->
-              <div class="pulse-ring" style="position: absolute; top: 10px; left: 10px; width: 40px; height: 40px; border-radius: 50%; background: rgba(0,177,79,0.2); border: 3px solid rgba(0,177,79,0.4);"></div>
-              <!-- Inner marker -->
-              <div style="position: absolute; top: 15px; left: 15px; background: #00B14F; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,177,79,0.6);">
-                <div style="transform: rotate(\${heading}deg); transition: transform 0.3s ease;">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-                    <path d="M12 2L4 8v6c0 5.5 3.8 10.7 8 12 4.2-1.3 8-6.5 8-12V8l-8-6z"/>
-                    <path d="M12 7v10M9 10h6" stroke="white" stroke-width="1.5"/>
-                  </svg>
-                </div>
+            <div style="position: relative; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;">
+              <div class="pulse-effect"></div>
+              <div id="motor-ship" style="transform: rotate(\${heading}deg); transition: transform 0.3s ease;">
+                <svg width="45" height="45" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="20" fill="#FFD700" stroke="black" stroke-width="2"/>
+                  <rect x="45" y="20" width="10" height="40" rx="5" fill="black" />
+                  <rect x="30" y="45" width="40" height="10" rx="2" fill="#333" />
+                </svg>
               </div>
             </div>
           \`,
-          className: 'driver-icon',
-          iconSize: [60, 60],
-          iconAnchor: [30, 30]
+          className: '',
+          iconSize: [50, 50],
+          iconAnchor: [25, 25]
         });
-        driverMarker = L.marker([lat, lng], { 
-          icon: driverIcon,
-          zIndexOffset: 1000 
-        }).addTo(map);
+        driverMarker = L.marker(driverPos, { icon: motorIcon }).addTo(map);
       } else {
-        // Smooth update
-        driverMarker.setLatLng([lat, lng]);
-        
-        // Update heading rotation
-        const iconHtml = driverMarker.getElement();
-        if (iconHtml) {
-          const rotatingDiv = iconHtml.querySelector('div > div:last-child > div');
-          if (rotatingDiv) {
-            rotatingDiv.style.transform = 'rotate(' + heading + 'deg)';
-          }
-        }
+        driverMarker.setLatLng(driverPos);
+        const ship = document.getElementById('motor-ship');
+        if(ship) ship.style.transform = 'rotate(' + heading + 'deg)';
       }
-      
-      // Remove old route lines
+
+      // UPDATE THE LINE (From Driver to Customer only)
       if (routeLine) map.removeLayer(routeLine);
-      if (routeBorder) map.removeLayer(routeBorder);
       
-      // Create route path (single continuous line)
-      const routePath = [
-        [storeLat, storeLng],
-        [lat, lng],
-        [customerLat, customerLng]
-      ];
-      
-      // White border for depth effect
-      routeBorder = L.polyline(routePath, {
-        color: '#FFFFFF',
-        weight: 8,
-        opacity: 0.6,
-        smoothFactor: 1,
-        lineCap: 'round',
-        lineJoin: 'round'
+      routeLine = L.polyline([driverPos, customerPos], {
+        color: '#1E88E5', // Blue line
+        weight: 4,
+        dashArray: '10, 10', // Dashed line looks better for "tracking"
+        opacity: 0.7
       }).addTo(map);
-      
-      // Main blue route line (Grab style)
-      routeLine = L.polyline(routePath, {
-        color: '#1E88E5',
-        weight: 5,
-        opacity: 0.9,
-        smoothFactor: 1,
-        lineCap: 'round',
-        lineJoin: 'round'
-      }).addTo(map);
-      
-      // Fit map to show all markers
-      const bounds = L.latLngBounds([
-        [storeLat, storeLng],
-        [lat, lng],
-        [customerLat, customerLng]
-      ]);
-      map.fitBounds(bounds, { 
-        padding: [60, 60],
-        maxZoom: 15 
-      });
+
+      // Auto-zoom to keep both in view
+      const bounds = L.latLngBounds([driverPos, customerPos]);
+      map.fitBounds(bounds, { padding: [50, 50] });
     };
-    
-    // Initial fit to show store and customer
-    const initialBounds = L.latLngBounds([
-      [storeLat, storeLng],
-      [customerLat, customerLng]
-    ]);
-    map.fitBounds(initialBounds, { 
-      padding: [60, 60],
-      maxZoom: 14 
-    });
   </script>
 </body>
 </html>
