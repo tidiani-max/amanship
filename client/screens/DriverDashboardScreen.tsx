@@ -1,688 +1,434 @@
-// app/screens/DriverDashboardScreen.tsx
-import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Pressable, Alert, Linking, Platform, TextInput, Modal, TouchableOpacity } from "react-native";
+// app/screens/DriverMapScreen.tsx
+import React, { useState, useEffect, useRef } from "react";
+import { View, StyleSheet, Pressable, ActivityIndicator, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Feather } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from 'expo-location';
+import { Feather } from "@expo/vector-icons";
+import { useNavigation, useRoute } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
-import { apiRequest } from "@/lib/query-client";
-import { Spacing } from "@/constants/theme";
 
-// ==================== PIN MODAL COMPONENT ====================
-function PINModal({ 
-  visible, 
-  onClose, 
-  onSubmit,
-  isLoading 
-}: { 
-  visible: boolean; 
-  onClose: () => void;
-  onSubmit: (pin: string) => void;
-  isLoading: boolean;
-}) {
-  const { theme } = useTheme();
-  const [pin, setPin] = useState("");
-
-  const handleSubmit = () => {
-    if (pin.length !== 4) {
-      Alert.alert("Invalid PIN", "Please enter the 4-digit code");
-      return;
-    }
-    onSubmit(pin);
-    setPin("");
-  };
-
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
-          <ThemedText type="h3" style={{ marginBottom: 12 }}>Enter Delivery PIN</ThemedText>
-          <ThemedText type="body" style={{ color: theme.textSecondary, marginBottom: 20, textAlign: "center" }}>
-            Ask the customer for their 4-digit PIN
-          </ThemedText>
-
-          <TextInput
-            style={[styles.pinInput, { 
-              backgroundColor: theme.backgroundRoot, 
-              color: theme.text,
-              borderColor: theme.border 
-            }]}
-            value={pin}
-            onChangeText={(text) => setPin(text.replace(/[^0-9]/g, "").slice(0, 4))}
-            keyboardType="number-pad"
-            maxLength={4}
-            placeholder="0000"
-            placeholderTextColor={theme.textSecondary}
-            autoFocus
-          />
-
-          <View style={{ flexDirection: "row", gap: 12, marginTop: 20 }}>
-            <Pressable
-              style={[styles.modalButton, { backgroundColor: theme.border }]}
-              onPress={() => {
-                setPin("");
-                onClose();
-              }}
-              disabled={isLoading}
-            >
-              <ThemedText type="button">Cancel</ThemedText>
-            </Pressable>
-
-            <Pressable
-              style={[styles.modalButton, { 
-                backgroundColor: theme.primary,
-                opacity: (pin.length === 4 && !isLoading) ? 1 : 0.5 
-              }]}
-              onPress={handleSubmit}
-              disabled={pin.length !== 4 || isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <ThemedText type="button" style={{ color: "#FFF" }}>Confirm</ThemedText>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
+interface RouteParams {
+  orderId: string;
+  customerLat: number;
+  customerLng: number;
+  customerAddress?: string;
 }
 
-// ==================== ORDER CARD COMPONENT ====================
-function OrderCard({ 
-  order, 
-  onPickup,
-  onComplete,
-  isUpdating,
-  disabled
-}: { 
-  order: any; 
-  onPickup: (orderId: string) => void;
-  onComplete: (orderId: string) => void;
-  isUpdating: boolean;
-  disabled?: boolean;
-}) {
-  const { theme } = useTheme();
-  const navigation = useNavigation<any>();
-  
-  const isAtStore = order.status === "packed";
-  const isOnWay = order.status === "delivering";
-  const isDelivered = order.status === "delivered";
-
-  const getStatusColor = () => {
-    if (isDelivered) return theme.success;
-    if (isAtStore) return theme.warning;
-    if (isOnWay) return theme.primary;
-    return theme.textSecondary;
-  };
-
-  const openMaps = () => {
-    const lat = order.customer_lat || order.customerLat;
-    const lng = order.customer_lng || order.customerLng;
-    
-    if (!lat || !lng) {
-      Alert.alert("Error", "Location data missing");
-      return;
-    }
-
-    const label = encodeURIComponent("Customer Drop-off");
-
-    if (Platform.OS === 'android') {
-      Linking.openURL(`google.navigation:q=${lat},${lng}`).catch(() => {
-        Linking.openURL(`geo:${lat},${lng}?q=${lat},${lng}(${label})`);
-      });
-    } else {
-      Linking.openURL(`maps://?ll=${lat},${lng}&q=${label}&t=m`).catch(() => {
-        Linking.openURL(`http://maps.google.com/?q=${lat},${lng}`);
-      });
-    }
-  };
-
-  return (
-    <Card style={styles.orderCard}>
-      <View style={styles.orderHeader}>
-        <View>
-          <ThemedText type="h3">{order.orderNumber || order.id.slice(0, 8).toUpperCase()}</ThemedText>
-          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            {isDelivered ? "✅ Delivered" : isAtStore ? "📍 Waiting at Store" : "🚚 In Transit"}
-          </ThemedText>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor() + "20" }]}>
-          <ThemedText type="small" style={{ color: getStatusColor() }}>
-            {order.status.toUpperCase()}
-          </ThemedText>
-        </View>
-      </View>
-
-      <View style={[styles.divider, { backgroundColor: theme.border }]} />
-      
-      {/* Customer Address Section */}
-      {order.address && (
-        <View style={[styles.addressSection, { 
-          backgroundColor: theme.backgroundDefault, 
-          borderRadius: 8,
-          padding: 12,
-          marginBottom: 12 
-        }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-            <Feather name="map-pin" size={16} color={theme.primary} />
-            <ThemedText type="body" style={{ fontWeight: '600', marginLeft: 6 }}>
-              Delivery Address
-            </ThemedText>
-          </View>
-          
-          {order.address.label && (
-            <ThemedText type="h3" style={{ marginBottom: 4 }}>
-              {order.address.label}
-            </ThemedText>
-          )}
-          
-          <ThemedText type="body" style={{ color: theme.textSecondary }}>
-            {order.address.fullAddress}
-          </ThemedText>
-          
-          {order.address.details && (
-            <View style={{ 
-              marginTop: 8, 
-              paddingTop: 8, 
-              borderTopWidth: 1, 
-              borderTopColor: theme.border 
-            }}>
-              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                📝 {order.address.details}
-              </ThemedText>
-            </View>
-          )}
-        </View>
-      )}
-
-      <View style={styles.orderDetails}>
-        {!isDelivered && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 8 }}>
-            <Feather name="home" size={14} color={theme.textSecondary} />
-            <View style={{ flex: 1, height: 2, backgroundColor: isAtStore ? theme.border : theme.primary }} />
-            <Feather name="truck" size={16} color={isOnWay ? theme.primary : theme.textSecondary} />
-            <View style={{ flex: 1, height: 2, backgroundColor: theme.border }} />
-            <Feather name="map-pin" size={14} color={theme.textSecondary} />
-          </View>
-        )}
-
-        <View style={styles.detailRow}>
-          <Feather name="package" size={16} color={theme.textSecondary} />
-          <ThemedText type="body">{order.items.length} items to deliver</ThemedText>
-        </View>
-
-        <View style={styles.detailRow}>
-          <Feather name="credit-card" size={16} color={theme.textSecondary} />
-          <ThemedText type="body">
-            {order.paymentMethod === "cod" ? "CASH ON DELIVERY" : "PREPAID"}
-          </ThemedText>
-        </View>
-
-        {order.paymentMethod === "cod" && (
-          <View style={[styles.codBadge, { backgroundColor: theme.warning + "15", borderLeftWidth: 4, borderLeftColor: theme.warning }]}>
-            <ThemedText type="small" style={{ color: theme.textSecondary }}>COLLECT FROM CUSTOMER:</ThemedText>
-            <ThemedText type="h3" style={{ color: theme.warning }}>Rp {order.total.toLocaleString()}</ThemedText>
-          </View>
-        )}
-
-        {isDelivered && order.deliveredAt && (
-          <View style={{ marginTop: 8 }}>
-            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-              Delivered: {new Date(order.deliveredAt).toLocaleString()}
-            </ThemedText>
-          </View>
-        )}
-      </View>
-
-      {!isDelivered && (
-        <View style={styles.orderActions}>
-          <Pressable style={[styles.mapButton, { borderColor: theme.border }]} onPress={openMaps}>
-            <Feather name="navigation" size={18} color={theme.secondary} />
-          </Pressable>
-
-          <Pressable style={[styles.mapButton, { borderColor: theme.border }]} onPress={() => navigation.navigate("Chat", { orderId: order.id })}>
-            <Feather name="message-square" size={18} color={theme.primary} />
-          </Pressable>
-          
-          {isAtStore && (
-            <Pressable
-              style={[styles.actionButton, { backgroundColor: disabled ? "#999" : theme.primary, flex: 1 }]}
-              onPress={() => onPickup(order.id)}
-              disabled={isUpdating || disabled}
-            >
-              {isUpdating ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Feather name="package" size={16} color="#FFF" />
-                  <ThemedText type="button" style={{ color: "#FFF" }}>Pick Up</ThemedText>
-                </View>
-              )}
-            </Pressable>
-          )}
-
-          {isOnWay && (
-            <Pressable
-              style={[styles.actionButton, { backgroundColor: disabled ? "#999" : theme.success, flex: 1 }]}
-              onPress={() => onComplete(order.id)}
-              disabled={isUpdating || disabled}
-            >
-              {isUpdating ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Feather name="check-circle" size={16} color="#FFF" />
-                  <ThemedText type="button" style={{ color: "#FFF" }}>Enter PIN</ThemedText>
-                </View>
-              )}
-            </Pressable>
-          )}
-        </View>
-      )}
-    </Card>
-  );
-}
-
-// ==================== MAIN COMPONENT ====================
-export default function DriverDashboardScreen() {
+export default function DriverMapScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { user, logout } = useAuth();
-  const queryClient = useQueryClient();
-  const navigation = useNavigation<any>();
+  const { user } = useAuth();
+  const navigation = useNavigation();
+  const route = useRoute();
+  const { orderId, customerLat, customerLng, customerAddress } = route.params as RouteParams;
   
-  const [showCompleted, setShowCompleted] = useState(false);
-  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
-  const [pinModalVisible, setPinModalVisible] = useState(false);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [locationPermission, setLocationPermission] = useState(false);
+  const mapRef = useRef<MapView>(null);
+  const [driverLocation, setDriverLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [heading, setHeading] = useState(0);
+  const [routeCoordinates, setRouteCoordinates] = useState<{ latitude: number; longitude: number }[]>([]);
+  const [eta, setEta] = useState<number | null>(null);
+  const [distance, setDistance] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // ==================== DATA FETCHING ====================
-  const { data: dashboard, isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ["/api/driver/dashboard", user?.id],
-    queryFn: async () => {
-      const baseUrl = process.env.EXPO_PUBLIC_DOMAIN!;
-      const response = await fetch(`${baseUrl}/api/driver/dashboard?userId=${user?.id}`);
-      if (!response.ok) throw new Error("Failed to fetch dashboard");
-      return response.json();
-    },
-    enabled: !!user?.id && user?.role === "driver",
-    refetchInterval: 3000,
-    refetchOnWindowFocus: true,
-  });
-
-  // ==================== LOCATION TRACKING ====================
+  // Get initial driver location
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      setLocationPermission(status === 'granted');
       if (status !== 'granted') {
-        Alert.alert(
-          'Location Required',
-          'Please enable location services to use delivery tracking.',
-          [{ text: 'OK' }]
+        Alert.alert('Permission Denied', 'Location permission is required');
+        navigation.goBack();
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      setDriverLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+      setHeading(location.coords.heading || 0);
+      setIsLoading(false);
+
+      // Fit map to show both driver and customer
+      if (mapRef.current) {
+        mapRef.current.fitToCoordinates(
+          [
+            { latitude: location.coords.latitude, longitude: location.coords.longitude },
+            { latitude: customerLat, longitude: customerLng },
+          ],
+          {
+            edgePadding: { top: 100, right: 50, bottom: 300, left: 50 },
+            animated: true,
+          }
         );
       }
     })();
   }, []);
 
+  // Fetch route from Google Directions API
   useEffect(() => {
-    if (!locationPermission || !user?.id) return;
+    if (!driverLocation) return;
 
-    const activeOrders = dashboard?.orders?.active || [];
-    const activeDelivery = activeOrders.find((o: any) => o.status === 'delivering');
+    const fetchRoute = async () => {
+      try {
+        const origin = `${driverLocation.latitude},${driverLocation.longitude}`;
+        const destination = `${customerLat},${customerLng}`;
+        const GOOGLE_MAPS_KEY = 'YOUR_GOOGLE_MAPS_API_KEY'; // Replace with your API key
 
-    if (!activeDelivery) {
-      console.log('📍 No active delivery - location tracking paused');
-      return;
-    }
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&key=${GOOGLE_MAPS_KEY}&mode=driving`
+        );
+        
+        const data = await response.json();
 
-    console.log('📍 Starting location tracking for order:', activeDelivery.id);
+        if (data.routes.length) {
+          const route = data.routes[0];
+          const points = decodePolyline(route.overview_polyline.points);
+          setRouteCoordinates(points);
+          
+          // Get ETA and distance
+          const leg = route.legs[0];
+          setEta(Math.ceil(leg.duration.value / 60)); // Convert to minutes
+          setDistance((leg.distance.value / 1000).toFixed(1)); // Convert to km
+        }
+      } catch (error) {
+        console.error('Error fetching route:', error);
+      }
+    };
 
+    fetchRoute();
+  }, [driverLocation, customerLat, customerLng]);
+
+  // Track driver location in real-time
+  useEffect(() => {
     let locationSubscription: Location.LocationSubscription | null = null;
 
     const startTracking = async () => {
-      try {
-        locationSubscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 3000,
-            distanceInterval: 10,
-          },
-          async (location) => {
-            try {
-              console.log('📍 Sending location update:', {
-                lat: location.coords.latitude,
-                lng: location.coords.longitude,
-                speed: location.coords.speed,
-              });
+      locationSubscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 2000,
+          distanceInterval: 5,
+        },
+        (location) => {
+          setDriverLocation({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
+          setHeading(location.coords.heading || 0);
 
-              const response = await fetch(
-                `${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/update`,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    driverId: user.id,
-                    orderId: activeDelivery.id,
-                    latitude: location.coords.latitude,
-                    longitude: location.coords.longitude,
-                    heading: location.coords.heading || 0,
-                    speed: location.coords.speed || 0,
-                    accuracy: location.coords.accuracy || 0,
-                  }),
-                }
-              );
-
-              if (!response.ok) {
-                console.error('❌ Location update failed:', await response.text());
-              } else {
-                const data = await response.json();
-                console.log('✅ Location updated. ETA:', data.etaMinutes, 'min');
-              }
-            } catch (error) {
-              console.error('❌ Location update error:', error);
-            }
-          }
-        );
-      } catch (error) {
-        console.error('❌ Failed to start location tracking:', error);
-      }
+          // Update backend with driver location
+          fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              driverId: user?.id,
+              orderId: orderId,
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+              heading: location.coords.heading || 0,
+              speed: location.coords.speed || 0,
+            }),
+          });
+        }
+      );
     };
 
     startTracking();
 
     return () => {
       if (locationSubscription) {
-        console.log('📍 Stopping location tracking');
         locationSubscription.remove();
       }
     };
-  }, [dashboard?.orders?.active, user?.id, locationPermission]);
+  }, [orderId, user?.id]);
 
-  // ==================== MUTATIONS ====================
-  const pickupMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      setUpdatingOrderId(orderId);
-      const response = await apiRequest("PUT", `/api/driver/orders/${orderId}/status`, { 
-        userId: user?.id, 
-        status: "delivering" 
+  // Center map on driver
+  const centerOnDriver = () => {
+    if (driverLocation && mapRef.current) {
+      mapRef.current.animateToRegion({
+        ...driverLocation,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
       });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/driver/dashboard"] });
-      setUpdatingOrderId(null);
-    },
-    onError: (error: Error) => {
-      Alert.alert("Error", error.message);
-      setUpdatingOrderId(null);
-    }
-  });
-
-  const completeMutation = useMutation({
-    mutationFn: async ({ orderId, pin }: { orderId: string; pin: string }) => {
-      setUpdatingOrderId(orderId);
-      const response = await apiRequest("PUT", `/api/driver/orders/${orderId}/complete`, {
-        userId: user?.id,
-        deliveryPin: pin
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to complete delivery");
-      }
-      
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/driver/dashboard"] });
-      setPinModalVisible(false);
-      setSelectedOrderId(null);
-      setUpdatingOrderId(null);
-      Alert.alert("✅ Success", "Order delivered successfully!");
-    },
-    onError: (error: Error) => {
-      Alert.alert("❌ Incorrect PIN", error.message || "The PIN you entered is incorrect. Please try again.");
-      setUpdatingOrderId(null);
-    }
-  });
-
-  // ==================== HANDLERS ====================
-  const handleLogout = () => {
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Logout",
-          style: "destructive",
-          onPress: async () => {
-            await logout();
-          },
-        },
-      ]
-    );
-  };
-
-  const handleComplete = (orderId: string) => {
-    setSelectedOrderId(orderId);
-    setPinModalVisible(true);
-  };
-
-  const handlePinSubmit = (pin: string) => {
-    if (selectedOrderId) {
-      completeMutation.mutate({ orderId: selectedOrderId, pin });
     }
   };
 
-  // ==================== GUARDS ====================
-  if (!user || user.role !== "driver") {
-    return (
-      <ThemedView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Feather name="lock" size={48} color={theme.error} />
-          <ThemedText type="h3" style={{ marginTop: Spacing.md }}>Access Denied</ThemedText>
-        </View>
-      </ThemedView>
-    );
-  }
-
-  if (isLoading) {
+  if (isLoading || !driverLocation) {
     return (
       <ThemedView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.primary} />
+        <ThemedText type="body" style={{ marginTop: 16 }}>Loading map...</ThemedText>
       </ThemedView>
     );
   }
 
-  // ==================== DATA PROCESSING ====================
-  const readyOrders = dashboard?.orders?.ready || [];
-  const activeOrders = dashboard?.orders?.active || [];
-  const completedOrders = dashboard?.orders?.completed || [];
-  const hasActiveDelivery = activeOrders.length > 0;
-  
-  const allActiveOrders = (hasActiveDelivery ? activeOrders : readyOrders)
-    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  
-  const sortedCompletedOrders = completedOrders
-    .sort((a: any, b: any) => new Date(b.deliveredAt || b.createdAt).getTime() - new Date(a.deliveredAt || a.createdAt).getTime());
-  
-  const todayEarnings = completedOrders.reduce((sum: number, order: any) => sum + order.total, 0);
-
-  // ==================== RENDER ====================
   return (
-    <ThemedView style={styles.container}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: theme.backgroundDefault, borderBottomWidth: 1, borderBottomColor: theme.border }]}>
-        <View style={styles.titleRow}>
-          <ThemedText type="h2">Delivery Hub</ThemedText>
-          
-          <View style={styles.headerActions}>
-            <TouchableOpacity 
-              style={[styles.iconButton, { backgroundColor: theme.primary }]}
-              onPress={() => navigation.navigate('Notifications')}
-            >
-              <Feather name="bell" size={20} color="white" />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.iconButton, { backgroundColor: '#ff4444' }]}
-              onPress={handleLogout}
-            >
-              <Feather name="log-out" size={20} color="white" />
-            </TouchableOpacity>
-          </View>
-        </View>
+    <View style={styles.container}>
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER_GOOGLE}
+        style={styles.map}
+        initialRegion={{
+          latitude: driverLocation.latitude,
+          longitude: driverLocation.longitude,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        }}
+        showsUserLocation={false}
+        showsMyLocationButton={false}
+        showsTraffic={true}
+      >
+        {/* Route Polyline */}
+        {routeCoordinates.length > 0 && (
+          <Polyline
+            coordinates={routeCoordinates}
+            strokeColor="#4285F4"
+            strokeWidth={5}
+            lineDashPattern={[1]}
+          />
+        )}
 
-        <View style={[styles.statusRow, { marginTop: 8, marginBottom: 16 }]}>
-          <View style={[styles.statusDot, { backgroundColor: theme.success }]} />
-          <ThemedText type="caption" style={{ color: theme.textSecondary, marginLeft: 6 }}>
-            Online & Ready
-          </ThemedText>
+        {/* Driver Marker */}
+        <Marker
+          coordinate={driverLocation}
+          anchor={{ x: 0.5, y: 0.5 }}
+          rotation={heading}
+          flat={true}
+        >
+          <View style={styles.driverMarker}>
+            <View style={styles.driverIconContainer}>
+              <Feather name="navigation" size={20} color="#FFF" />
+            </View>
+          </View>
+        </Marker>
+
+        {/* Customer Marker */}
+        <Marker
+          coordinate={{ latitude: customerLat, longitude: customerLng }}
+          title="Customer Location"
+          description={customerAddress}
+        >
+          <View style={styles.customerMarker}>
+            <Feather name="map-pin" size={30} color="#E53935" />
+          </View>
+        </Marker>
+      </MapView>
+
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <Pressable
+          style={[styles.backButton, { backgroundColor: theme.backgroundDefault }]}
+          onPress={() => navigation.goBack()}
+        >
+          <Feather name="arrow-left" size={24} color={theme.text} />
+        </Pressable>
+
+        <View style={[styles.headerInfo, { backgroundColor: theme.backgroundDefault }]}>
+          <ThemedText type="h3">Delivering to Customer</ThemedText>
+          {eta && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              <Feather name="clock" size={14} color={theme.primary} />
+              <ThemedText type="caption" style={{ color: theme.primary }}>
+                ETA: {eta} min • {distance} km
+              </ThemedText>
+            </View>
+          )}
         </View>
       </View>
 
-      {/* Content */}
-      <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing.xl }]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.primary} />}
+      {/* Center on Driver Button */}
+      <Pressable
+        style={[styles.centerButton, { 
+          bottom: insets.bottom + 100,
+          backgroundColor: theme.backgroundDefault 
+        }]}
+        onPress={centerOnDriver}
       >
-        {/* Active Deliveries Section */}
-        <View style={styles.sectionHeader}>
-          <Feather name="truck" size={20} color={theme.primary} />
-          <ThemedText type="h3" style={styles.sectionTitle}>
-            Active Deliveries ({allActiveOrders.length})
-          </ThemedText>
-        </View>
+        <Feather name="navigation" size={24} color={theme.primary} />
+      </Pressable>
 
-        {allActiveOrders.length > 0 ? (
-          allActiveOrders.map((order: any) => (
-            <OrderCard 
-              key={order.id} 
-              order={order} 
-              onPickup={(orderId) => pickupMutation.mutate(orderId)}
-              onComplete={handleComplete}
-              isUpdating={updatingOrderId === order.id}
-              disabled={hasActiveDelivery && order.status === "packed"}
-            />
-          ))
-        ) : (
-          <Card style={styles.emptyCard}>
-            <Feather name="inbox" size={48} color={theme.textSecondary} />
-            <ThemedText type="h3" style={{ marginTop: Spacing.md, color: theme.textSecondary }}>No Deliveries</ThemedText>
-            <ThemedText type="body" style={{ marginTop: 8, color: theme.textSecondary }}>
-              New orders will appear here
-            </ThemedText>
-          </Card>
-        )}
-
-        {/* Completed Deliveries Section */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.xl, marginBottom: 12 }}>
-          <View style={styles.sectionHeader}>
-            <Feather name="check-circle" size={20} color={theme.success} />
-            <ThemedText type="h3" style={styles.sectionTitle}>
-              Today's Completed ({sortedCompletedOrders.length})
-            </ThemedText>
-          </View>
-          <Pressable onPress={() => setShowCompleted(!showCompleted)}>
-            <Feather name={showCompleted ? "chevron-up" : "chevron-down"} size={24} color={theme.text} />
-          </Pressable>
-        </View>
-
-        {showCompleted && (
+      {/* Bottom Info Card */}
+      <View style={[styles.bottomCard, { 
+        paddingBottom: insets.bottom + 16,
+        backgroundColor: theme.backgroundDefault 
+      }]}>
+        {customerAddress && (
           <>
-            {sortedCompletedOrders.length > 0 ? (
-              <>
-                <Card style={{ padding: 16, marginBottom: 12, backgroundColor: theme.success + "15" }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <ThemedText type="body">💰 Total Earnings Today</ThemedText>
-                    <ThemedText type="h2" style={{ color: theme.success }}>
-                      Rp {todayEarnings.toLocaleString()}
-                    </ThemedText>
-                  </View>
-                </Card>
-                
-                {sortedCompletedOrders.map((order: any) => (
-                  <OrderCard 
-                    key={order.id} 
-                    order={order}
-                    onPickup={() => {}}
-                    onComplete={() => {}}
-                    isUpdating={false}
-                  />
-                ))}
-              </>
-            ) : (
-              <Card style={styles.emptyCard}>
-                <Feather name="check-circle" size={48} color={theme.textSecondary} />
-                <ThemedText type="body" style={{ marginTop: Spacing.md, color: theme.textSecondary }}>
-                  No deliveries completed today
-                </ThemedText>
-              </Card>
-            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Feather name="map-pin" size={20} color={theme.primary} />
+              <ThemedText type="body" style={{ flex: 1 }}>{customerAddress}</ThemedText>
+            </View>
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
           </>
         )}
-      </ScrollView>
 
-      {/* PIN Modal */}
-      <PINModal
-        visible={pinModalVisible}
-        onClose={() => {
-          setPinModalVisible(false);
-          setSelectedOrderId(null);
-        }}
-        onSubmit={handlePinSubmit}
-        isLoading={completeMutation.isPending}
-      />
-    </ThemedView>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 12 }}>
+          <View style={{ alignItems: 'center' }}>
+            <ThemedText type="h2" style={{ color: theme.primary }}>{eta || '--'}</ThemedText>
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>Minutes</ThemedText>
+          </View>
+          <View style={[styles.verticalDivider, { backgroundColor: theme.border }]} />
+          <View style={{ alignItems: 'center' }}>
+            <ThemedText type="h2" style={{ color: theme.primary }}>{distance || '--'}</ThemedText>
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>Kilometers</ThemedText>
+          </View>
+        </View>
+      </View>
+    </View>
   );
 }
 
-// ==================== STYLES ====================
+// Decode Google's encoded polyline format
+function decodePolyline(encoded: string): { latitude: number; longitude: number }[] {
+  const points: { latitude: number; longitude: number }[] = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < encoded.length) {
+    let b;
+    let shift = 0;
+    let result = 0;
+
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+
+    const deltaLat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+    lat += deltaLat;
+
+    shift = 0;
+    result = 0;
+
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+
+    const deltaLng = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+    lng += deltaLng;
+
+    points.push({
+      latitude: lat / 1e5,
+      longitude: lng / 1e5,
+    });
+  }
+
+  return points;
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { paddingHorizontal: 20 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  statusRow: { flexDirection: 'row', alignItems: 'center' },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  headerActions: { flexDirection: 'row', gap: 10 },
-  iconButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 16 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  sectionTitle: { marginBottom: 0 },
-  orderCard: { marginBottom: 12, padding: 16 },
-  orderHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
-  divider: { height: 1, marginVertical: 12 },
-  addressSection: {},
-  orderDetails: { marginBottom: 12 },
-  detailRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
-  codBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginTop: 8 },
-  orderActions: { flexDirection: "row", gap: 8 },
-  mapButton: { padding: 10, borderWidth: 1, borderRadius: 8, justifyContent: "center", alignItems: "center" },
-  actionButton: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, alignItems: "center" },
-  emptyCard: { alignItems: "center", padding: 40 },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
-  modalContent: { width: "80%", padding: 24, borderRadius: 16, alignItems: "center" },
-  pinInput: { fontSize: 32, fontWeight: "bold", letterSpacing: 12, textAlign: "center", paddingVertical: 16, paddingHorizontal: 24, borderRadius: 12, borderWidth: 2, width: "100%" },
-  modalButton: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center" },
+  container: {
+    flex: 1,
+  },
+  map: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  backButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  headerInfo: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  centerButton: {
+    position: 'absolute',
+    right: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  bottomCard: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  divider: {
+    height: 1,
+    marginVertical: 8,
+  },
+  verticalDivider: {
+    width: 1,
+    height: 40,
+  },
+  driverMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  driverIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#4285F4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#FFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  customerMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
