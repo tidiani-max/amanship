@@ -68,53 +68,51 @@ function PickingAnimation() {
     outputRange: ['0deg', '-10deg', '0deg'],
   });
 
-  const iconSize = isSmallDevice ? 60 : isTablet ? 100 : 80;
-  const containerSize = isSmallDevice ? 140 : isTablet ? 200 : 160;
+  const iconSize = isSmallDevice ? 50 : isTablet ? 100 : 70;
+  const containerSize = isSmallDevice ? 120 : isTablet ? 200 : 150;
 
   return (
     <View style={styles.pickingContainer}>
-      <View style={[styles.pickingScene, { width: containerSize * 2, height: containerSize }]}>
-        {/* Warehouse/Storage */}
+      <View style={[styles.pickingScene, { width: containerSize * 2.2, height: containerSize }]}>
         <View style={[styles.warehouse, { 
           backgroundColor: theme.backgroundDefault, 
           borderColor: theme.border,
-          width: containerSize * 0.8,
-          height: containerSize * 0.8,
+          width: containerSize * 0.85,
+          height: containerSize * 0.85,
         }]}>
           <Feather name="home" size={iconSize * 0.5} color={theme.textSecondary} />
           <View style={styles.shelfRow}>
-            <View style={[styles.box, { backgroundColor: theme.primary + '40', width: 20, height: 20 }]} />
-            <View style={[styles.box, { backgroundColor: theme.secondary + '40', width: 20, height: 20 }]} />
-            <View style={[styles.box, { backgroundColor: theme.warning + '40', width: 20, height: 20 }]} />
+            <View style={[styles.box, { backgroundColor: theme.primary + '40', width: isSmallDevice ? 16 : 20, height: isSmallDevice ? 16 : 20 }]} />
+            <View style={[styles.box, { backgroundColor: theme.secondary + '40', width: isSmallDevice ? 16 : 20, height: isSmallDevice ? 16 : 20 }]} />
+            <View style={[styles.box, { backgroundColor: theme.warning + '40', width: isSmallDevice ? 16 : 20, height: isSmallDevice ? 16 : 20 }]} />
           </View>
         </View>
 
-        {/* Animated Picker */}
         <Animated.View style={[
           styles.pickerIcon,
           { 
             transform: [{ translateX }, { rotate }],
-            left: containerSize * 0.7,
+            left: containerSize * 0.75,
           }
         ]}>
           <View style={[styles.pickerCircle, { 
             backgroundColor: theme.primary + '20', 
             borderColor: theme.primary,
-            width: containerSize * 0.6,
-            height: containerSize * 0.6,
+            width: containerSize * 0.65,
+            height: containerSize * 0.65,
           }]}>
-            <Feather name="user" size={iconSize * 0.6} color={theme.primary} />
-            <View style={[styles.cart, { backgroundColor: theme.primary, marginTop: 8 }]}>
+            <Feather name="user" size={iconSize * 0.55} color={theme.primary} />
+            <View style={[styles.cart, { backgroundColor: theme.primary, marginTop: 6 }]}>
               <Feather name="shopping-cart" size={iconSize * 0.3} color="white" />
             </View>
           </View>
         </Animated.View>
       </View>
       
-      <ThemedText type="h2" style={[styles.centerText, { marginTop: isTablet ? 40 : 32 }]}>
+      <ThemedText type="h2" style={[styles.centerText, { marginTop: isTablet ? 40 : isSmallDevice ? 24 : 32, fontSize: isSmallDevice ? 20 : undefined }]}>
         Picking your items
       </ThemedText>
-      <ThemedText type="body" style={[styles.centerText, { color: theme.textSecondary, marginTop: 12 }]}>
+      <ThemedText type="body" style={[styles.centerText, { color: theme.textSecondary, marginTop: 8, fontSize: isSmallDevice ? 13 : undefined, paddingHorizontal: 16 }]}>
         Our team is collecting items from the warehouse...
       </ThemedText>
       
@@ -171,8 +169,8 @@ function PackingAnimation() {
     outputRange: ['0deg', '360deg'],
   });
 
-  const iconSize = isSmallDevice ? 60 : isTablet ? 100 : 80;
-  const boxSize = isSmallDevice ? 140 : isTablet ? 200 : 160;
+  const iconSize = isSmallDevice ? 50 : isTablet ? 100 : 70;
+  const boxSize = isSmallDevice ? 120 : isTablet ? 200 : 150;
 
   return (
     <View style={styles.packingContainer}>
@@ -189,10 +187,10 @@ function PackingAnimation() {
         </View>
       </Animated.View>
       
-      <ThemedText type="h2" style={[styles.centerText, { marginTop: isTablet ? 40 : 32 }]}>
+      <ThemedText type="h2" style={[styles.centerText, { marginTop: isTablet ? 40 : isSmallDevice ? 24 : 32, fontSize: isSmallDevice ? 20 : undefined }]}>
         Packing your order
       </ThemedText>
-      <ThemedText type="body" style={[styles.centerText, { color: theme.textSecondary, marginTop: 12 }]}>
+      <ThemedText type="body" style={[styles.centerText, { color: theme.textSecondary, marginTop: 8, fontSize: isSmallDevice ? 13 : undefined, paddingHorizontal: 16 }]}>
         Our team is carefully packing your items...
       </ThemedText>
       
@@ -229,8 +227,8 @@ function WaitingForDriver() {
     return () => pulse.stop();
   }, []);
 
-  const circleSize = isSmallDevice ? 120 : isTablet ? 180 : 140;
-  const iconSize = isSmallDevice ? 50 : isTablet ? 80 : 64;
+  const circleSize = isSmallDevice ? 100 : isTablet ? 180 : 130;
+  const iconSize = isSmallDevice ? 40 : isTablet ? 80 : 60;
 
   return (
     <View style={styles.waitingContainer}>
@@ -246,10 +244,10 @@ function WaitingForDriver() {
         </View>
       </Animated.View>
       
-      <ThemedText type="h2" style={[styles.centerText, { marginTop: isTablet ? 40 : 32 }]}>
+      <ThemedText type="h2" style={[styles.centerText, { marginTop: isTablet ? 40 : isSmallDevice ? 24 : 32, fontSize: isSmallDevice ? 20 : undefined }]}>
         Waiting for driver
       </ThemedText>
-      <ThemedText type="body" style={[styles.centerText, { color: theme.textSecondary, marginTop: 12 }]}>
+      <ThemedText type="body" style={[styles.centerText, { color: theme.textSecondary, marginTop: 8, fontSize: isSmallDevice ? 13 : undefined, paddingHorizontal: 16 }]}>
         Your order is packed and ready. Waiting for driver confirmation...
       </ThemedText>
     </View>
@@ -269,30 +267,57 @@ export default function OrderTrackingScreen() {
   const [heading, setHeading] = useState(45);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Fetch order details with real-time updates
-  const { data: order, isLoading } = useQuery({
+  const fetchWithErrorHandling = async (url: string) => {
+    try {
+      console.log('Fetching:', url);
+      const response = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error: any) {
+      console.error('Fetch error:', error);
+      
+      if (error.message?.includes('CORS')) {
+        throw new Error('Connection blocked. Please check server CORS settings.');
+      } else if (error.message?.includes('502')) {
+        throw new Error('Server temporarily unavailable. Please try again.');
+      } else if (error.message?.includes('Failed to fetch')) {
+        throw new Error('Network error. Please check your connection.');
+      }
+      
+      throw error;
+    }
+  };
+
+  const { data: order, isLoading, error: orderError } = useQuery({
     queryKey: ["order-tracking", orderId],
-    queryFn: async () => {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}`);
-      if (!response.ok) throw new Error("Failed to fetch order");
-      return response.json();
-    },
+    queryFn: () => fetchWithErrorHandling(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}`),
     refetchInterval: 3000,
+    retry: 3,
+    retryDelay: 1000,
   });
 
-  // Fetch driver location
   const { data: locationData } = useQuery({
     queryKey: ["driver-location", orderId],
     queryFn: async () => {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/${orderId}`);
-      if (!response.ok) return null;
-      return response.json();
+      try {
+        return await fetchWithErrorHandling(`${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/${orderId}`);
+      } catch {
+        return null;
+      }
     },
     enabled: order?.status === "delivering",
     refetchInterval: 3000,
+    retry: 2,
   });
 
-  // Update driver location from real data
   useEffect(() => {
     if (locationData?.hasLocation && locationData.location) {
       setDriverLocation({
@@ -305,7 +330,6 @@ export default function OrderTrackingScreen() {
     }
   }, [locationData]);
 
-  // Simulate movement for demo if no real location
   useEffect(() => {
     if (!locationData?.hasLocation && order?.status === "delivering") {
       const interval = setInterval(() => {
@@ -319,7 +343,6 @@ export default function OrderTrackingScreen() {
     }
   }, [locationData, order?.status]);
 
-  // Update map iframe
   useEffect(() => {
     if (iframeRef.current?.contentWindow && (order?.status === "delivering" || order?.status === "packed")) {
       iframeRef.current.contentWindow.postMessage({
@@ -353,16 +376,27 @@ export default function OrderTrackingScreen() {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.backgroundRoot }]}>
         <ActivityIndicator size="large" color={theme.primary} />
-        <ThemedText style={{ marginTop: 16 }}>Loading order details...</ThemedText>
+        <ThemedText style={{ marginTop: 16, textAlign: 'center' }}>Loading order details...</ThemedText>
       </View>
     );
   }
 
-  if (!order) {
+  if (orderError || !order) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.loadingContainer, { backgroundColor: theme.backgroundRoot, padding: 24 }]}>
         <Feather name="alert-circle" size={48} color={theme.error} />
-        <ThemedText style={{ marginTop: 16 }}>Order not found</ThemedText>
+        <ThemedText style={{ marginTop: 16, textAlign: 'center', fontSize: 18, fontWeight: '600' }}>
+          {orderError ? 'Connection Error' : 'Order Not Found'}
+        </ThemedText>
+        <ThemedText style={{ marginTop: 8, textAlign: 'center', color: theme.textSecondary, paddingHorizontal: 24 }}>
+          {orderError instanceof Error ? orderError.message : 'Unable to load order details'}
+        </ThemedText>
+        <Pressable 
+          style={[styles.retryButton, { backgroundColor: theme.primary, marginTop: 24 }]}
+          onPress={() => navigation.goBack()}
+        >
+          <ThemedText style={{ color: 'white', fontWeight: '600' }}>Go Back</ThemedText>
+        </Pressable>
       </View>
     );
   }
@@ -374,17 +408,10 @@ export default function OrderTrackingScreen() {
   const isPacked = status === "packed";
   const isDelivering = status === "delivering";
   const isDelivered = status === "delivered";
-
-  // Show driver contact only when delivering
   const showDriverContact = isDelivering && order.driverId;
-
-  // Show map for packed and delivering stages
   const showMap = isPacked || isDelivering || isDelivered;
-  
-  // Only show yellow line when delivering (not when packed)
   const showRoute = isDelivering || isDelivered;
 
-  // Map HTML
   const mapHTML = `
 <!DOCTYPE html>
 <html>
@@ -396,13 +423,11 @@ export default function OrderTrackingScreen() {
     body { margin: 0; padding: 0; }
     #map { width: 100%; height: 100vh; }
     .leaflet-container { background: #f5f5f5; }
-    
     @keyframes pulse {
       0% { transform: scale(1); opacity: 0.6; }
       50% { transform: scale(1.3); opacity: 0.3; }
       100% { transform: scale(1); opacity: 0.6; }
     }
-    
     .pulse-ring {
       position: absolute;
       width: 60px;
@@ -503,33 +528,23 @@ export default function OrderTrackingScreen() {
         }
       }
 
-      // Only show yellow line when delivering
       if (showRoute) {
         if (routeLine) map.removeLayer(routeLine);
-        
         routeLine = L.polyline([driverPos, customerPos], {
           color: '#FFD700',
           weight: 6,
           opacity: 0.9,
           smoothFactor: 1
         }).addTo(map);
-
         const bounds = L.latLngBounds([driverPos, customerPos]);
-        map.fitBounds(bounds, { 
-          padding: [80, 80],
-          maxZoom: 16
-        });
+        map.fitBounds(bounds, { padding: [80, 80], maxZoom: 16 });
       } else {
-        // Just show driver and customer locations without line (packed status)
         if (routeLine) {
           map.removeLayer(routeLine);
           routeLine = null;
         }
         const bounds = L.latLngBounds([driverPos, customerPos]);
-        map.fitBounds(bounds, { 
-          padding: [100, 100],
-          maxZoom: 14
-        });
+        map.fitBounds(bounds, { padding: [100, 100], maxZoom: 14 });
       }
     }
     
@@ -545,41 +560,37 @@ export default function OrderTrackingScreen() {
 </html>
   `;
 
-  const estimatedMinutes = locationData?.distance 
-    ? Math.ceil(locationData.distance * 3) 
-    : "5-8";
+  const estimatedMinutes = locationData?.distance ? Math.ceil(locationData.distance * 3) : "5-8";
+  const horizontalPadding = isSmallDevice ? 16 : isTablet ? 40 : 24;
+  const verticalPadding = isSmallDevice ? 32 : isTablet ? 40 : 36;
 
-  // ==================== RENDER CONFIRMED STAGE ====================
   if (isConfirmed) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
         <ScrollView contentContainerStyle={{ 
-          paddingTop: insets.top + 40, 
-          paddingBottom: insets.bottom + 40,
-          paddingHorizontal: isTablet ? 40 : 24,
+          paddingTop: insets.top + verticalPadding, 
+          paddingBottom: insets.bottom + verticalPadding,
+          paddingHorizontal: horizontalPadding,
         }}>
-          <View style={[styles.confirmationContainer, { maxWidth: isTablet ? 600 : '100%', alignSelf: 'center', width: '100%' }]}>
+          <View style={StyleSheet.flatten([styles.confirmationContainer, { maxWidth: isTablet ? 600 : '100%', alignSelf: 'center', width: '100%' }])}>
             <View style={[styles.successCircle, { 
               backgroundColor: theme.success + '20', 
               borderColor: theme.success,
-              width: isTablet ? 140 : 120,
-              height: isTablet ? 140 : 120,
+              width: isSmallDevice ? 100 : isTablet ? 140 : 120,
+              height: isSmallDevice ? 100 : isTablet ? 140 : 120,
             }]}>
-              <Feather name="check-circle" size={isTablet ? 70 : 60} color={theme.success} />
+              <Feather name="check-circle" size={isSmallDevice ? 50 : isTablet ? 70 : 60} color={theme.success} />
             </View>
             
-            <ThemedText type="h2" style={[styles.centerText, { marginTop: isTablet ? 32 : 24 }]}>
+            <ThemedText type="h2" style={[styles.centerText, { marginTop: isTablet ? 32 : isSmallDevice ? 20 : 24, fontSize: isSmallDevice ? 22 : undefined }]}>
               Order Confirmed!
             </ThemedText>
-            <ThemedText type="body" style={[styles.centerText, { color: theme.textSecondary, marginTop: 12 }]}>
+            <ThemedText type="body" style={[styles.centerText, { color: theme.textSecondary, marginTop: 12, fontSize: isSmallDevice ? 14 : undefined }]}>
               We've received your order and will start picking soon...
             </ThemedText>
           </View>
           
-          <Card style={StyleSheet.flatten([
-  styles.infoCard, 
-  { maxWidth: isTablet ? 600 : '100%', alignSelf: 'center', width: '100%' }
-])}>
+          <Card style={StyleSheet.flatten([styles.infoCard, { maxWidth: isTablet ? 600 : '100%', alignSelf: 'center', width: '100%' }])}>
             <View style={{ alignItems: 'center', marginBottom: 16 }}>
               <ThemedText type="caption" style={{ color: theme.textSecondary }}>
                 Order #{order.orderNumber || order.id.slice(0, 8)}
@@ -587,38 +598,13 @@ export default function OrderTrackingScreen() {
             </View>
             
             <View style={styles.timeline}>
-              <TimelineItem 
-                icon="check" 
-                iconColor={theme.success} 
-                title="Confirmed" 
-                subtitle="Order received" 
-                isCompleted 
-                theme={theme}
-              />
+              <TimelineItem icon="check" iconColor={theme.success} title="Confirmed" subtitle="Order received" isCompleted theme={theme} />
               <TimelineConnector color={theme.border} />
-              <TimelineItem 
-                icon="loader" 
-                iconColor={theme.border} 
-                title="Picking" 
-                subtitle="Pending..." 
-                theme={theme}
-              />
+              <TimelineItem icon="loader" iconColor={theme.border} title="Picking" subtitle="Pending..." theme={theme} />
               <TimelineConnector color={theme.border} />
-              <TimelineItem 
-                icon="package" 
-                iconColor={theme.border} 
-                title="Packed" 
-                subtitle="Pending..." 
-                theme={theme}
-              />
+              <TimelineItem icon="package" iconColor={theme.border} title="Packed" subtitle="Pending..." theme={theme} />
               <TimelineConnector color={theme.border} />
-              <TimelineItem 
-                icon="truck" 
-                iconColor={theme.border} 
-                title="Delivering" 
-                subtitle="Pending..." 
-                theme={theme}
-              />
+              <TimelineItem icon="truck" iconColor={theme.border} title="Delivering" subtitle="Pending..." theme={theme} />
             </View>
           </Card>
         </ScrollView>
@@ -626,14 +612,13 @@ export default function OrderTrackingScreen() {
     );
   }
 
-  // ==================== RENDER PICKING STAGE ====================
   if (isPicking) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
         <ScrollView contentContainerStyle={{ 
-          paddingTop: insets.top + 40, 
-          paddingBottom: insets.bottom + 40,
-          paddingHorizontal: isTablet ? 40 : 24,
+          paddingTop: insets.top + verticalPadding, 
+          paddingBottom: insets.bottom + verticalPadding,
+          paddingHorizontal: horizontalPadding,
         }}>
           <View style={{ maxWidth: isTablet ? 700 : '100%', alignSelf: 'center', width: '100%' }}>
             <PickingAnimation />
@@ -646,40 +631,13 @@ export default function OrderTrackingScreen() {
               </View>
               
               <View style={styles.timeline}>
-                <TimelineItem 
-                  icon="check" 
-                  iconColor={theme.success} 
-                  title="Confirmed" 
-                  subtitle="Completed" 
-                  isCompleted 
-                  theme={theme}
-                />
+                <TimelineItem icon="check" iconColor={theme.success} title="Confirmed" subtitle="Completed" isCompleted theme={theme} />
                 <TimelineConnector color={theme.success} />
-                <TimelineItem 
-                  icon="loader" 
-                  iconColor={theme.primary} 
-                  title="Picking" 
-                  subtitle="In progress..." 
-                  isActive 
-                  showSpinner 
-                  theme={theme}
-                />
+                <TimelineItem icon="loader" iconColor={theme.primary} title="Picking" subtitle="In progress..." isActive showSpinner theme={theme} />
                 <TimelineConnector color={theme.border} />
-                <TimelineItem 
-                  icon="package" 
-                  iconColor={theme.border} 
-                  title="Packed" 
-                  subtitle="Pending..." 
-                  theme={theme}
-                />
+                <TimelineItem icon="package" iconColor={theme.border} title="Packed" subtitle="Pending..." theme={theme} />
                 <TimelineConnector color={theme.border} />
-                <TimelineItem 
-                  icon="truck" 
-                  iconColor={theme.border} 
-                  title="Delivering" 
-                  subtitle="Pending..." 
-                  theme={theme}
-                />
+                <TimelineItem icon="truck" iconColor={theme.border} title="Delivering" subtitle="Pending..." theme={theme} />
               </View>
             </Card>
           </View>
@@ -688,14 +646,13 @@ export default function OrderTrackingScreen() {
     );
   }
 
-  // ==================== RENDER PACKING STAGE ====================
   if (isPacking) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
         <ScrollView contentContainerStyle={{ 
-          paddingTop: insets.top + 40, 
-          paddingBottom: insets.bottom + 40,
-          paddingHorizontal: isTablet ? 40 : 24,
+          paddingTop: insets.top + verticalPadding, 
+          paddingBottom: insets.bottom + verticalPadding,
+          paddingHorizontal: horizontalPadding,
         }}>
           <View style={{ maxWidth: isTablet ? 700 : '100%', alignSelf: 'center', width: '100%' }}>
             <PackingAnimation />
@@ -708,41 +665,13 @@ export default function OrderTrackingScreen() {
               </View>
               
               <View style={styles.timeline}>
-                <TimelineItem 
-                  icon="check" 
-                  iconColor={theme.success} 
-                  title="Confirmed" 
-                  subtitle="Completed" 
-                  isCompleted 
-                  theme={theme}
-                />
+                <TimelineItem icon="check" iconColor={theme.success} title="Confirmed" subtitle="Completed" isCompleted theme={theme} />
                 <TimelineConnector color={theme.success} />
-                <TimelineItem 
-                  icon="check" 
-                  iconColor={theme.success} 
-                  title="Picked" 
-                  subtitle="Completed" 
-                  isCompleted 
-                  theme={theme}
-                />
+                <TimelineItem icon="check" iconColor={theme.success} title="Picked" subtitle="Completed" isCompleted theme={theme} />
                 <TimelineConnector color={theme.primary} />
-                <TimelineItem 
-                  icon="package" 
-                  iconColor={theme.primary} 
-                  title="Packing" 
-                  subtitle="In progress..." 
-                  isActive 
-                  showSpinner 
-                  theme={theme}
-                />
+                <TimelineItem icon="package" iconColor={theme.primary} title="Packing" subtitle="In progress..." isActive showSpinner theme={theme} />
                 <TimelineConnector color={theme.border} />
-                <TimelineItem 
-                  icon="truck" 
-                  iconColor={theme.border} 
-                  title="Delivering" 
-                  subtitle="Pending..." 
-                  theme={theme}
-                />
+                <TimelineItem icon="truck" iconColor={theme.border} title="Delivering" subtitle="Pending..." theme={theme} />
               </View>
             </Card>
           </View>
@@ -751,11 +680,9 @@ export default function OrderTrackingScreen() {
     );
   }
 
-  // ==================== RENDER WAITING FOR DRIVER STAGE (PACKED) ====================
   if (isPacked) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-        {/* Map Section - Show map but WITHOUT yellow line */}
         <View style={{ height: isTablet ? '60%' : '50%' }}>
           <iframe
             ref={iframeRef}
@@ -765,18 +692,17 @@ export default function OrderTrackingScreen() {
           />
         </View>
 
-        {/* Bottom Panel */}
         <ScrollView
           style={[styles.bottomPanel, { backgroundColor: theme.backgroundDefault }]}
           contentContainerStyle={{ 
             paddingBottom: insets.bottom + 20,
-            paddingHorizontal: isTablet ? 40 : 24,
+            paddingHorizontal: horizontalPadding,
           }}
         >
           <View style={{ maxWidth: isTablet ? 800 : '100%', alignSelf: 'center', width: '100%' }}>
             <WaitingForDriver />
             
-            <Card style={{ marginTop: 24 }}>
+            <Card style={StyleSheet.flatten([styles.infoCard, { marginTop: 24 }])}>
               <View style={{ alignItems: 'center', marginBottom: 16 }}>
                 <ThemedText type="caption" style={{ color: theme.textSecondary }}>
                   Order #{order.orderNumber || order.id.slice(0, 8)}
@@ -784,42 +710,13 @@ export default function OrderTrackingScreen() {
               </View>
               
               <View style={styles.timeline}>
-                <TimelineItem 
-                  icon="check" 
-                  iconColor={theme.success} 
-                  title="Confirmed" 
-                  subtitle="Completed" 
-                  isCompleted 
-                  theme={theme}
-                />
+                <TimelineItem icon="check" iconColor={theme.success} title="Confirmed" subtitle="Completed" isCompleted theme={theme} />
                 <TimelineConnector color={theme.success} />
-                <TimelineItem 
-                  icon="check" 
-                  iconColor={theme.success} 
-                  title="Picked" 
-                  subtitle="Completed" 
-                  isCompleted 
-                  theme={theme}
-                />
+                <TimelineItem icon="check" iconColor={theme.success} title="Picked" subtitle="Completed" isCompleted theme={theme} />
                 <TimelineConnector color={theme.success} />
-                <TimelineItem 
-                  icon="check" 
-                  iconColor={theme.success} 
-                  title="Packed" 
-                  subtitle="Ready for pickup" 
-                  isCompleted 
-                  theme={theme}
-                />
+                <TimelineItem icon="check" iconColor={theme.success} title="Packed" subtitle="Ready for pickup" isCompleted theme={theme} />
                 <TimelineConnector color={theme.warning} />
-                <TimelineItem 
-                  icon="truck" 
-                  iconColor={theme.warning} 
-                  title="Waiting Pickup" 
-                  subtitle="Driver confirming..." 
-                  isActive 
-                  showSpinner 
-                  theme={theme}
-                />
+                <TimelineItem icon="truck" iconColor={theme.warning} title="Waiting Pickup" subtitle="Driver confirming..." isActive showSpinner theme={theme} />
               </View>
             </Card>
           </View>
@@ -828,10 +725,8 @@ export default function OrderTrackingScreen() {
     );
   }
 
-  // ==================== RENDER MAP VIEW (DELIVERING/DELIVERED) ====================
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-      {/* Map Section */}
       <View style={{ height: isTablet ? '60%' : '50%' }}>
         <iframe
           ref={iframeRef}
@@ -840,7 +735,6 @@ export default function OrderTrackingScreen() {
           title="Delivery Map"
         />
         
-        {/* GPS Badge - Only show when delivering */}
         {isDelivering && locationData?.hasLocation && (
           <View style={[styles.badge, { 
             left: isTablet ? 24 : 16, 
@@ -854,7 +748,6 @@ export default function OrderTrackingScreen() {
           </View>
         )}
         
-        {/* Distance Badge - Only show when delivering */}
         {isDelivering && locationData?.distance && (
           <View style={[styles.badge, { 
             right: isTablet ? 24 : 16, 
@@ -869,16 +762,14 @@ export default function OrderTrackingScreen() {
         )}
       </View>
 
-      {/* Bottom Panel */}
       <ScrollView
         style={[styles.bottomPanel, { backgroundColor: theme.backgroundDefault }]}
         contentContainerStyle={{ 
           paddingBottom: insets.bottom + 20,
-          paddingHorizontal: isTablet ? 40 : 24,
+          paddingHorizontal: horizontalPadding,
         }}
       >
         <View style={{ maxWidth: isTablet ? 800 : '100%', alignSelf: 'center', width: '100%' }}>
-          {/* Status Header */}
           <View style={{ alignItems: 'center', marginBottom: 24 }}>
             {isDelivering && (
               <View style={[styles.etaBadge, { backgroundColor: theme.primary + '15' }]}>
@@ -888,7 +779,7 @@ export default function OrderTrackingScreen() {
                 </ThemedText>
               </View>
             )}
-            <ThemedText type="h2" style={{ marginTop: 12, marginBottom: 8, textAlign: 'center' }}>
+            <ThemedText type="h2" style={{ marginTop: 12, marginBottom: 8, textAlign: 'center', fontSize: isSmallDevice ? 20 : undefined }}>
               {isDelivered ? "Order Delivered!" : "Driver is on the way"}
             </ThemedText>
             <ThemedText type="caption" style={{ color: theme.textSecondary }}>
@@ -896,7 +787,6 @@ export default function OrderTrackingScreen() {
             </ThemedText>
           </View>
 
-          {/* Progress Steps */}
           <View style={[styles.progressContainer, { 
             flexWrap: isSmallDevice ? 'wrap' : 'nowrap',
             justifyContent: isSmallDevice ? 'space-around' : 'center',
@@ -921,9 +811,8 @@ export default function OrderTrackingScreen() {
             />
           </View>
 
-          {/* Driver Info - Only show when delivering */}
           {showDriverContact && (
-            <Card style={{ marginBottom: 16, padding: 16 }}>
+            <Card style={StyleSheet.flatten([{ marginBottom: 16, padding: 16 }])}>
               <View style={{ 
                 flexDirection: isSmallDevice ? 'column' : 'row', 
                 alignItems: 'center', 
@@ -963,7 +852,6 @@ export default function OrderTrackingScreen() {
             </Card>
           )}
 
-          {/* Delivery PIN - Show when delivering or delivered */}
           {(isDelivering || isDelivered) && order.deliveryPin && (
             <Card style={styles.pinCard}>
               <View style={{ 
@@ -971,23 +859,23 @@ export default function OrderTrackingScreen() {
                 borderColor: isDelivered ? theme.success : theme.warning,
                 borderWidth: 2,
                 borderRadius: 16,
-                padding: isTablet ? 32 : 24,
+                padding: isTablet ? 32 : isSmallDevice ? 20 : 24,
                 alignItems: 'center'
               }}>
-                <Feather name="shield" size={isTablet ? 32 : 24} color={isDelivered ? theme.success : theme.warning} />
-                <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 8, textAlign: 'center' }}>
+                <Feather name="shield" size={isTablet ? 32 : isSmallDevice ? 20 : 24} color={isDelivered ? theme.success : theme.warning} />
+                <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 8, textAlign: 'center', fontSize: isSmallDevice ? 11 : undefined }}>
                   {isDelivered ? "Delivery Confirmed" : "Delivery PIN Code"}
                 </ThemedText>
                 <ThemedText style={{ 
-                  fontSize: isTablet ? 48 : 36, 
+                  fontSize: isSmallDevice ? 28 : isTablet ? 48 : 36, 
                   fontWeight: 'bold', 
                   color: isDelivered ? theme.success : theme.warning,
-                  letterSpacing: isTablet ? 12 : 8,
+                  letterSpacing: isSmallDevice ? 6 : isTablet ? 12 : 8,
                   marginVertical: 8 
                 }}>
                   {order.deliveryPin}
                 </ThemedText>
-                <ThemedText type="small" style={{ color: theme.textSecondary, textAlign: 'center', maxWidth: 300 }}>
+                <ThemedText type="small" style={{ color: theme.textSecondary, textAlign: 'center', maxWidth: 300, fontSize: isSmallDevice ? 12 : undefined }}>
                   {isDelivered 
                     ? "This code was used to confirm delivery"
                     : "Share this code with the driver upon arrival"}
@@ -1001,7 +889,6 @@ export default function OrderTrackingScreen() {
   );
 }
 
-// ==================== HELPER COMPONENTS ====================
 function TimelineItem({ icon, iconColor, title, subtitle, isCompleted, isActive, showSpinner, theme }: any) {
   return (
     <View style={styles.timelineItem}>
@@ -1015,11 +902,12 @@ function TimelineItem({ icon, iconColor, title, subtitle, isCompleted, isActive,
       <View style={{ flex: 1 }}>
         <ThemedText type="body" style={{ 
           fontWeight: isActive || isCompleted ? '600' : '400',
-          color: isActive ? iconColor : (isCompleted ? theme.text : theme.textSecondary)
+          color: isActive ? iconColor : (isCompleted ? theme.text : theme.textSecondary),
+          fontSize: isSmallDevice ? 14 : undefined
         }}>
           {title}
         </ThemedText>
-        <ThemedText type="caption" style={{ color: theme.textSecondary }}>{subtitle}</ThemedText>
+        <ThemedText type="caption" style={{ color: theme.textSecondary, fontSize: isSmallDevice ? 11 : undefined }}>{subtitle}</ThemedText>
       </View>
     </View>
   );
@@ -1037,7 +925,7 @@ function ProgressStep({ icon, label, isCompleted, isActive, theme }: any) {
       <View style={[styles.stepCircle, { backgroundColor: color }]}>
         <Feather name={icon as any} size={14} color="white" />
       </View>
-      <ThemedText type="small" style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 4 }}>
+      <ThemedText type="small" style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 4, fontSize: isSmallDevice ? 11 : undefined }}>
         {label}
       </ThemedText>
     </View>
@@ -1060,11 +948,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   
-  // ===== CONFIRMATION =====
   confirmationContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: isTablet ? 60 : 40,
+    padding: isTablet ? 60 : isSmallDevice ? 32 : 40,
   },
   successCircle: {
     borderRadius: 1000,
@@ -1073,11 +960,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   
-  // ===== PICKING STAGE =====
   pickingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: isTablet ? 60 : 40,
+    padding: isTablet ? 60 : isSmallDevice ? 32 : 40,
   },
   pickingScene: {
     flexDirection: 'row',
@@ -1090,7 +976,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
+    padding: isSmallDevice ? 12 : 16,
   },
   shelfRow: {
     flexDirection: 'row',
@@ -1108,18 +994,17 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
+    padding: isSmallDevice ? 8 : 12,
   },
   cart: {
     padding: 6,
     borderRadius: 8,
   },
   
-  // ===== PACKING STAGE =====
   packingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: isTablet ? 60 : 40,
+    padding: isTablet ? 60 : isSmallDevice ? 32 : 40,
   },
   packingBox: {
     borderRadius: 20,
@@ -1138,11 +1023,10 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   
-  // ===== WAITING STAGE =====
   waitingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: isTablet ? 60 : 40,
+    padding: isTablet ? 60 : isSmallDevice ? 32 : 40,
   },
   driverWaitCircle: {
     borderWidth: 3,
@@ -1150,10 +1034,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   
-  // ===== TIMELINE =====
   infoCard: {
-    margin: 24,
-    padding: 20,
+    margin: isSmallDevice ? 16 : 24,
+    padding: isSmallDevice ? 16 : 20,
   },
   timeline: {
     paddingVertical: 8,
@@ -1177,7 +1060,6 @@ const styles = StyleSheet.create({
     marginLeft: 15,
   },
   
-  // ===== MAP VIEW =====
   badge: {
     position: 'absolute',
     borderRadius: 20,
@@ -1241,5 +1123,11 @@ const styles = StyleSheet.create({
   },
   pinCard: {
     marginBottom: 16,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
   },
 });
