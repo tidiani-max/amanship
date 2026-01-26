@@ -1,149 +1,40 @@
-// app/screens/OrderTrackingScreen.tsx
-// REAL MAP with live driver tracking like Uber/Grab
-
 import React, { useEffect, useState, useRef } from "react";
-import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Dimensions } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
-import { Feather } from "@expo/vector-icons";
-import { useQuery } from "@tanstack/react-query";
-import { WebView } from "react-native-webview";
-
-import { ThemedText } from "@/components/ThemedText";
-import { Card } from "@/components/Card";
-import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius } from "@/constants/theme";
-import { RootStackParamList } from "@/navigation/RootStackNavigator";
-import { CallButton } from "@/components/CallButton";
-
-type OrderTrackingRouteProp = RouteProp<RootStackParamList, "OrderTracking">;
-
-const { width, height } = Dimensions.get("window");
 
 export default function OrderTrackingScreen() {
-  const navigation = useNavigation<any>();
-  const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
-  const route = useRoute<OrderTrackingRouteProp>();
-  const { orderId } = route.params;
-  const webViewRef = useRef<WebView>(null);
+  const [driverLocation, setDriverLocation] = useState({ lat: 13.7548, lng: 100.4990 });
+  const [customerLocation] = useState({ lat: 13.7563, lng: 100.5018 });
+  const [heading, setHeading] = useState(45);
+  const webViewRef = useRef<any>(null);
 
-  const [storeLocation, setStoreLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [customerLocation, setCustomerLocation] = useState<{lat: number, lng: number} | null>(null);
-
-  // Fetch order details
-  const { data: order, isLoading: orderLoading } = useQuery({
-    queryKey: ["order-tracking", orderId],
-    queryFn: async () => {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}`);
-      if (!response.ok) throw new Error("Order not found");
-      const data = await response.json();
-      
-      // Get customer location from order
-      if (data.customerLat && data.customerLng) {
-        setCustomerLocation({
-          lat: parseFloat(data.customerLat),
-          lng: parseFloat(data.customerLng)
-        });
-      }
-      
-      // Get store location
-      if (data.storeId) {
-        const storeRes = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/stores/${data.storeId}`);
-        const storeData = await storeRes.json();
-        if (storeData.latitude && storeData.longitude) {
-          setStoreLocation({
-            lat: parseFloat(storeData.latitude),
-            lng: parseFloat(storeData.longitude)
-          });
-        }
-      }
-      
-      return data;
-    },
-    refetchInterval: 5000,
-  });
-
-  // Fetch driver location (real-time polling)
-  const { data: driverData } = useQuery({
-    queryKey: ["driver-location", orderId],
-    queryFn: async () => {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/${orderId}`);
-      return response.json();
-    },
-    refetchInterval: 3000, // Update every 3 seconds
-    enabled: order?.status === "delivering",
-  });
-
-  // Update map when driver location changes
+  // Simulate driver movement for demo
   useEffect(() => {
-    if (driverData?.hasLocation && webViewRef.current) {
+    const interval = setInterval(() => {
+      setDriverLocation(prev => ({
+        lat: prev.lat + (Math.random() - 0.5) * 0.0005,
+        lng: prev.lng + (Math.random() - 0.5) * 0.0005
+      }));
+      setHeading(prev => (prev + 15) % 360);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update map when driver moves
+  useEffect(() => {
+    if (webViewRef.current) {
       const updateScript = `
         if (window.updateDriverLocation) {
           window.updateDriverLocation(
-            ${driverData.location.latitude},
-            ${driverData.location.longitude},
-            ${driverData.location.heading || 0}
+            ${driverLocation.lat},
+            ${driverLocation.lng},
+            ${heading}
           );
         }
         true;
       `;
       webViewRef.current.injectJavaScript(updateScript);
     }
-  }, [driverData?.location]);
+  }, [driverLocation, heading]);
 
-  if (orderLoading || !order) {
-    return (
-      <View style={[styles.centered, { backgroundColor: theme.backgroundRoot }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-        <ThemedText style={{ marginTop: 10 }}>Loading order details...</ThemedText>
-      </View>
-    );
-  }
-
-  const getUIStatus = () => {
-    const s = order.status;
-    if (s === "pending" || s === "picking") return "preparing";
-    if (s === "packed") return "picked_up";
-    if (s === "delivering") return "on_the_way";
-    if (s === "delivered") return "arriving";
-    return "preparing";
-  };
-
-  const status = getUIStatus();
-
-  const getStatusText = () => {
-    switch (status) {
-      case "preparing": return "Preparing your order";
-      case "picked_up": return "Rider picked up";
-      case "on_the_way": return "Rider is on the way";
-      case "arriving": return "Almost there!";
-      default: return "Processing";
-    }
-  };
-
-  const getTimeEstimate = () => {
-    if (driverData?.estimatedArrival) {
-      const eta = new Date(driverData.estimatedArrival);
-      const now = new Date();
-      const diff = Math.ceil((eta.getTime() - now.getTime()) / 60000);
-      return diff > 0 ? `${diff} min` : "Arriving now";
-    }
-    
-    switch (status) {
-      case "preparing": return "12-15 min";
-      case "picked_up": return "10-12 min";
-      case "on_the_way": return "5-8 min";
-      case "arriving": return "1-2 min";
-      default: return "-- min";
-    }
-  };
-
-  const showMessageButton = order.status === "delivering" && order.driverId;
-  const hasDriverLocation = driverData?.hasLocation && driverData.location;
-
-  // Create HTML for the map
-// Create HTML for the map
   const mapHTML = `
 <!DOCTYPE html>
 <html>
@@ -154,71 +45,104 @@ export default function OrderTrackingScreen() {
   <style>
     body { margin: 0; padding: 0; }
     #map { width: 100%; height: 100vh; }
-    .leaflet-container { background: #f0f2f5; }
+    .leaflet-container { background: #f5f5f5; }
     
-    /* Animation for the driver's path ripple */
     @keyframes pulse {
-      0% { transform: scale(0.5); opacity: 0.8; }
-      100% { transform: scale(2.5); opacity: 0; }
+      0% { transform: scale(1); opacity: 0.6; }
+      50% { transform: scale(1.3); opacity: 0.3; }
+      100% { transform: scale(1); opacity: 0.6; }
     }
-    .pulse-effect {
+    
+    .pulse-ring {
       position: absolute;
-      width: 40px;
-      height: 40px;
-      background: rgba(30, 136, 229, 0.3);
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 215, 0, 0.3);
       border-radius: 50%;
       animation: pulse 2s infinite;
+      top: -5px;
+      left: -5px;
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <script>
-    const customerLat = ${customerLocation?.lat || 13.7563};
-    const customerLng = ${customerLocation?.lng || 100.5018};
+    const customerLat = ${customerLocation.lat};
+    const customerLng = ${customerLocation.lng};
     
     const map = L.map('map', {
       zoomControl: false,
       attributionControl: false
     }).setView([customerLat, customerLng], 15);
     
-    // Light-themed tiles for a clean delivery app look
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+    // Light map tiles
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19
+    }).addTo(map);
     
-    // CUSTOMER ICON (Destination)
+    // Customer location (Blue home icon)
     const customerIcon = L.divIcon({
       html: \`
-        <div style="background: #1E88E5; width: 34px; height: 34px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-          </svg>
+        <div style="position: relative; width: 40px; height: 48px;">
+          <div style="
+            background: #1E88E5; 
+            width: 40px; 
+            height: 40px; 
+            border-radius: 50% 50% 50% 0; 
+            transform: rotate(-45deg);
+            border: 4px solid white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="white" style="transform: rotate(45deg);">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+          </div>
         </div>
       \`,
       className: '',
-      iconSize: [34, 34],
-      iconAnchor: [17, 17]
+      iconSize: [40, 48],
+      iconAnchor: [20, 48]
     });
     L.marker([customerLat, customerLng], { icon: customerIcon }).addTo(map);
     
     let driverMarker = null;
     let routeLine = null;
 
-    // UPDATE FUNCTION
     window.updateDriverLocation = function(lat, lng, heading = 0) {
       const driverPos = [lat, lng];
       const customerPos = [customerLat, customerLng];
 
+      // Create or update driver marker
       if (!driverMarker) {
-        // DRIVER ICON (Motorcycle)
-        const motorIcon = L.divIcon({
+        const driverIcon = L.divIcon({
           html: \`
-            <div style="position: relative; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;">
-              <div class="pulse-effect"></div>
-              <div id="motor-ship" style="transform: rotate(\${heading}deg); transition: transform 0.3s ease;">
-                <svg width="45" height="45" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="20" fill="#FFD700" stroke="black" stroke-width="2"/>
-                  <rect x="45" y="20" width="10" height="40" rx="5" fill="black" />
-                  <rect x="30" y="45" width="40" height="10" rx="2" fill="#333" />
+            <div style="position: relative; width: 50px; height: 50px;">
+              <div class="pulse-ring"></div>
+              <div id="driver-icon" style="
+                position: absolute;
+                width: 50px;
+                height: 50px;
+                transform: rotate(\${heading}deg);
+                transition: transform 0.5s ease;
+              ">
+                <svg width="50" height="50" viewBox="0 0 100 100">
+                  <!-- Yellow circle background -->
+                  <circle cx="50" cy="50" r="22" fill="#FFD700" stroke="white" stroke-width="4"/>
+                  <!-- Motorcycle icon -->
+                  <g transform="translate(50, 50)">
+                    <!-- Wheels -->
+                    <circle cx="-8" cy="8" r="4" fill="#333"/>
+                    <circle cx="8" cy="8" r="4" fill="#333"/>
+                    <!-- Body -->
+                    <rect x="-10" y="0" width="20" height="6" rx="2" fill="#333"/>
+                    <!-- Handlebar -->
+                    <rect x="-2" y="-8" width="4" height="10" rx="2" fill="#666"/>
+                  </g>
                 </svg>
               </div>
             </div>
@@ -227,266 +151,254 @@ export default function OrderTrackingScreen() {
           iconSize: [50, 50],
           iconAnchor: [25, 25]
         });
-        driverMarker = L.marker(driverPos, { icon: motorIcon }).addTo(map);
+        driverMarker = L.marker(driverPos, { icon: driverIcon }).addTo(map);
       } else {
         driverMarker.setLatLng(driverPos);
-        const ship = document.getElementById('motor-ship');
-        if(ship) ship.style.transform = 'rotate(' + heading + 'deg)';
+        const icon = document.getElementById('driver-icon');
+        if (icon) {
+          icon.style.transform = 'rotate(' + heading + 'deg)';
+        }
       }
 
-      // UPDATE THE LINE (From Driver to Customer only)
+      // Update route line (yellow, matching the image)
       if (routeLine) map.removeLayer(routeLine);
       
       routeLine = L.polyline([driverPos, customerPos], {
-        color: '#1E88E5', // Blue line
-        weight: 4,
-        dashArray: '10, 10', // Dashed line looks better for "tracking"
-        opacity: 0.7
+        color: '#FFD700',
+        weight: 6,
+        opacity: 0.9,
+        smoothFactor: 1
       }).addTo(map);
 
-      // Auto-zoom to keep both in view
+      // Fit bounds to show both markers
       const bounds = L.latLngBounds([driverPos, customerPos]);
-      map.fitBounds(bounds, { padding: [50, 50] });
+      map.fitBounds(bounds, { 
+        padding: [80, 80],
+        maxZoom: 16
+      });
     };
+    
+    // Initial position
+    window.updateDriverLocation(${driverLocation.lat}, ${driverLocation.lng}, ${heading});
   </script>
 </body>
 </html>
-`;
+  `;
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-      {/* Real Map View */}
-      <View style={styles.mapContainer}>
-        {storeLocation && customerLocation ? (
-          <WebView
-            ref={webViewRef}
-            source={{ html: mapHTML }}
-            style={styles.map}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-          />
-        ) : (
-          <View style={[styles.centered, { backgroundColor: theme.backgroundDefault }]}>
-            <ActivityIndicator size="large" color={theme.primary} />
-            <ThemedText style={{ marginTop: 10 }}>Loading map...</ThemedText>
-          </View>
-        )}
-
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f9fafb' }}>
+      {/* Map Section */}
+      <div style={{ position: 'relative', height: '50%' }}>
+        <iframe
+          ref={webViewRef}
+          srcDoc={mapHTML}
+          style={{ width: '100%', height: '100%', border: 'none' }}
+          title="Delivery Map"
+        />
+        
         {/* GPS Accuracy Badge */}
-        {hasDriverLocation && driverData.location.accuracy && (
-          <View style={[styles.accuracyBadge, { backgroundColor: theme.cardBackground }]}>
-            <Feather name="crosshair" size={12} color="#10b981" />
-            <ThemedText style={styles.accuracyText}>
-              GPS: ±{Math.round(driverData.location.accuracy)}m
-            </ThemedText>
-          </View>
-        )}
-
+        <div style={{
+          position: 'absolute',
+          bottom: '16px',
+          left: '16px',
+          backgroundColor: 'white',
+          borderRadius: '20px',
+          padding: '8px 12px',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="22" y1="12" x2="18" y2="12"/>
+            <line x1="6" y1="12" x2="2" y2="12"/>
+            <line x1="12" y1="6" x2="12" y2="2"/>
+            <line x1="12" y1="22" x2="12" y2="18"/>
+          </svg>
+          <span style={{ fontSize: '12px', fontWeight: '600', color: '#065f46' }}>GPS: ±12m</span>
+        </div>
+        
         {/* Speed Badge */}
-        {hasDriverLocation && driverData.location.speed && (
-          <View style={[styles.speedBadge, { backgroundColor: theme.cardBackground }]}>
-            <Feather name="navigation" size={12} color={theme.primary} />
-            <ThemedText style={[styles.accuracyText, { color: theme.primary }]}>
-              {Math.round(driverData.location.speed * 3.6)} km/h
-            </ThemedText>
-          </View>
-        )}
-      </View>
+        <div style={{
+          position: 'absolute',
+          bottom: '16px',
+          right: '16px',
+          backgroundColor: 'white',
+          borderRadius: '20px',
+          padding: '8px 12px',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1E88E5" strokeWidth="2">
+            <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+          </svg>
+          <span style={{ fontSize: '12px', fontWeight: '600', color: '#1E88E5' }}>24 km/h</span>
+        </div>
+      </div>
 
       {/* Bottom Panel */}
-      <ScrollView 
-        style={styles.bottomPanel}
-        contentContainerStyle={{
-          paddingBottom: insets.bottom + Spacing.lg,
-          paddingHorizontal: Spacing.lg,
-          paddingTop: Spacing.lg,
-        }}
-      >
+      <div style={{
+        flex: 1,
+        backgroundColor: 'white',
+        borderTopLeftRadius: '24px',
+        borderTopRightRadius: '24px',
+        marginTop: '-24px',
+        padding: '24px',
+        overflowY: 'auto',
+        boxShadow: '0 -4px 20px rgba(0,0,0,0.1)'
+      }}>
         {/* Status Header */}
-        <View style={styles.statusHeader}>
-          <View style={[styles.statusBadge, { backgroundColor: theme.primary + "20" }]}>
-            <Feather name="zap" size={16} color={theme.primary} />
-            <ThemedText type="caption" style={{ color: theme.primary, fontWeight: "600" }}>
-              {getTimeEstimate()}
-            </ThemedText>
-          </View>
-          <ThemedText type="h3">{getStatusText()}</ThemedText>
-          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            Order #{order.orderNumber}
-          </ThemedText>
+        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            backgroundColor: '#dbeafe',
+            padding: '8px 16px',
+            borderRadius: '20px',
+            marginBottom: '12px'
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1E88E5" strokeWidth="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+            <span style={{ fontSize: '14px', fontWeight: '600', color: '#1E88E5' }}>5-8 min</span>
+          </div>
+          <h2 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 8px 0' }}>Rider is on the way</h2>
+          <p style={{ color: '#6b7280', fontSize: '14px', margin: 0 }}>Order #12345</p>
+          
+          {/* Distance */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '8px' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
+              <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+            </svg>
+            <span style={{ fontSize: '14px', fontWeight: '600', color: '#10b981' }}>2.3 km away</span>
+          </div>
+        </div>
 
-          {/* Distance to Customer */}
-          {hasDriverLocation && (
-            <View style={styles.distanceBadge}>
-              <Feather name="navigation" size={14} color={theme.success} />
-              <ThemedText type="caption" style={{ color: theme.success, fontWeight: "600" }}>
-                {driverData.distance.toFixed(1)} km away
-              </ThemedText>
-            </View>
-          )}
-        </View>
-
-        {/* Progress Tracker */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressStep}>
-            <View style={[styles.progressDot, { backgroundColor: theme.success }]}>
-              <Feather name="check" size={12} color="#FFF" />
-            </View>
-            <ThemedText type="small" style={styles.progressLabel}>Confirmed</ThemedText>
-          </View>
-
-          <View style={[styles.progressLine, { 
-            backgroundColor: ["picked_up", "on_the_way", "arriving"].includes(status) 
-              ? theme.success : theme.border 
-          }]} />
-
-          <View style={styles.progressStep}>
-            <View style={[styles.progressDot, { 
-              backgroundColor: ["picked_up", "on_the_way", "arriving"].includes(status)
-                ? theme.success : theme.border 
-            }]}>
-              {["picked_up", "on_the_way", "arriving"].includes(status) && (
-                <Feather name="check" size={12} color="#FFF" />
-              )}
-            </View>
-            <ThemedText type="small" style={styles.progressLabel}>Picked Up</ThemedText>
-          </View>
-
-          <View style={[styles.progressLine, { 
-            backgroundColor: status === "arriving" ? theme.success : theme.border 
-          }]} />
-
-          <View style={styles.progressStep}>
-            <View style={[styles.progressDot, { 
-              backgroundColor: status === "arriving" ? theme.success : theme.border 
-            }]}>
-              {status === "arriving" && <Feather name="check" size={12} color="#FFF" />}
-            </View>
-            <ThemedText type="small" style={styles.progressLabel}>Delivered</ThemedText>
-          </View>
-        </View>
+        {/* Progress Steps */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                backgroundColor: '#10b981',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <span style={{ fontSize: '10px', marginTop: '4px', color: '#6b7280' }}>Confirmed</span>
+            </div>
+            <div style={{ width: '64px', height: '2px', backgroundColor: '#10b981', margin: '0 8px' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                backgroundColor: '#10b981',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <span style={{ fontSize: '10px', marginTop: '4px', color: '#6b7280' }}>Picked Up</span>
+            </div>
+            <div style={{ width: '64px', height: '2px', backgroundColor: '#d1d5db', margin: '0 8px' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                backgroundColor: '#d1d5db'
+              }} />
+              <span style={{ fontSize: '10px', marginTop: '4px', color: '#6b7280' }}>Delivered</span>
+            </div>
+          </div>
+        </div>
 
         {/* Driver Info Card */}
-        <Card style={styles.riderCard}>
-          <View style={styles.riderInfo}>
-            <View style={[styles.riderAvatar, { backgroundColor: theme.primary }]}>
-              <ThemedText type="h3" style={{ color: '#FFF' }}>
-                {order.driverName?.charAt(0) || "D"}
-              </ThemedText>
-            </View>
-            <View style={styles.riderDetails}>
-              <ThemedText type="body" style={{ fontWeight: "600" }}>
-                {order.driverName || "Finding Driver..."}
-              </ThemedText>
-              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                Flash Courier Partner
-              </ThemedText>
-            </View>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {showMessageButton && (
-                <Pressable 
-                  onPress={() => navigation.navigate("Chat", { orderId: order.id })}
-                  style={[styles.actionBtn, { backgroundColor: theme.primary }]}
-                >
-                  <Feather name="message-square" size={20} color="#FFFFFF" />
-                </Pressable>
-              )}
-              {order.driverPhone && <CallButton phoneNumber={order.driverPhone} />}
-            </View>
-          </View>
-        </Card>
+        <div style={{
+          backgroundColor: '#f9fafb',
+          borderRadius: '16px',
+          padding: '16px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px'
+        }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '50%',
+            backgroundColor: '#1E88E5',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <span style={{ color: 'white', fontWeight: 'bold', fontSize: '18px' }}>A</span>
+          </div>
+          <div style={{ flex: 1 }}>
+            <h3 style={{ margin: 0, fontWeight: '600', fontSize: '16px' }}>Alex Rider</h3>
+            <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>Flash Courier Partner</p>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              backgroundColor: '#1E88E5',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </button>
+            <button style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              backgroundColor: '#10b981',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
 
         {/* Delivery PIN */}
-        <Card style={styles.pinCard}>
-          <ThemedText type="caption" style={{ color: theme.textSecondary, marginBottom: 4 }}>
-            Delivery PIN Code
-          </ThemedText>
-          <ThemedText type="h1" style={{ letterSpacing: 8, color: theme.primary }}>
-            {order.deliveryPin}
-          </ThemedText>
-          <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 4 }}>
-            Share this code with the driver upon arrival
-          </ThemedText>
-        </Card>
-      </ScrollView>
-    </View>
+        <div style={{
+          backgroundColor: '#ecfdf5',
+          border: '2px solid #10b981',
+          borderRadius: '16px',
+          padding: '24px',
+          textAlign: 'center'
+        }}>
+          <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 8px 0' }}>Delivery PIN Code</p>
+          <h1 style={{ fontSize: '36px', fontWeight: 'bold', color: '#10b981', letterSpacing: '8px', margin: '0 0 8px 0' }}>5789</h1>
+          <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>Share this code with the driver upon arrival</p>
+        </div>
+      </div>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  mapContainer: { 
-    flex: 0.5, 
-    position: 'relative',
-  },
-  map: {
-    flex: 1,
-  },
-  accuracyBadge: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  speedBadge: {
-    position: 'absolute',
-    bottom: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  accuracyText: { fontSize: 12, fontWeight: '600', color: '#065f46' },
-  bottomPanel: { flex: 0.5 },
-  statusHeader: { alignItems: "center", marginBottom: Spacing.xl },
-  statusBadge: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    paddingHorizontal: Spacing.md, 
-    paddingVertical: Spacing.xs, 
-    borderRadius: BorderRadius.xs, 
-    gap: Spacing.xs, 
-    marginBottom: Spacing.sm 
-  },
-  distanceBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
-  },
-  progressContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.lg },
-  progressStep: { alignItems: 'center' },
-  progressDot: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  progressLine: { width: 60, height: 2, marginHorizontal: 8 },
-  progressLabel: { fontSize: 10 },
-  riderCard: { padding: 12, marginBottom: Spacing.md },
-  riderInfo: { flexDirection: "row", alignItems: "center" },
-  riderAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
-  riderDetails: { flex: 1, marginLeft: Spacing.md },
-  actionBtn: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  pinCard: {
-    padding: 20,
-    alignItems: 'center',
-    backgroundColor: '#ecfdf5',
-    borderWidth: 2,
-    borderColor: '#10b981',
-  },
-});
