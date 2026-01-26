@@ -1,24 +1,79 @@
 import React, { useEffect, useState, useRef } from "react";
+import { View, StyleSheet, ScrollView, ActivityIndicator, Linking, Pressable, Alert } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRoute, RouteProp } from "@react-navigation/native";
+import { Feather } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
+import { ThemedText } from "@/components/ThemedText";
+import { Card } from "@/components/Card";
+import { useTheme } from "@/hooks/useTheme";
+import { Spacing } from "@/constants/theme";
+import { RootStackParamList } from "@/navigation/RootStackNavigator";
+
+type OrderTrackingRouteProp = RouteProp<RootStackParamList, "OrderTracking">;
 
 export default function OrderTrackingScreen() {
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
+  const route = useRoute<OrderTrackingRouteProp>();
+  const orderId = route.params.orderId;
+
   const [driverLocation, setDriverLocation] = useState({ lat: 13.7548, lng: 100.4990 });
   const [customerLocation] = useState({ lat: 13.7563, lng: 100.5018 });
   const [heading, setHeading] = useState(45);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Simulate driver movement for demo
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDriverLocation(prev => ({
-        lat: prev.lat + (Math.random() - 0.5) * 0.0005,
-        lng: prev.lng + (Math.random() - 0.5) * 0.0005
-      }));
-      setHeading(prev => (prev + 15) % 360);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
+  // Fetch order details with real-time updates
+  const { data: order, isLoading } = useQuery({
+    queryKey: ["order-tracking", orderId],
+    queryFn: async () => {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}`);
+      if (!response.ok) throw new Error("Failed to fetch order");
+      return response.json();
+    },
+    refetchInterval: 3000, // Update every 3 seconds
+  });
 
-  // Update map when driver moves
+  // Fetch driver location
+  const { data: locationData } = useQuery({
+    queryKey: ["driver-location", orderId],
+    queryFn: async () => {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/${orderId}`);
+      if (!response.ok) return null;
+      return response.json();
+    },
+    enabled: order?.status === "delivering",
+    refetchInterval: 3000,
+  });
+
+  // Update driver location from real data
+  useEffect(() => {
+    if (locationData?.hasLocation && locationData.location) {
+      setDriverLocation({
+        lat: locationData.location.latitude,
+        lng: locationData.location.longitude,
+      });
+      if (locationData.location.heading) {
+        setHeading(locationData.location.heading);
+      }
+    }
+  }, [locationData]);
+
+  // Simulate movement for demo if no real location
+  useEffect(() => {
+    if (!locationData?.hasLocation) {
+      const interval = setInterval(() => {
+        setDriverLocation(prev => ({
+          lat: prev.lat + (Math.random() - 0.5) * 0.0005,
+          lng: prev.lng + (Math.random() - 0.5) * 0.0005
+        }));
+        setHeading(prev => (prev + 15) % 360);
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [locationData]);
+
+  // Update map iframe
   useEffect(() => {
     if (iframeRef.current?.contentWindow) {
       iframeRef.current.contentWindow.postMessage({
@@ -29,6 +84,37 @@ export default function OrderTrackingScreen() {
       }, '*');
     }
   }, [driverLocation, heading]);
+
+  const handleCallDriver = () => {
+    if (order?.driverPhone) {
+      Linking.openURL(`tel:${order.driverPhone}`);
+    } else {
+      Alert.alert("No Driver", "Driver contact not available yet");
+    }
+  };
+
+  const handleChatDriver = () => {
+    // Navigate to chat screen (implement based on your navigation)
+    Alert.alert("Chat", "Chat feature coming soon");
+  };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: theme.backgroundRoot }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <ThemedText style={{ marginTop: 16 }}>Loading order details...</ThemedText>
+      </View>
+    );
+  }
+
+  if (!order) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: theme.backgroundRoot }]}>
+        <Feather name="alert-circle" size={48} color={theme.error} />
+        <ThemedText style={{ marginTop: 16 }}>Order not found</ThemedText>
+      </View>
+    );
+  }
 
   const mapHTML = `
 <!DOCTYPE html>
@@ -71,12 +157,10 @@ export default function OrderTrackingScreen() {
       attributionControl: false
     }).setView([customerLat, customerLng], 15);
     
-    // Light map tiles
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19
     }).addTo(map);
     
-    // Customer location (Blue home icon)
     const customerIcon = L.divIcon({
       html: \`
         <div style="position: relative; width: 40px; height: 48px;">
@@ -112,7 +196,6 @@ export default function OrderTrackingScreen() {
       const driverPos = [lat, lng];
       const customerPos = [customerLat, customerLng];
 
-      // Create or update driver marker
       if (!driverMarker) {
         const driverIcon = L.divIcon({
           html: \`
@@ -150,7 +233,6 @@ export default function OrderTrackingScreen() {
         }
       }
 
-      // Update route line (yellow)
       if (routeLine) map.removeLayer(routeLine);
       
       routeLine = L.polyline([driverPos, customerPos], {
@@ -160,7 +242,6 @@ export default function OrderTrackingScreen() {
         smoothFactor: 1
       }).addTo(map);
 
-      // Fit bounds to show both markers
       const bounds = L.latLngBounds([driverPos, customerPos]);
       map.fitBounds(bounds, { 
         padding: [80, 80],
@@ -168,24 +249,26 @@ export default function OrderTrackingScreen() {
       });
     }
     
-    // Listen for messages from parent
     window.addEventListener('message', function(event) {
       if (event.data && event.data.type === 'updateDriver') {
         updateDriverLocation(event.data.lat, event.data.lng, event.data.heading);
       }
     });
     
-    // Initial position
     updateDriverLocation(${driverLocation.lat}, ${driverLocation.lng}, ${heading});
   </script>
 </body>
 </html>
   `;
 
+  const estimatedMinutes = locationData?.distance 
+    ? Math.ceil(locationData.distance * 3) 
+    : "5-8";
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f9fafb' }}>
+    <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
       {/* Map Section */}
-      <div style={{ position: 'relative', height: '50%' }}>
+      <View style={{ height: '50%' }}>
         <iframe
           ref={iframeRef}
           srcDoc={mapHTML}
@@ -193,209 +276,220 @@ export default function OrderTrackingScreen() {
           title="Delivery Map"
         />
         
-        {/* GPS Accuracy Badge */}
-        <div style={{
-          position: 'absolute',
-          bottom: '16px',
-          left: '16px',
-          backgroundColor: 'white',
-          borderRadius: '20px',
-          padding: '8px 12px',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="22" y1="12" x2="18" y2="12"/>
-            <line x1="6" y1="12" x2="2" y2="12"/>
-            <line x1="12" y1="6" x2="12" y2="2"/>
-            <line x1="12" y1="22" x2="12" y2="18"/>
-          </svg>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: '#065f46' }}>GPS: ±12m</span>
-        </div>
+        {/* GPS Badge */}
+        {locationData?.hasLocation && (
+          <View style={[styles.badge, { left: 16, backgroundColor: 'white' }]}>
+            <Feather name="navigation" size={14} color="#10b981" />
+            <ThemedText type="small" style={{ fontWeight: '600', color: '#065f46' }}>
+              GPS: ±{locationData.location.accuracy?.toFixed(0) || 12}m
+            </ThemedText>
+          </View>
+        )}
         
-        {/* Speed Badge */}
-        <div style={{
-          position: 'absolute',
-          bottom: '16px',
-          right: '16px',
-          backgroundColor: 'white',
-          borderRadius: '20px',
-          padding: '8px 12px',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1E88E5" strokeWidth="2">
-            <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-          </svg>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: '#1E88E5' }}>24 km/h</span>
-        </div>
-      </div>
+        {/* Distance Badge */}
+        {locationData?.distance && (
+          <View style={[styles.badge, { right: 16, backgroundColor: 'white' }]}>
+            <Feather name="navigation" size={14} color="#1E88E5" />
+            <ThemedText type="small" style={{ fontWeight: '600', color: '#1E88E5' }}>
+              {locationData.distance.toFixed(1)} km
+            </ThemedText>
+          </View>
+        )}
+      </View>
 
       {/* Bottom Panel */}
-      <div style={{
-        flex: 1,
-        backgroundColor: 'white',
-        borderTopLeftRadius: '24px',
-        borderTopRightRadius: '24px',
-        marginTop: '-24px',
-        padding: '24px',
-        overflowY: 'auto',
-        boxShadow: '0 -4px 20px rgba(0,0,0,0.1)'
-      }}>
+      <ScrollView
+        style={[styles.bottomPanel, { backgroundColor: theme.backgroundDefault }]}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+      >
         {/* Status Header */}
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            backgroundColor: '#dbeafe',
-            padding: '8px 16px',
-            borderRadius: '20px',
-            marginBottom: '12px'
-          }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1E88E5" strokeWidth="2">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-            </svg>
-            <span style={{ fontSize: '14px', fontWeight: '600', color: '#1E88E5' }}>5-8 min</span>
-          </div>
-          <h2 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 8px 0' }}>Rider is on the way</h2>
-          <p style={{ color: '#6b7280', fontSize: '14px', margin: 0 }}>Order #12345</p>
-          
-          {/* Distance */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '8px' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
-              <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-            </svg>
-            <span style={{ fontSize: '14px', fontWeight: '600', color: '#10b981' }}>2.3 km away</span>
-          </div>
-        </div>
+        <View style={{ alignItems: 'center', marginBottom: 24 }}>
+          <View style={[styles.etaBadge, { backgroundColor: theme.primary + '15' }]}>
+            <Feather name="clock" size={16} color={theme.primary} />
+            <ThemedText type="body" style={{ fontWeight: '600', color: theme.primary }}>
+              {estimatedMinutes} min
+            </ThemedText>
+          </View>
+          <ThemedText type="h2" style={{ marginTop: 12, marginBottom: 8 }}>
+            {order.status === "delivering" ? "Rider is on the way" : "Preparing your order"}
+          </ThemedText>
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            Order #{order.orderNumber || order.id.slice(0, 8)}
+          </ThemedText>
+        </View>
 
         {/* Progress Steps */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{
-                width: '24px',
-                height: '24px',
-                borderRadius: '50%',
-                backgroundColor: '#10b981',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              </div>
-              <span style={{ fontSize: '10px', marginTop: '4px', color: '#6b7280' }}>Confirmed</span>
-            </div>
-            <div style={{ width: '64px', height: '2px', backgroundColor: '#10b981', margin: '0 8px' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{
-                width: '24px',
-                height: '24px',
-                borderRadius: '50%',
-                backgroundColor: '#10b981',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              </div>
-              <span style={{ fontSize: '10px', marginTop: '4px', color: '#6b7280' }}>Picked Up</span>
-            </div>
-            <div style={{ width: '64px', height: '2px', backgroundColor: '#d1d5db', margin: '0 8px' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{
-                width: '24px',
-                height: '24px',
-                borderRadius: '50%',
-                backgroundColor: '#d1d5db'
-              }} />
-              <span style={{ fontSize: '10px', marginTop: '4px', color: '#6b7280' }}>Delivered</span>
-            </div>
-          </div>
-        </div>
+        <View style={styles.progressContainer}>
+          <View style={styles.progressStep}>
+            <View style={[styles.stepCircle, { backgroundColor: theme.success }]}>
+              <Feather name="check" size={14} color="white" />
+            </View>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>Confirmed</ThemedText>
+          </View>
+          
+          <View style={[styles.progressLine, { 
+            backgroundColor: order.status === "delivering" ? theme.success : theme.border 
+          }]} />
+          
+          <View style={styles.progressStep}>
+            <View style={[styles.stepCircle, { 
+              backgroundColor: order.status === "delivering" ? theme.success : theme.border 
+            }]}>
+              {order.status === "delivering" && <Feather name="check" size={14} color="white" />}
+            </View>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>Picked Up</ThemedText>
+          </View>
+          
+          <View style={[styles.progressLine, { backgroundColor: theme.border }]} />
+          
+          <View style={styles.progressStep}>
+            <View style={[styles.stepCircle, { backgroundColor: theme.border }]} />
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>Delivered</ThemedText>
+          </View>
+        </View>
 
-        {/* Driver Info Card */}
-        <div style={{
-          backgroundColor: '#f9fafb',
-          borderRadius: '16px',
-          padding: '16px',
-          marginBottom: '16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px'
-        }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '50%',
-            backgroundColor: '#1E88E5',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <span style={{ color: 'white', fontWeight: 'bold', fontSize: '18px' }}>A</span>
-          </div>
-          <div style={{ flex: 1 }}>
-            <h3 style={{ margin: 0, fontWeight: '600', fontSize: '16px' }}>Alex Rider</h3>
-            <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>Flash Courier Partner</p>
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: '50%',
-              backgroundColor: '#1E88E5',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
-            </button>
-            <button style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: '50%',
-              backgroundColor: '#10b981',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-              </svg>
-            </button>
-          </div>
-        </div>
+        {/* Driver Info */}
+        {order.driverId && (
+          <Card style={{ marginBottom: 16, padding: 16 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+              <View style={[styles.driverAvatar, { backgroundColor: theme.primary }]}>
+                <ThemedText style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>
+                  {order.driverName?.[0]?.toUpperCase() || 'D'}
+                </ThemedText>
+              </View>
+              
+              <View style={{ flex: 1 }}>
+                <ThemedText style={{ fontWeight: '600', fontSize: 16 }}>
+                  {order.driverName || "Driver"}
+                </ThemedText>
+                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                  {order.driverPhone || "Courier Partner"}
+                </ThemedText>
+              </View>
+              
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Pressable 
+                  style={[styles.actionButton, { backgroundColor: theme.primary }]}
+                  onPress={handleChatDriver}
+                >
+                  <Feather name="message-circle" size={20} color="white" />
+                </Pressable>
+                
+                <Pressable 
+                  style={[styles.actionButton, { backgroundColor: theme.success }]}
+                  onPress={handleCallDriver}
+                >
+                  <Feather name="phone" size={20} color="white" />
+                </Pressable>
+              </View>
+            </View>
+          </Card>
+        )}
 
         {/* Delivery PIN */}
-        <div style={{
-          backgroundColor: '#ecfdf5',
-          border: '2px solid #10b981',
-          borderRadius: '16px',
-          padding: '24px',
-          textAlign: 'center'
-        }}>
-          <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 8px 0' }}>Delivery PIN Code</p>
-          <h1 style={{ fontSize: '36px', fontWeight: 'bold', color: '#10b981', letterSpacing: '8px', margin: '0 0 8px 0' }}>5789</h1>
-          <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>Share this code with the driver upon arrival</p>
-        </div>
-      </div>
-    </div>
+        {order.deliveryPin && (
+          <Card style={styles.pinCard}>
+            <View style={{ 
+              backgroundColor: theme.success + '10',
+              borderColor: theme.success,
+              borderWidth: 2,
+              borderRadius: 16,
+              padding: 24,
+              alignItems: 'center'
+            }}>
+              <Feather name="shield" size={24} color={theme.success} />
+            <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 8 }}>
+              Delivery PIN Code
+            </ThemedText>
+            <ThemedText style={{ 
+              fontSize: 36, 
+              fontWeight: 'bold', 
+              color: theme.success,
+              letterSpacing: 8,
+              marginVertical: 8 
+            }}>
+              {order.deliveryPin}
+            </ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary, textAlign: 'center' }}>
+              Share this code with the driver upon arrival
+            </ThemedText>
+            </View>
+          </Card>
+        )}
+      </ScrollView>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  badge: {
+    position: 'absolute',
+    bottom: 16,
+    borderRadius: 20,
+    padding: 8,
+    paddingHorizontal: 12,
+    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bottomPanel: {
+    flex: 1,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    marginTop: -24,
+    padding: 24,
+  },
+  etaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  progressStep: {
+    alignItems: 'center',
+  },
+  stepCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  progressLine: {
+    width: 64,
+    height: 2,
+    marginHorizontal: 8,
+  },
+  driverAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinCard: {
+    marginBottom: 16,
+  },
+});
