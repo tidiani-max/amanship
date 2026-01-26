@@ -44,7 +44,7 @@ export default function OrdersScreen() {
   });
 
   const activeOrders = allOrders.filter((o: any) => 
-    ["pending", "picking", "packed", "delivering", "created", "confirmed"].includes(o.status?.toLowerCase())
+    ["pending", "picking", "packing", "packed", "delivering", "created", "confirmed"].includes(o.status?.toLowerCase())
   );
   
   const completedOrders = allOrders.filter((o: any) => 
@@ -70,25 +70,42 @@ export default function OrdersScreen() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "pending": return theme.warning;
+      case "pending": 
+      case "confirmed": return theme.success;
       case "picking": return theme.secondary;
-      case "packed": return theme.secondary;
+      case "packing": return theme.secondary;
+      case "packed": return theme.warning;
       case "delivering": return theme.primary;
       case "delivered": return theme.success;
       default: return theme.textSecondary;
     }
   };
 
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "pending": return "PENDING";
+      case "confirmed": return "CONFIRMED";
+      case "picking": return "PICKING";
+      case "packing": return "PACKING";
+      case "packed": return "PACKED";
+      case "delivering": return "ON THE WAY";
+      case "delivered": return "DELIVERED";
+      default: return status.toUpperCase();
+    }
+  };
+
   const handleOrderPress = (order: any) => {
-    if (order.status === "delivering" || order.status === "packed") {
-      navigation.navigate("OrderTracking", { orderId: order.id });
-    } else {
+    // Only go to order detail if delivered, otherwise go to tracking
+    if (order.status === "delivered") {
       navigation.navigate("OrderDetail", { order });
+    } else {
+      navigation.navigate("OrderTracking", { orderId: order.id });
     }
   };
 
   const renderOrder = ({ item }: { item: any }) => {
     const firstItem = item.items?.[0];
+    const isActiveOrder = item.status !== "delivered";
 
     return (
       <Card style={styles.orderCard} onPress={() => handleOrderPress(item)}>
@@ -104,41 +121,103 @@ export default function OrdersScreen() {
 
           {/* INFO CONTAINER */}
           <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <ThemedText style={{ fontWeight: "700" }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <ThemedText style={{ fontWeight: "700", flex: 1, marginRight: 8 }}>
                 {firstItem?.productName || "Order"}
                 {item.items?.length > 1 ? ` (+${item.items.length - 1})` : ""}
               </ThemedText>
-              <ThemedText style={{ color: getStatusColor(item.status), fontWeight: 'bold', fontSize: 12 }}>
-                {item.status.toUpperCase()}
-              </ThemedText>
+              <View style={{
+                backgroundColor: getStatusColor(item.status) + '20',
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                borderRadius: 6,
+              }}>
+                <ThemedText style={{ 
+                  color: getStatusColor(item.status), 
+                  fontWeight: 'bold', 
+                  fontSize: 10 
+                }}>
+                  {getStatusLabel(item.status)}
+                </ThemedText>
+              </View>
             </View>
             
-            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 4 }}>
               {formatDate(item.createdAt)}
             </ThemedText>
             
-            {/* ✅ DELIVERY PIN BADGE - Only show when delivering */}
-            {item.status === "delivering" && item.deliveryPin && (
+            {/* Status indicator for active orders */}
+            {isActiveOrder && (
               <View style={{ 
-                backgroundColor: theme.primary + "15", 
-                paddingHorizontal: 8, 
-                paddingVertical: 4, 
-                borderRadius: 4,
-                marginTop: 6,
-                alignSelf: 'flex-start'
+                flexDirection: 'row', 
+                alignItems: 'center', 
+                gap: 6,
+                marginTop: 8,
+                backgroundColor: theme.primary + '10',
+                paddingHorizontal: 8,
+                paddingVertical: 6,
+                borderRadius: 6,
+                alignSelf: 'flex-start',
               }}>
-                <ThemedText type="small" style={{ color: theme.primary, fontWeight: "bold" }}>
-                  PIN: {item.deliveryPin}
+                <Feather name="clock" size={12} color={theme.primary} />
+                <ThemedText type="small" style={{ color: theme.primary, fontWeight: '600' }}>
+                  {item.status === "confirmed" && "Getting ready..."}
+                  {item.status === "picking" && "Picking items..."}
+                  {item.status === "packing" && "Packing..."}
+                  {item.status === "packed" && "Waiting for driver"}
+                  {item.status === "delivering" && "On the way"}
                 </ThemedText>
               </View>
             )}
             
-            <ThemedText style={{ fontWeight: "700", marginTop: 4 }}>
+            {/* Delivery PIN Badge - Only show when delivering */}
+            {item.status === "delivering" && item.deliveryPin && (
+              <View style={{ 
+                backgroundColor: theme.warning + "20", 
+                paddingHorizontal: 10, 
+                paddingVertical: 6, 
+                borderRadius: 8,
+                marginTop: 8,
+                alignSelf: 'flex-start',
+                borderWidth: 1,
+                borderColor: theme.warning + '40',
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Feather name="shield" size={12} color={theme.warning} />
+                  <ThemedText type="small" style={{ color: theme.warning, fontWeight: "bold" }}>
+                    PIN: {item.deliveryPin}
+                  </ThemedText>
+                </View>
+              </View>
+            )}
+            
+            <ThemedText style={{ fontWeight: "700", marginTop: 8, fontSize: 16 }}>
               {formatPrice(item.total)}
             </ThemedText>
           </View>
         </View>
+
+        {/* Track Order Button for active orders */}
+        {isActiveOrder && (
+          <View style={{ 
+            marginTop: 12, 
+            paddingTop: 12, 
+            borderTopWidth: 1, 
+            borderTopColor: theme.border 
+          }}>
+            <View style={{ 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              gap: 6,
+            }}>
+              <Feather name="navigation" size={14} color={theme.primary} />
+              <ThemedText style={{ color: theme.primary, fontWeight: '600', fontSize: 13 }}>
+                Track Order
+              </ThemedText>
+            </View>
+          </View>
+        )}
       </Card>
     );
   };
@@ -183,9 +262,18 @@ export default function OrdersScreen() {
         contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 100 }]}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Feather name="shopping-bag" size={48} color={theme.textSecondary} />
+            <Feather 
+              name={activeTab === "active" ? "shopping-bag" : "check-circle"} 
+              size={48} 
+              color={theme.textSecondary} 
+            />
             <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
-              No orders found
+              {activeTab === "active" ? "No active orders" : "No order history"}
+            </ThemedText>
+            <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 8 }}>
+              {activeTab === "active" 
+                ? "Start shopping to see your orders here" 
+                : "Completed orders will appear here"}
             </ThemedText>
           </View>
         }
@@ -211,5 +299,10 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   productImage: { width: '100%', height: '100%' },
-  emptyState: { alignItems: "center", justifyContent: "center", marginTop: 100 },
+  emptyState: { 
+    alignItems: "center", 
+    justifyContent: "center", 
+    marginTop: 100,
+    paddingHorizontal: 40,
+  },
 });

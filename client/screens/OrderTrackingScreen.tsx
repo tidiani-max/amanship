@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { View, StyleSheet, ScrollView, ActivityIndicator, Linking, Pressable, Alert, Animated } from "react-native";
+import { View, StyleSheet, ScrollView, ActivityIndicator, Linking, Pressable, Alert, Animated, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -13,6 +13,119 @@ import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type OrderTrackingRouteProp = RouteProp<RootStackParamList, "OrderTracking">;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const isSmallDevice = SCREEN_WIDTH < 375;
+const isMediumDevice = SCREEN_WIDTH >= 375 && SCREEN_WIDTH < 768;
+const isTablet = SCREEN_WIDTH >= 768;
+
+// ==================== PICKING ANIMATION COMPONENT ====================
+function PickingAnimation() {
+  const { theme } = useTheme();
+  const moveAnim = useRef(new Animated.Value(0)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const moveAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(moveAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(moveAnim, {
+          toValue: 0,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const rotateAnimation = Animated.loop(
+      Animated.timing(rotateAnim, {
+        toValue: 1,
+        duration: 3000,
+        useNativeDriver: true,
+      })
+    );
+
+    moveAnimation.start();
+    rotateAnimation.start();
+
+    return () => {
+      moveAnimation.stop();
+      rotateAnimation.stop();
+    };
+  }, []);
+
+  const translateX = moveAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 30],
+  });
+
+  const rotate = rotateAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ['0deg', '-10deg', '0deg'],
+  });
+
+  const iconSize = isSmallDevice ? 60 : isTablet ? 100 : 80;
+  const containerSize = isSmallDevice ? 140 : isTablet ? 200 : 160;
+
+  return (
+    <View style={styles.pickingContainer}>
+      <View style={[styles.pickingScene, { width: containerSize * 2, height: containerSize }]}>
+        {/* Warehouse/Storage */}
+        <View style={[styles.warehouse, { 
+          backgroundColor: theme.backgroundDefault, 
+          borderColor: theme.border,
+          width: containerSize * 0.8,
+          height: containerSize * 0.8,
+        }]}>
+          <Feather name="home" size={iconSize * 0.5} color={theme.textSecondary} />
+          <View style={styles.shelfRow}>
+            <View style={[styles.box, { backgroundColor: theme.primary + '40', width: 20, height: 20 }]} />
+            <View style={[styles.box, { backgroundColor: theme.secondary + '40', width: 20, height: 20 }]} />
+            <View style={[styles.box, { backgroundColor: theme.warning + '40', width: 20, height: 20 }]} />
+          </View>
+        </View>
+
+        {/* Animated Picker */}
+        <Animated.View style={[
+          styles.pickerIcon,
+          { 
+            transform: [{ translateX }, { rotate }],
+            left: containerSize * 0.7,
+          }
+        ]}>
+          <View style={[styles.pickerCircle, { 
+            backgroundColor: theme.primary + '20', 
+            borderColor: theme.primary,
+            width: containerSize * 0.6,
+            height: containerSize * 0.6,
+          }]}>
+            <Feather name="user" size={iconSize * 0.6} color={theme.primary} />
+            <View style={[styles.cart, { backgroundColor: theme.primary, marginTop: 8 }]}>
+              <Feather name="shopping-cart" size={iconSize * 0.3} color="white" />
+            </View>
+          </View>
+        </Animated.View>
+      </View>
+      
+      <ThemedText type="h2" style={[styles.centerText, { marginTop: isTablet ? 40 : 32 }]}>
+        Picking your items
+      </ThemedText>
+      <ThemedText type="body" style={[styles.centerText, { color: theme.textSecondary, marginTop: 12 }]}>
+        Our team is collecting items from the warehouse...
+      </ThemedText>
+      
+      <View style={styles.loadingDots}>
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={[styles.dot, { backgroundColor: theme.primary }]} />
+        ))}
+      </View>
+    </View>
+  );
+}
 
 // ==================== PACKING ANIMATION COMPONENT ====================
 function PackingAnimation() {
@@ -58,27 +171,35 @@ function PackingAnimation() {
     outputRange: ['0deg', '360deg'],
   });
 
+  const iconSize = isSmallDevice ? 60 : isTablet ? 100 : 80;
+  const boxSize = isSmallDevice ? 140 : isTablet ? 200 : 160;
+
   return (
     <View style={styles.packingContainer}>
       <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-        <View style={[styles.packingBox, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
+        <View style={[styles.packingBox, { 
+          backgroundColor: theme.primary + '20', 
+          borderColor: theme.primary,
+          width: boxSize,
+          height: boxSize,
+        }]}>
           <Animated.View style={{ transform: [{ rotate }] }}>
-            <Feather name="package" size={80} color={theme.primary} />
+            <Feather name="package" size={iconSize} color={theme.primary} />
           </Animated.View>
         </View>
       </Animated.View>
       
-      <ThemedText type="h2" style={{ marginTop: 32, textAlign: 'center' }}>
-        Your order is being packed
+      <ThemedText type="h2" style={[styles.centerText, { marginTop: isTablet ? 40 : 32 }]}>
+        Packing your order
       </ThemedText>
-      <ThemedText type="body" style={{ marginTop: 12, textAlign: 'center', color: theme.textSecondary }}>
+      <ThemedText type="body" style={[styles.centerText, { color: theme.textSecondary, marginTop: 12 }]}>
         Our team is carefully packing your items...
       </ThemedText>
       
       <View style={styles.loadingDots}>
-        <View style={[styles.dot, { backgroundColor: theme.primary }]} />
-        <View style={[styles.dot, { backgroundColor: theme.primary }]} />
-        <View style={[styles.dot, { backgroundColor: theme.primary }]} />
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={[styles.dot, { backgroundColor: theme.primary }]} />
+        ))}
       </View>
     </View>
   );
@@ -108,19 +229,28 @@ function WaitingForDriver() {
     return () => pulse.stop();
   }, []);
 
+  const circleSize = isSmallDevice ? 120 : isTablet ? 180 : 140;
+  const iconSize = isSmallDevice ? 50 : isTablet ? 80 : 64;
+
   return (
     <View style={styles.waitingContainer}>
       <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-        <View style={[styles.driverWaitCircle, { backgroundColor: theme.warning + '20', borderColor: theme.warning }]}>
-          <Feather name="truck" size={64} color={theme.warning} />
+        <View style={[styles.driverWaitCircle, { 
+          backgroundColor: theme.warning + '20', 
+          borderColor: theme.warning,
+          width: circleSize,
+          height: circleSize,
+          borderRadius: circleSize / 2,
+        }]}>
+          <Feather name="truck" size={iconSize} color={theme.warning} />
         </View>
       </Animated.View>
       
-      <ThemedText type="h2" style={{ marginTop: 32, textAlign: 'center' }}>
-        Waiting for driver to confirm pickup
+      <ThemedText type="h2" style={[styles.centerText, { marginTop: isTablet ? 40 : 32 }]}>
+        Waiting for driver
       </ThemedText>
-      <ThemedText type="body" style={{ marginTop: 12, textAlign: 'center', color: theme.textSecondary }}>
-        Your order is ready and packed. A driver will pick it up soon...
+      <ThemedText type="body" style={[styles.centerText, { color: theme.textSecondary, marginTop: 12 }]}>
+        Your order is packed and ready. Waiting for driver confirmation...
       </ThemedText>
     </View>
   );
@@ -191,7 +321,7 @@ export default function OrderTrackingScreen() {
 
   // Update map iframe
   useEffect(() => {
-    if (iframeRef.current?.contentWindow && order?.status === "delivering") {
+    if (iframeRef.current?.contentWindow && (order?.status === "delivering" || order?.status === "packed")) {
       iframeRef.current.contentWindow.postMessage({
         type: 'updateDriver',
         lat: driverLocation.lat,
@@ -238,15 +368,23 @@ export default function OrderTrackingScreen() {
   }
 
   const status = order.status;
-  const isPacking = status === "confirmed" || status === "picking";
-  const isWaitingDriver = status === "packed";
+  const isConfirmed = status === "confirmed";
+  const isPicking = status === "picking";
+  const isPacking = status === "packing";
+  const isPacked = status === "packed";
   const isDelivering = status === "delivering";
   const isDelivered = status === "delivered";
 
   // Show driver contact only when delivering
   const showDriverContact = isDelivering && order.driverId;
 
-  // Map HTML - only show yellow line when delivering
+  // Show map for packed and delivering stages
+  const showMap = isPacked || isDelivering || isDelivered;
+  
+  // Only show yellow line when delivering (not when packed)
+  const showRoute = isDelivering || isDelivered;
+
+  // Map HTML
   const mapHTML = `
 <!DOCTYPE html>
 <html>
@@ -282,7 +420,7 @@ export default function OrderTrackingScreen() {
   <script>
     const customerLat = ${customerLocation.lat};
     const customerLng = ${customerLocation.lng};
-    const showRoute = ${isDelivering};
+    const showRoute = ${showRoute};
     
     const map = L.map('map', {
       zoomControl: false,
@@ -382,7 +520,11 @@ export default function OrderTrackingScreen() {
           maxZoom: 16
         });
       } else {
-        // Just show driver and customer locations without line
+        // Just show driver and customer locations without line (packed status)
+        if (routeLine) {
+          map.removeLayer(routeLine);
+          routeLine = null;
+        }
         const bounds = L.latLngBounds([driverPos, customerPos]);
         map.fitBounds(bounds, { 
           padding: [100, 100],
@@ -407,64 +549,76 @@ export default function OrderTrackingScreen() {
     ? Math.ceil(locationData.distance * 3) 
     : "5-8";
 
-  // ==================== RENDER PACKING STAGE ====================
-  if (isPacking) {
+  // ==================== RENDER CONFIRMED STAGE ====================
+  if (isConfirmed) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-        <ScrollView contentContainerStyle={{ paddingTop: insets.top + 40, paddingBottom: insets.bottom + 40 }}>
-          <PackingAnimation />
+        <ScrollView contentContainerStyle={{ 
+          paddingTop: insets.top + 40, 
+          paddingBottom: insets.bottom + 40,
+          paddingHorizontal: isTablet ? 40 : 24,
+        }}>
+          <View style={[styles.confirmationContainer, { maxWidth: isTablet ? 600 : '100%', alignSelf: 'center', width: '100%' }]}>
+            <View style={[styles.successCircle, { 
+              backgroundColor: theme.success + '20', 
+              borderColor: theme.success,
+              width: isTablet ? 140 : 120,
+              height: isTablet ? 140 : 120,
+            }]}>
+              <Feather name="check-circle" size={isTablet ? 70 : 60} color={theme.success} />
+            </View>
+            
+            <ThemedText type="h2" style={[styles.centerText, { marginTop: isTablet ? 32 : 24 }]}>
+              Order Confirmed!
+            </ThemedText>
+            <ThemedText type="body" style={[styles.centerText, { color: theme.textSecondary, marginTop: 12 }]}>
+              We've received your order and will start picking soon...
+            </ThemedText>
+          </View>
           
-          {/* Order Info */}
-          <Card style={{ margin: 24, padding: 20 }}>
+          <Card style={StyleSheet.flatten([
+  styles.infoCard, 
+  { maxWidth: isTablet ? 600 : '100%', alignSelf: 'center', width: '100%' }
+])}>
             <View style={{ alignItems: 'center', marginBottom: 16 }}>
               <ThemedText type="caption" style={{ color: theme.textSecondary }}>
                 Order #{order.orderNumber || order.id.slice(0, 8)}
               </ThemedText>
             </View>
             
-            {/* Progress Timeline */}
             <View style={styles.timeline}>
-              <View style={styles.timelineItem}>
-                <View style={[styles.timelineDot, { backgroundColor: theme.success }]}>
-                  <Feather name="check" size={12} color="white" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="body" style={{ fontWeight: '600' }}>Confirmed</ThemedText>
-                  <ThemedText type="caption" style={{ color: theme.textSecondary }}>Order received</ThemedText>
-                </View>
-              </View>
-              
-              <View style={[styles.timelineConnector, { backgroundColor: theme.primary }]} />
-              
-              <View style={styles.timelineItem}>
-                <View style={[styles.timelineDot, { backgroundColor: theme.primary }]}>
-                  <ActivityIndicator size="small" color="white" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="body" style={{ fontWeight: '600', color: theme.primary }}>Packing</ThemedText>
-                  <ThemedText type="caption" style={{ color: theme.textSecondary }}>In progress...</ThemedText>
-                </View>
-              </View>
-              
-              <View style={[styles.timelineConnector, { backgroundColor: theme.border }]} />
-              
-              <View style={styles.timelineItem}>
-                <View style={[styles.timelineDot, { backgroundColor: theme.border }]} />
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="body" style={{ color: theme.textSecondary }}>Pickup</ThemedText>
-                  <ThemedText type="caption" style={{ color: theme.textSecondary }}>Waiting...</ThemedText>
-                </View>
-              </View>
-              
-              <View style={[styles.timelineConnector, { backgroundColor: theme.border }]} />
-              
-              <View style={styles.timelineItem}>
-                <View style={[styles.timelineDot, { backgroundColor: theme.border }]} />
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="body" style={{ color: theme.textSecondary }}>Delivered</ThemedText>
-                  <ThemedText type="caption" style={{ color: theme.textSecondary }}>Pending...</ThemedText>
-                </View>
-              </View>
+              <TimelineItem 
+                icon="check" 
+                iconColor={theme.success} 
+                title="Confirmed" 
+                subtitle="Order received" 
+                isCompleted 
+                theme={theme}
+              />
+              <TimelineConnector color={theme.border} />
+              <TimelineItem 
+                icon="loader" 
+                iconColor={theme.border} 
+                title="Picking" 
+                subtitle="Pending..." 
+                theme={theme}
+              />
+              <TimelineConnector color={theme.border} />
+              <TimelineItem 
+                icon="package" 
+                iconColor={theme.border} 
+                title="Packed" 
+                subtitle="Pending..." 
+                theme={theme}
+              />
+              <TimelineConnector color={theme.border} />
+              <TimelineItem 
+                icon="truck" 
+                iconColor={theme.border} 
+                title="Delivering" 
+                subtitle="Pending..." 
+                theme={theme}
+              />
             </View>
           </Card>
         </ScrollView>
@@ -472,68 +626,203 @@ export default function OrderTrackingScreen() {
     );
   }
 
-  // ==================== RENDER WAITING FOR DRIVER STAGE ====================
-  if (isWaitingDriver) {
+  // ==================== RENDER PICKING STAGE ====================
+  if (isPicking) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-        <ScrollView contentContainerStyle={{ paddingTop: insets.top + 40, paddingBottom: insets.bottom + 40 }}>
-          <WaitingForDriver />
-          
-          {/* Order Info */}
-          <Card style={{ margin: 24, padding: 20 }}>
-            <View style={{ alignItems: 'center', marginBottom: 16 }}>
-              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                Order #{order.orderNumber || order.id.slice(0, 8)}
-              </ThemedText>
-            </View>
+        <ScrollView contentContainerStyle={{ 
+          paddingTop: insets.top + 40, 
+          paddingBottom: insets.bottom + 40,
+          paddingHorizontal: isTablet ? 40 : 24,
+        }}>
+          <View style={{ maxWidth: isTablet ? 700 : '100%', alignSelf: 'center', width: '100%' }}>
+            <PickingAnimation />
             
-            {/* Progress Timeline */}
-            <View style={styles.timeline}>
-              <View style={styles.timelineItem}>
-                <View style={[styles.timelineDot, { backgroundColor: theme.success }]}>
-                  <Feather name="check" size={12} color="white" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="body" style={{ fontWeight: '600' }}>Confirmed</ThemedText>
-                  <ThemedText type="caption" style={{ color: theme.textSecondary }}>Completed</ThemedText>
-                </View>
+            <Card style={styles.infoCard}>
+              <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                  Order #{order.orderNumber || order.id.slice(0, 8)}
+                </ThemedText>
               </View>
               
-              <View style={[styles.timelineConnector, { backgroundColor: theme.success }]} />
-              
-              <View style={styles.timelineItem}>
-                <View style={[styles.timelineDot, { backgroundColor: theme.success }]}>
-                  <Feather name="check" size={12} color="white" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="body" style={{ fontWeight: '600' }}>Packed</ThemedText>
-                  <ThemedText type="caption" style={{ color: theme.textSecondary }}>Ready for pickup</ThemedText>
-                </View>
+              <View style={styles.timeline}>
+                <TimelineItem 
+                  icon="check" 
+                  iconColor={theme.success} 
+                  title="Confirmed" 
+                  subtitle="Completed" 
+                  isCompleted 
+                  theme={theme}
+                />
+                <TimelineConnector color={theme.success} />
+                <TimelineItem 
+                  icon="loader" 
+                  iconColor={theme.primary} 
+                  title="Picking" 
+                  subtitle="In progress..." 
+                  isActive 
+                  showSpinner 
+                  theme={theme}
+                />
+                <TimelineConnector color={theme.border} />
+                <TimelineItem 
+                  icon="package" 
+                  iconColor={theme.border} 
+                  title="Packed" 
+                  subtitle="Pending..." 
+                  theme={theme}
+                />
+                <TimelineConnector color={theme.border} />
+                <TimelineItem 
+                  icon="truck" 
+                  iconColor={theme.border} 
+                  title="Delivering" 
+                  subtitle="Pending..." 
+                  theme={theme}
+                />
+              </View>
+            </Card>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // ==================== RENDER PACKING STAGE ====================
+  if (isPacking) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+        <ScrollView contentContainerStyle={{ 
+          paddingTop: insets.top + 40, 
+          paddingBottom: insets.bottom + 40,
+          paddingHorizontal: isTablet ? 40 : 24,
+        }}>
+          <View style={{ maxWidth: isTablet ? 700 : '100%', alignSelf: 'center', width: '100%' }}>
+            <PackingAnimation />
+            
+            <Card style={styles.infoCard}>
+              <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                  Order #{order.orderNumber || order.id.slice(0, 8)}
+                </ThemedText>
               </View>
               
-              <View style={[styles.timelineConnector, { backgroundColor: theme.warning }]} />
-              
-              <View style={styles.timelineItem}>
-                <View style={[styles.timelineDot, { backgroundColor: theme.warning }]}>
-                  <ActivityIndicator size="small" color="white" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="body" style={{ fontWeight: '600', color: theme.warning }}>Waiting Pickup</ThemedText>
-                  <ThemedText type="caption" style={{ color: theme.textSecondary }}>Driver confirming...</ThemedText>
-                </View>
+              <View style={styles.timeline}>
+                <TimelineItem 
+                  icon="check" 
+                  iconColor={theme.success} 
+                  title="Confirmed" 
+                  subtitle="Completed" 
+                  isCompleted 
+                  theme={theme}
+                />
+                <TimelineConnector color={theme.success} />
+                <TimelineItem 
+                  icon="check" 
+                  iconColor={theme.success} 
+                  title="Picked" 
+                  subtitle="Completed" 
+                  isCompleted 
+                  theme={theme}
+                />
+                <TimelineConnector color={theme.primary} />
+                <TimelineItem 
+                  icon="package" 
+                  iconColor={theme.primary} 
+                  title="Packing" 
+                  subtitle="In progress..." 
+                  isActive 
+                  showSpinner 
+                  theme={theme}
+                />
+                <TimelineConnector color={theme.border} />
+                <TimelineItem 
+                  icon="truck" 
+                  iconColor={theme.border} 
+                  title="Delivering" 
+                  subtitle="Pending..." 
+                  theme={theme}
+                />
+              </View>
+            </Card>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // ==================== RENDER WAITING FOR DRIVER STAGE (PACKED) ====================
+  if (isPacked) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+        {/* Map Section - Show map but WITHOUT yellow line */}
+        <View style={{ height: isTablet ? '60%' : '50%' }}>
+          <iframe
+            ref={iframeRef}
+            srcDoc={mapHTML}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            title="Delivery Map"
+          />
+        </View>
+
+        {/* Bottom Panel */}
+        <ScrollView
+          style={[styles.bottomPanel, { backgroundColor: theme.backgroundDefault }]}
+          contentContainerStyle={{ 
+            paddingBottom: insets.bottom + 20,
+            paddingHorizontal: isTablet ? 40 : 24,
+          }}
+        >
+          <View style={{ maxWidth: isTablet ? 800 : '100%', alignSelf: 'center', width: '100%' }}>
+            <WaitingForDriver />
+            
+            <Card style={{ marginTop: 24 }}>
+              <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                  Order #{order.orderNumber || order.id.slice(0, 8)}
+                </ThemedText>
               </View>
               
-              <View style={[styles.timelineConnector, { backgroundColor: theme.border }]} />
-              
-              <View style={styles.timelineItem}>
-                <View style={[styles.timelineDot, { backgroundColor: theme.border }]} />
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="body" style={{ color: theme.textSecondary }}>Delivered</ThemedText>
-                  <ThemedText type="caption" style={{ color: theme.textSecondary }}>Pending...</ThemedText>
-                </View>
+              <View style={styles.timeline}>
+                <TimelineItem 
+                  icon="check" 
+                  iconColor={theme.success} 
+                  title="Confirmed" 
+                  subtitle="Completed" 
+                  isCompleted 
+                  theme={theme}
+                />
+                <TimelineConnector color={theme.success} />
+                <TimelineItem 
+                  icon="check" 
+                  iconColor={theme.success} 
+                  title="Picked" 
+                  subtitle="Completed" 
+                  isCompleted 
+                  theme={theme}
+                />
+                <TimelineConnector color={theme.success} />
+                <TimelineItem 
+                  icon="check" 
+                  iconColor={theme.success} 
+                  title="Packed" 
+                  subtitle="Ready for pickup" 
+                  isCompleted 
+                  theme={theme}
+                />
+                <TimelineConnector color={theme.warning} />
+                <TimelineItem 
+                  icon="truck" 
+                  iconColor={theme.warning} 
+                  title="Waiting Pickup" 
+                  subtitle="Driver confirming..." 
+                  isActive 
+                  showSpinner 
+                  theme={theme}
+                />
               </View>
-            </View>
-          </Card>
+            </Card>
+          </View>
         </ScrollView>
       </View>
     );
@@ -543,7 +832,7 @@ export default function OrderTrackingScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
       {/* Map Section */}
-      <View style={{ height: '50%' }}>
+      <View style={{ height: isTablet ? '60%' : '50%' }}>
         <iframe
           ref={iframeRef}
           srcDoc={mapHTML}
@@ -553,7 +842,11 @@ export default function OrderTrackingScreen() {
         
         {/* GPS Badge - Only show when delivering */}
         {isDelivering && locationData?.hasLocation && (
-          <View style={[styles.badge, { left: 16, backgroundColor: 'white' }]}>
+          <View style={[styles.badge, { 
+            left: isTablet ? 24 : 16, 
+            bottom: isTablet ? 24 : 16,
+            backgroundColor: 'white' 
+          }]}>
             <Feather name="navigation" size={14} color="#10b981" />
             <ThemedText type="small" style={{ fontWeight: '600', color: '#065f46' }}>
               GPS: ±{locationData.location.accuracy?.toFixed(0) || 12}m
@@ -563,7 +856,11 @@ export default function OrderTrackingScreen() {
         
         {/* Distance Badge - Only show when delivering */}
         {isDelivering && locationData?.distance && (
-          <View style={[styles.badge, { right: 16, backgroundColor: 'white' }]}>
+          <View style={[styles.badge, { 
+            right: isTablet ? 24 : 16, 
+            bottom: isTablet ? 24 : 16,
+            backgroundColor: 'white' 
+          }]}>
             <Feather name="navigation" size={14} color="#1E88E5" />
             <ThemedText type="small" style={{ fontWeight: '600', color: '#1E88E5' }}>
               {locationData.distance.toFixed(1)} km
@@ -575,160 +872,256 @@ export default function OrderTrackingScreen() {
       {/* Bottom Panel */}
       <ScrollView
         style={[styles.bottomPanel, { backgroundColor: theme.backgroundDefault }]}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+        contentContainerStyle={{ 
+          paddingBottom: insets.bottom + 20,
+          paddingHorizontal: isTablet ? 40 : 24,
+        }}
       >
-        {/* Status Header */}
-        <View style={{ alignItems: 'center', marginBottom: 24 }}>
-          {isDelivering && (
-            <View style={[styles.etaBadge, { backgroundColor: theme.primary + '15' }]}>
-              <Feather name="clock" size={16} color={theme.primary} />
-              <ThemedText type="body" style={{ fontWeight: '600', color: theme.primary }}>
-                {estimatedMinutes} min
-              </ThemedText>
-            </View>
-          )}
-          <ThemedText type="h2" style={{ marginTop: 12, marginBottom: 8 }}>
-            {isDelivered ? "Order Delivered!" : "Driver is on the way"}
-          </ThemedText>
-          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            Order #{order.orderNumber || order.id.slice(0, 8)}
-          </ThemedText>
-        </View>
-
-        {/* Progress Steps */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressStep}>
-            <View style={[styles.stepCircle, { backgroundColor: theme.success }]}>
-              <Feather name="check" size={14} color="white" />
-            </View>
-            <ThemedText type="small" style={{ color: theme.textSecondary }}>Confirmed</ThemedText>
-          </View>
-          
-          <View style={[styles.progressLine, { backgroundColor: theme.success }]} />
-          
-          <View style={styles.progressStep}>
-            <View style={[styles.stepCircle, { backgroundColor: theme.success }]}>
-              <Feather name="check" size={14} color="white" />
-            </View>
-            <ThemedText type="small" style={{ color: theme.textSecondary }}>Packed</ThemedText>
-          </View>
-          
-          <View style={[styles.progressLine, { backgroundColor: isDelivered ? theme.success : theme.primary }]} />
-          
-          <View style={styles.progressStep}>
-            <View style={[styles.stepCircle, { backgroundColor: isDelivered ? theme.success : theme.primary }]}>
-              {isDelivered ? (
-                <Feather name="check" size={14} color="white" />
-              ) : (
-                <Feather name="truck" size={14} color="white" />
-              )}
-            </View>
-            <ThemedText type="small" style={{ color: theme.textSecondary }}>
-              {isDelivered ? "Picked Up" : "On Route"}
+        <View style={{ maxWidth: isTablet ? 800 : '100%', alignSelf: 'center', width: '100%' }}>
+          {/* Status Header */}
+          <View style={{ alignItems: 'center', marginBottom: 24 }}>
+            {isDelivering && (
+              <View style={[styles.etaBadge, { backgroundColor: theme.primary + '15' }]}>
+                <Feather name="clock" size={16} color={theme.primary} />
+                <ThemedText type="body" style={{ fontWeight: '600', color: theme.primary }}>
+                  {estimatedMinutes} min
+                </ThemedText>
+              </View>
+            )}
+            <ThemedText type="h2" style={{ marginTop: 12, marginBottom: 8, textAlign: 'center' }}>
+              {isDelivered ? "Order Delivered!" : "Driver is on the way"}
+            </ThemedText>
+            <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+              Order #{order.orderNumber || order.id.slice(0, 8)}
             </ThemedText>
           </View>
-          
-          <View style={[styles.progressLine, { backgroundColor: isDelivered ? theme.success : theme.border }]} />
-          
-          <View style={styles.progressStep}>
-            <View style={[styles.stepCircle, { backgroundColor: isDelivered ? theme.success : theme.border }]}>
-              {isDelivered && <Feather name="check" size={14} color="white" />}
-            </View>
-            <ThemedText type="small" style={{ color: theme.textSecondary }}>Delivered</ThemedText>
+
+          {/* Progress Steps */}
+          <View style={[styles.progressContainer, { 
+            flexWrap: isSmallDevice ? 'wrap' : 'nowrap',
+            justifyContent: isSmallDevice ? 'space-around' : 'center',
+          }]}>
+            <ProgressStep icon="check" label="Confirmed" isCompleted theme={theme} />
+            {!isSmallDevice && <ProgressLine color={theme.success} />}
+            <ProgressStep icon="check" label="Packed" isCompleted theme={theme} />
+            {!isSmallDevice && <ProgressLine color={isDelivered ? theme.success : theme.primary} />}
+            <ProgressStep 
+              icon={isDelivered ? "check" : "truck"} 
+              label={isDelivered ? "Picked Up" : "On Route"} 
+              isCompleted={isDelivered} 
+              isActive={!isDelivered} 
+              theme={theme} 
+            />
+            {!isSmallDevice && <ProgressLine color={isDelivered ? theme.success : theme.border} />}
+            <ProgressStep 
+              icon={isDelivered ? "check" : "home"} 
+              label="Delivered" 
+              isCompleted={isDelivered} 
+              theme={theme} 
+            />
           </View>
-        </View>
 
-        {/* Driver Info - Only show when delivering */}
-        {showDriverContact && (
-          <Card style={{ marginBottom: 16, padding: 16 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-              <View style={[styles.driverAvatar, { backgroundColor: theme.primary }]}>
-                <ThemedText style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>
-                  {order.driverName?.[0]?.toUpperCase() || 'D'}
-                </ThemedText>
-              </View>
-              
-              <View style={{ flex: 1 }}>
-                <ThemedText style={{ fontWeight: '600', fontSize: 16 }}>
-                  {order.driverName || "Driver"}
-                </ThemedText>
-                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  {order.driverPhone || "Courier Partner"}
-                </ThemedText>
-              </View>
-              
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <Pressable 
-                  style={[styles.actionButton, { backgroundColor: theme.primary }]}
-                  onPress={handleChatDriver}
-                >
-                  <Feather name="message-circle" size={20} color="white" />
-                </Pressable>
-                
-                <Pressable 
-                  style={[styles.actionButton, { backgroundColor: theme.success }]}
-                  onPress={handleCallDriver}
-                >
-                  <Feather name="phone" size={20} color="white" />
-                </Pressable>
-              </View>
-            </View>
-          </Card>
-        )}
-
-        {/* Delivery PIN - Show when delivering or delivered */}
-        {(isDelivering || isDelivered) && order.deliveryPin && (
-          <Card style={styles.pinCard}>
-            <View style={{ 
-              backgroundColor: theme.success + '10',
-              borderColor: isDelivered ? theme.success : theme.warning,
-              borderWidth: 2,
-              borderRadius: 16,
-              padding: 24,
-              alignItems: 'center'
-            }}>
-              <Feather name="shield" size={24} color={isDelivered ? theme.success : theme.warning} />
-              <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 8 }}>
-                {isDelivered ? "Delivery Confirmed" : "Delivery PIN Code"}
-              </ThemedText>
-              <ThemedText style={{ 
-                fontSize: 36, 
-                fontWeight: 'bold', 
-                color: isDelivered ? theme.success : theme.warning,
-                letterSpacing: 8,
-                marginVertical: 8 
+          {/* Driver Info - Only show when delivering */}
+          {showDriverContact && (
+            <Card style={{ marginBottom: 16, padding: 16 }}>
+              <View style={{ 
+                flexDirection: isSmallDevice ? 'column' : 'row', 
+                alignItems: 'center', 
+                gap: 16 
               }}>
-                {order.deliveryPin}
-              </ThemedText>
-              <ThemedText type="small" style={{ color: theme.textSecondary, textAlign: 'center' }}>
-                {isDelivered 
-                  ? "This code was used to confirm delivery"
-                  : "Share this code with the driver upon arrival"}
-              </ThemedText>
-            </View>
-          </Card>
-        )}
+                <View style={[styles.driverAvatar, { backgroundColor: theme.primary }]}>
+                  <ThemedText style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>
+                    {order.driverName?.[0]?.toUpperCase() || 'D'}
+                  </ThemedText>
+                </View>
+                
+                <View style={{ flex: 1, alignItems: isSmallDevice ? 'center' : 'flex-start' }}>
+                  <ThemedText style={{ fontWeight: '600', fontSize: 16 }}>
+                    {order.driverName || "Driver"}
+                  </ThemedText>
+                  <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                    {order.driverPhone || "Courier Partner"}
+                  </ThemedText>
+                </View>
+                
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Pressable 
+                    style={[styles.actionButton, { backgroundColor: theme.primary }]}
+                    onPress={handleChatDriver}
+                  >
+                    <Feather name="message-circle" size={20} color="white" />
+                  </Pressable>
+                  
+                  <Pressable 
+                    style={[styles.actionButton, { backgroundColor: theme.success }]}
+                    onPress={handleCallDriver}
+                  >
+                    <Feather name="phone" size={20} color="white" />
+                  </Pressable>
+                </View>
+              </View>
+            </Card>
+          )}
+
+          {/* Delivery PIN - Show when delivering or delivered */}
+          {(isDelivering || isDelivered) && order.deliveryPin && (
+            <Card style={styles.pinCard}>
+              <View style={{ 
+                backgroundColor: theme.success + '10',
+                borderColor: isDelivered ? theme.success : theme.warning,
+                borderWidth: 2,
+                borderRadius: 16,
+                padding: isTablet ? 32 : 24,
+                alignItems: 'center'
+              }}>
+                <Feather name="shield" size={isTablet ? 32 : 24} color={isDelivered ? theme.success : theme.warning} />
+                <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 8, textAlign: 'center' }}>
+                  {isDelivered ? "Delivery Confirmed" : "Delivery PIN Code"}
+                </ThemedText>
+                <ThemedText style={{ 
+                  fontSize: isTablet ? 48 : 36, 
+                  fontWeight: 'bold', 
+                  color: isDelivered ? theme.success : theme.warning,
+                  letterSpacing: isTablet ? 12 : 8,
+                  marginVertical: 8 
+                }}>
+                  {order.deliveryPin}
+                </ThemedText>
+                <ThemedText type="small" style={{ color: theme.textSecondary, textAlign: 'center', maxWidth: 300 }}>
+                  {isDelivered 
+                    ? "This code was used to confirm delivery"
+                    : "Share this code with the driver upon arrival"}
+                </ThemedText>
+              </View>
+            </Card>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
+}
+
+// ==================== HELPER COMPONENTS ====================
+function TimelineItem({ icon, iconColor, title, subtitle, isCompleted, isActive, showSpinner, theme }: any) {
+  return (
+    <View style={styles.timelineItem}>
+      <View style={[styles.timelineDot, { backgroundColor: iconColor }]}>
+        {showSpinner ? (
+          <ActivityIndicator size="small" color="white" />
+        ) : (
+          <Feather name={icon as any} size={12} color="white" />
+        )}
+      </View>
+      <View style={{ flex: 1 }}>
+        <ThemedText type="body" style={{ 
+          fontWeight: isActive || isCompleted ? '600' : '400',
+          color: isActive ? iconColor : (isCompleted ? theme.text : theme.textSecondary)
+        }}>
+          {title}
+        </ThemedText>
+        <ThemedText type="caption" style={{ color: theme.textSecondary }}>{subtitle}</ThemedText>
+      </View>
+    </View>
+  );
+}
+
+function TimelineConnector({ color }: { color: string }) {
+  return <View style={[styles.timelineConnector, { backgroundColor: color }]} />;
+}
+
+function ProgressStep({ icon, label, isCompleted, isActive, theme }: any) {
+  const color = isCompleted ? theme.success : isActive ? theme.primary : theme.border;
+  
+  return (
+    <View style={styles.progressStep}>
+      <View style={[styles.stepCircle, { backgroundColor: color }]}>
+        <Feather name={icon as any} size={14} color="white" />
+      </View>
+      <ThemedText type="small" style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 4 }}>
+        {label}
+      </ThemedText>
+    </View>
+  );
+}
+
+function ProgressLine({ color }: { color: string }) {
+  return <View style={[styles.progressLine, { backgroundColor: color }]} />;
 }
 
 const styles = StyleSheet.create({
   loadingContainer: { 
     flex: 1, 
     justifyContent: 'center', 
-    alignItems: 'center' 
+    alignItems: 'center',
+    padding: 24,
+  },
+  
+  centerText: {
+    textAlign: 'center',
+  },
+  
+  // ===== CONFIRMATION =====
+  confirmationContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: isTablet ? 60 : 40,
+  },
+  successCircle: {
+    borderRadius: 1000,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  // ===== PICKING STAGE =====
+  pickingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: isTablet ? 60 : 40,
+  },
+  pickingScene: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    position: 'relative',
+  },
+  warehouse: {
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  shelfRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  box: {
+    borderRadius: 4,
+  },
+  pickerIcon: {
+    position: 'absolute',
+  },
+  pickerCircle: {
+    borderRadius: 1000,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+  },
+  cart: {
+    padding: 6,
+    borderRadius: 8,
   },
   
   // ===== PACKING STAGE =====
   packingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 40,
+    padding: isTablet ? 60 : 40,
   },
   packingBox: {
-    width: 160,
-    height: 160,
     borderRadius: 20,
     borderWidth: 3,
     alignItems: 'center',
@@ -749,18 +1142,19 @@ const styles = StyleSheet.create({
   waitingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 40,
+    padding: isTablet ? 60 : 40,
   },
   driverWaitCircle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
     borderWidth: 3,
     alignItems: 'center',
     justifyContent: 'center',
   },
   
   // ===== TIMELINE =====
+  infoCard: {
+    margin: 24,
+    padding: 20,
+  },
   timeline: {
     paddingVertical: 8,
   },
@@ -786,7 +1180,6 @@ const styles = StyleSheet.create({
   // ===== MAP VIEW =====
   badge: {
     position: 'absolute',
-    bottom: 16,
     borderRadius: 20,
     padding: 8,
     paddingHorizontal: 12,
@@ -800,7 +1193,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     marginTop: -24,
-    padding: 24,
+    paddingTop: 24,
   },
   etaBadge: {
     flexDirection: 'row',
@@ -813,11 +1206,12 @@ const styles = StyleSheet.create({
   progressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 24,
+    paddingHorizontal: isSmallDevice ? 0 : 16,
   },
   progressStep: {
     alignItems: 'center',
+    minWidth: isSmallDevice ? 70 : 80,
   },
   stepCircle: {
     width: 24,
@@ -825,10 +1219,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
   },
   progressLine: {
-    width: 64,
+    width: isSmallDevice ? 40 : isTablet ? 80 : 64,
     height: 2,
     marginHorizontal: 8,
   },
