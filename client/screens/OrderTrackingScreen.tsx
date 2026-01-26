@@ -1,402 +1,245 @@
 import React, { useEffect, useState, useRef } from "react";
+import { View, StyleSheet, ActivityIndicator, Dimensions, Pressable, ScrollView } from "react-native";
+import { WebView } from "react-native-webview";
+import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
+import { useQuery } from "@tanstack/react-query";
+import { Feather } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { ThemedText } from "@/components/ThemedText";
+import { Card } from "@/components/Card";
+import { useTheme } from "@/hooks/useTheme";
+
+const { width } = Dimensions.get("window");
 
 export default function OrderTrackingScreen() {
-  const [driverLocation, setDriverLocation] = useState({ lat: 13.7548, lng: 100.4990 });
-  const [customerLocation] = useState({ lat: 13.7563, lng: 100.5018 });
-  const [heading, setHeading] = useState(45);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const route = useRoute<any>();
+  const { orderId } = route.params;
+  const webViewRef = useRef<WebView>(null);
 
-  // Simulate driver movement for demo
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDriverLocation(prev => ({
-        lat: prev.lat + (Math.random() - 0.5) * 0.0005,
-        lng: prev.lng + (Math.random() - 0.5) * 0.0005
-      }));
-      setHeading(prev => (prev + 15) % 360);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Update map when driver moves
-  useEffect(() => {
-    if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage({
-        type: 'updateDriver',
-        lat: driverLocation.lat,
-        lng: driverLocation.lng,
-        heading: heading
-      }, '*');
+  // 1. Fetch Order & Customer Details from your backend
+  const { data: order, isLoading: orderLoading } = useQuery({
+    queryKey: ["order", orderId],
+    queryFn: async () => {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}`);
+      return res.json();
     }
-  }, [driverLocation, heading]);
+  });
+
+  // 2. Poll Driver Location every 3 seconds (as defined in your backend routes)
+  const { data: driverData } = useQuery({
+    queryKey: ["driver-location", orderId],
+    queryFn: async () => {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/${orderId}`);
+      return res.json();
+    },
+    refetchInterval: 3000,
+    enabled: !!order && order.status === "delivering"
+  });
+
+  // 3. Inject new coordinates into the WebView map
+  useEffect(() => {
+    if (driverData?.hasLocation && webViewRef.current) {
+      const script = `
+        if (window.updateDriverLocation) {
+          window.updateDriverLocation(
+            ${driverData.location.latitude}, 
+            ${driverData.location.longitude}, 
+            ${driverData.location.heading || 0}
+          );
+        }
+      `;
+      webViewRef.current.injectJavaScript(script);
+    }
+  }, [driverData]);
+
+  if (orderLoading || !order) {
+    return (
+      <View style={styles.centered}><ActivityIndicator size="large" color={theme.primary} /></View>
+    );
+  }
+
+  const customerLocation = { 
+    lat: parseFloat(order.customerLat || "13.7563"), 
+    lng: parseFloat(order.customerLng || "100.5018") 
+  };
 
   const mapHTML = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <style>
-    body { margin: 0; padding: 0; }
-    #map { width: 100%; height: 100vh; }
-    .leaflet-container { background: #f5f5f5; }
-    
-    @keyframes pulse {
-      0% { transform: scale(1); opacity: 0.6; }
-      50% { transform: scale(1.3); opacity: 0.3; }
-      100% { transform: scale(1); opacity: 0.6; }
-    }
-    
-    .pulse-ring {
-      position: absolute;
-      width: 60px;
-      height: 60px;
-      background: rgba(255, 215, 0, 0.3);
-      border-radius: 50%;
-      animation: pulse 2s infinite;
-      top: -5px;
-      left: -5px;
-    }
-  </style>
-</head>
-<body>
-  <div id="map"></div>
-  <script>
-    const customerLat = ${customerLocation.lat};
-    const customerLng = ${customerLocation.lng};
-    
-    const map = L.map('map', {
-      zoomControl: false,
-      attributionControl: false
-    }).setView([customerLat, customerLng], 15);
-    
-    // Light map tiles
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19
-    }).addTo(map);
-    
-    // Customer location (Blue home icon)
-    const customerIcon = L.divIcon({
-      html: \`
-        <div style="position: relative; width: 40px; height: 48px;">
-          <div style="
-            background: #1E88E5; 
-            width: 40px; 
-            height: 40px; 
-            border-radius: 50% 50% 50% 0; 
-            transform: rotate(-45deg);
-            border: 4px solid white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          ">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="white" style="transform: rotate(45deg);">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-              <polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-          </div>
-        </div>
-      \`,
-      className: '',
-      iconSize: [40, 48],
-      iconAnchor: [20, 48]
-    });
-    L.marker([customerLat, customerLng], { icon: customerIcon }).addTo(map);
-    
-    let driverMarker = null;
-    let routeLine = null;
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+      <style>
+        body { margin: 0; padding: 0; }
+        #map { width: 100%; height: 100vh; background: #f0f2f5; }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(1.5); opacity: 0; } }
+        .pulse { position: absolute; width: 40px; height: 40px; background: rgba(255, 215, 0, 0.4); border-radius: 50%; animation: pulse 2s infinite; top: -10px; left: -10px; }
+      </style>
+    </head>
+    <body>
+      <div id="map"></div>
+      <script>
+        const map = L.map('map', { zoomControl: false, attributionControl: false })
+          .setView([${customerLocation.lat}, ${customerLocation.lng}], 15);
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-    function updateDriverLocation(lat, lng, heading) {
-      const driverPos = [lat, lng];
-      const customerPos = [customerLat, customerLng];
+        // Customer Marker
+        L.marker([${customerLocation.lat}, ${customerLocation.lng}], {
+          icon: L.divIcon({
+            html: '<div style="background:#1E88E5;width:30px;height:30px;border-radius:50%;border:3px solid white;box-shadow:0 2px 10px rgba(0,0,0,0.2);display:flex;align-items:center;justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>',
+            className: '', iconSize: [30, 30], iconAnchor: [15, 15]
+          })
+        }).addTo(map);
 
-      // Create or update driver marker
-      if (!driverMarker) {
-        const driverIcon = L.divIcon({
-          html: \`
-            <div style="position: relative; width: 50px; height: 50px;">
-              <div class="pulse-ring"></div>
-              <div id="driver-icon" style="
-                position: absolute;
-                width: 50px;
-                height: 50px;
-                transform: rotate(\${heading}deg);
-                transition: transform 0.5s ease;
-              ">
-                <svg width="50" height="50" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="22" fill="#FFD700" stroke="white" stroke-width="4"/>
-                  <g transform="translate(50, 50)">
-                    <circle cx="-8" cy="8" r="4" fill="#333"/>
-                    <circle cx="8" cy="8" r="4" fill="#333"/>
-                    <rect x="-10" y="0" width="20" height="6" rx="2" fill="#333"/>
-                    <rect x="-2" y="-8" width="4" height="10" rx="2" fill="#666"/>
-                  </g>
-                </svg>
-              </div>
-            </div>
-          \`,
-          className: '',
-          iconSize: [50, 50],
-          iconAnchor: [25, 25]
-        });
-        driverMarker = L.marker(driverPos, { icon: driverIcon }).addTo(map);
-      } else {
-        driverMarker.setLatLng(driverPos);
-        const icon = document.getElementById('driver-icon');
-        if (icon) {
-          icon.style.transform = 'rotate(' + heading + 'deg)';
-        }
-      }
+        let driverMarker = null;
+        let routeLine = null;
 
-      // Update route line (yellow)
-      if (routeLine) map.removeLayer(routeLine);
-      
-      routeLine = L.polyline([driverPos, customerPos], {
-        color: '#FFD700',
-        weight: 6,
-        opacity: 0.9,
-        smoothFactor: 1
-      }).addTo(map);
+        window.updateDriverLocation = function(lat, lng, heading) {
+          const dPos = [lat, lng];
+          const cPos = [${customerLocation.lat}, ${customerLocation.lng}];
 
-      // Fit bounds to show both markers
-      const bounds = L.latLngBounds([driverPos, customerPos]);
-      map.fitBounds(bounds, { 
-        padding: [80, 80],
-        maxZoom: 16
-      });
-    }
-    
-    // Listen for messages from parent
-    window.addEventListener('message', function(event) {
-      if (event.data && event.data.type === 'updateDriver') {
-        updateDriverLocation(event.data.lat, event.data.lng, event.data.heading);
-      }
-    });
-    
-    // Initial position
-    updateDriverLocation(${driverLocation.lat}, ${driverLocation.lng}, ${heading});
-  </script>
-</body>
-</html>
+          if (!driverMarker) {
+            driverMarker = L.marker(dPos, {
+              icon: L.divIcon({
+                html: '<div style="position:relative;"><div class="pulse"></div><div id="m" style="transition:0.5s ease;"><img src="https://cdn-icons-png.flaticon.com/512/713/713401.png" style="width:40px;height:40px;"/></div></div>',
+                className: '', iconSize: [40, 40], iconAnchor: [20, 20]
+              })
+            }).addTo(map);
+          } else {
+            driverMarker.setLatLng(dPos);
+            document.getElementById('m').style.transform = 'rotate(' + heading + 'deg)';
+          }
+
+          if (routeLine) map.removeLayer(routeLine);
+          routeLine = L.polyline([dPos, cPos], { color: '#FFD700', weight: 5, opacity: 0.8 }).addTo(map);
+          map.fitBounds([dPos, cPos], { padding: [50, 50] });
+        };
+      </script>
+    </body>
+    </html>
   `;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f9fafb' }}>
-      {/* Map Section */}
-      <div style={{ position: 'relative', height: '50%' }}>
-        <iframe
-          ref={iframeRef}
-          srcDoc={mapHTML}
-          style={{ width: '100%', height: '100%', border: 'none' }}
-          title="Delivery Map"
+    <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+      <View style={styles.mapContainer}>
+        <WebView
+          ref={webViewRef}
+          originWhitelist={['*']}
+          source={{ html: mapHTML }}
+          style={styles.map}
         />
         
-        {/* GPS Accuracy Badge */}
-        <div style={{
-          position: 'absolute',
-          bottom: '16px',
-          left: '16px',
-          backgroundColor: 'white',
-          borderRadius: '20px',
-          padding: '8px 12px',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="22" y1="12" x2="18" y2="12"/>
-            <line x1="6" y1="12" x2="2" y2="12"/>
-            <line x1="12" y1="6" x2="12" y2="2"/>
-            <line x1="12" y1="22" x2="12" y2="18"/>
-          </svg>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: '#065f46' }}>GPS: ±12m</span>
-        </div>
-        
-        {/* Speed Badge */}
-        <div style={{
-          position: 'absolute',
-          bottom: '16px',
-          right: '16px',
-          backgroundColor: 'white',
-          borderRadius: '20px',
-          padding: '8px 12px',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1E88E5" strokeWidth="2">
-            <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-          </svg>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: '#1E88E5' }}>24 km/h</span>
-        </div>
-      </div>
+        {/* Badges */}
+        <View style={styles.badgeLeft}>
+          <Feather name="crosshair" size={12} color="#10b981" />
+          <ThemedText style={styles.badgeText}>GPS: ±{Math.round(driverData?.location?.accuracy || 12)}m</ThemedText>
+        </View>
+      </View>
 
-      {/* Bottom Panel */}
-      <div style={{
-        flex: 1,
-        backgroundColor: 'white',
-        borderTopLeftRadius: '24px',
-        borderTopRightRadius: '24px',
-        marginTop: '-24px',
-        padding: '24px',
-        overflowY: 'auto',
-        boxShadow: '0 -4px 20px rgba(0,0,0,0.1)'
-      }}>
-        {/* Status Header */}
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            backgroundColor: '#dbeafe',
-            padding: '8px 16px',
-            borderRadius: '20px',
-            marginBottom: '12px'
-          }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1E88E5" strokeWidth="2">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-            </svg>
-            <span style={{ fontSize: '14px', fontWeight: '600', color: '#1E88E5' }}>5-8 min</span>
-          </div>
-          <h2 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 8px 0' }}>Rider is on the way</h2>
-          <p style={{ color: '#6b7280', fontSize: '14px', margin: 0 }}>Order #12345</p>
-          
-          {/* Distance */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '8px' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
-              <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-            </svg>
-            <span style={{ fontSize: '14px', fontWeight: '600', color: '#10b981' }}>2.3 km away</span>
-          </div>
-        </div>
+      <ScrollView style={styles.bottomPanel} contentContainerStyle={{ padding: 24 }}>
+        <View style={styles.header}>
+          <View style={[styles.etaBadge, { backgroundColor: theme.primary + '20' }]}>
+            <Feather name="zap" size={14} color={theme.primary} />
+            <ThemedText style={{ color: theme.primary, fontWeight: 'bold' }}>5-8 min</ThemedText>
+          </View>
+          <ThemedText type="h2">Rider is on the way</ThemedText>
+          <ThemedText style={{ color: theme.textSecondary }}>Order #{order.orderNumber || orderId.slice(0,8)}</ThemedText>
+        </View>
 
-        {/* Progress Steps */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{
-                width: '24px',
-                height: '24px',
-                borderRadius: '50%',
-                backgroundColor: '#10b981',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              </div>
-              <span style={{ fontSize: '10px', marginTop: '4px', color: '#6b7280' }}>Confirmed</span>
-            </div>
-            <div style={{ width: '64px', height: '2px', backgroundColor: '#10b981', margin: '0 8px' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{
-                width: '24px',
-                height: '24px',
-                borderRadius: '50%',
-                backgroundColor: '#10b981',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              </div>
-              <span style={{ fontSize: '10px', marginTop: '4px', color: '#6b7280' }}>Picked Up</span>
-            </div>
-            <div style={{ width: '64px', height: '2px', backgroundColor: '#d1d5db', margin: '0 8px' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{
-                width: '24px',
-                height: '24px',
-                borderRadius: '50%',
-                backgroundColor: '#d1d5db'
-              }} />
-              <span style={{ fontSize: '10px', marginTop: '4px', color: '#6b7280' }}>Delivered</span>
-            </div>
-          </div>
-        </div>
+        {/* Driver Info */}
+        <Card style={styles.driverCard}>
+          <View style={styles.row}>
+            <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
+              <ThemedText style={{ color: 'white', fontWeight: 'bold' }}>{order.driverName?.[0] || 'D'}</ThemedText>
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <ThemedText type="body" style={{ fontWeight: '600' }}>{order.driverName || "Assigning..."}</ThemedText>
+              <ThemedText type="caption">Flash Courier Partner</ThemedText>
+            </View>
+            <Pressable style={[styles.iconBtn, { backgroundColor: theme.primary }]}>
+              <Feather name="message-square" size={20} color="white" />
+            </Pressable>
+          </View>
+        </Card>
 
-        {/* Driver Info Card */}
-        <div style={{
-          backgroundColor: '#f9fafb',
-          borderRadius: '16px',
-          padding: '16px',
-          marginBottom: '16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px'
-        }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '50%',
-            backgroundColor: '#1E88E5',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <span style={{ color: 'white', fontWeight: 'bold', fontSize: '18px' }}>A</span>
-          </div>
-          <div style={{ flex: 1 }}>
-            <h3 style={{ margin: 0, fontWeight: '600', fontSize: '16px' }}>Alex Rider</h3>
-            <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>Flash Courier Partner</p>
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: '50%',
-              backgroundColor: '#1E88E5',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
-            </button>
-            <button style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: '50%',
-              backgroundColor: '#10b981',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        {/* Delivery PIN */}
-        <div style={{
-          backgroundColor: '#ecfdf5',
-          border: '2px solid #10b981',
-          borderRadius: '16px',
-          padding: '24px',
-          textAlign: 'center'
-        }}>
-          <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 8px 0' }}>Delivery PIN Code</p>
-          <h1 style={{ fontSize: '36px', fontWeight: 'bold', color: '#10b981', letterSpacing: '8px', margin: '0 0 8px 0' }}>5789</h1>
-          <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>Share this code with the driver upon arrival</p>
-        </div>
-      </div>
-    </div>
- 
-);
+        {/* PIN Section */}
+        <View style={styles.pinBox}>
+          <ThemedText type="caption">Delivery PIN Code</ThemedText>
+          <ThemedText style={styles.pinText}>{order.deliveryPin || "----"}</ThemedText>
+          <ThemedText type="small" style={{ textAlign: 'center' }}>Share this code with the driver</ThemedText>
+        </View>
+      </ScrollView>
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  mapContainer: { height: '45%', width: '100%' },
+  map: { flex: 1 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  bottomPanel: { 
+    flex: 1, 
+    borderTopLeftRadius: 24, 
+    borderTopRightRadius: 24, 
+    marginTop: -24, 
+    backgroundColor: 'white' 
+  },
+  header: { alignItems: 'center', marginBottom: 24 },
+  etaBadge: { 
+    flexDirection: 'row', 
+    paddingHorizontal: 12, 
+    paddingVertical: 6, 
+    borderRadius: 20, 
+    gap: 6, 
+    marginBottom: 8 
+  },
+  driverCard: { padding: 16, marginBottom: 16 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  avatar: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  iconBtn: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  pinBox: { 
+    padding: 20, 
+    backgroundColor: '#ecfdf5', 
+    borderRadius: 16, 
+    borderColor: '#10b981', 
+    borderWidth: 2, // Corrected from borderWeight
+    alignItems: 'center' 
+  },
+  pinText: { 
+    fontSize: 32, 
+    fontWeight: 'bold', 
+    color: '#10b981', 
+    letterSpacing: 10, 
+    marginVertical: 8 
+  },
+  badgeLeft: { 
+    position: 'absolute', 
+    bottom: 40, 
+    left: 16, 
+    backgroundColor: 'white', 
+    padding: 8, 
+    borderRadius: 20, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4 
+  },
+  badgeText: { fontSize: 10, fontWeight: 'bold' }
+});
