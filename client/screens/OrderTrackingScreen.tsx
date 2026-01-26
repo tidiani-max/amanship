@@ -1,91 +1,22 @@
 import React, { useEffect, useState, useRef } from "react";
 
-interface OrderData {
-  id: string;
-  orderNumber: string;
-  driverName?: string;
-  driverPhone?: string;
-  deliveryPin: string;
-  customerLat?: string;
-  customerLng?: string;
-  estimatedArrival?: string;
-  status: string;
-  items: any[];
-  total: number;
-}
-
 export default function OrderTrackingScreen() {
   const [driverLocation, setDriverLocation] = useState({ lat: 13.7548, lng: 100.4990 });
   const [customerLocation] = useState({ lat: 13.7563, lng: 100.5018 });
   const [heading, setHeading] = useState(45);
-  const [orderData, setOrderData] = useState<OrderData | null>(null);
-  const [loading, setLoading] = useState(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Get orderId from URL params (React Router)
-  const urlParams = new URLSearchParams(window.location.search);
-  const orderId = urlParams.get('orderId') || 'demo-order-id';
-
-  // Fetch order details
+  // Simulate driver movement for demo
   useEffect(() => {
-    const fetchOrderData = async () => {
-      try {
-        const baseUrl = process.env.EXPO_PUBLIC_DOMAIN || '';
-        const response = await fetch(`${baseUrl}/api/orders/${orderId}`);
-        if (!response.ok) throw new Error('Failed to fetch order');
-        
-        const data = await response.json();
-        setOrderData(data);
-        
-        console.log('📦 Order loaded:', data);
-        setLoading(false);
-      } catch (error) {
-        console.error("Failed to fetch order:", error);
-        setLoading(false);
-      }
-    };
-    
-    if (orderId && orderId !== 'demo-order-id') {
-      fetchOrderData();
-    } else {
-      setLoading(false);
-    }
-  }, [orderId]);
-
-  // Poll driver location
-  useEffect(() => {
-    if (!orderId || orderId === 'demo-order-id') return;
-
-    const pollDriverLocation = async () => {
-      try {
-        const baseUrl = process.env.EXPO_PUBLIC_DOMAIN || '';
-        const response = await fetch(`${baseUrl}/api/driver/location/${orderId}`);
-        const data = await response.json();
-
-        console.log('📍 Driver location update:', data);
-
-        if (data.hasLocation && data.location) {
-          setDriverLocation({
-            lat: data.location.latitude,
-            lng: data.location.longitude
-          });
-          if (data.location.heading !== null) {
-            setHeading(data.location.heading);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch driver location:", error);
-      }
-    };
-
-    // Initial fetch
-    pollDriverLocation();
-
-    // Poll every 3 seconds
-    const interval = setInterval(pollDriverLocation, 3000);
-
+    const interval = setInterval(() => {
+      setDriverLocation(prev => ({
+        lat: prev.lat + (Math.random() - 0.5) * 0.0005,
+        lng: prev.lng + (Math.random() - 0.5) * 0.0005
+      }));
+      setHeading(prev => (prev + 15) % 360);
+    }, 3000);
     return () => clearInterval(interval);
-  }, [orderId]);
+  }, []);
 
   // Update map when driver moves
   useEffect(() => {
@@ -98,44 +29,6 @@ export default function OrderTrackingScreen() {
       }, '*');
     }
   }, [driverLocation, heading]);
-
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f9fafb' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚚</div>
-          <div style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937' }}>Loading order details...</div>
-        </div>
-      </div>
-    );
-  }
-
-  // Extract data with proper fallbacks
-  const driverName = orderData?.driverName || "Driver";
-  const driverPhone = orderData?.driverPhone || "";
-  const orderNumber = orderData?.orderNumber || "N/A";
-  const deliveryPin = orderData?.deliveryPin || "****";
-  
-  console.log('📋 Display Data:', {
-    orderNumber,
-    deliveryPin,
-    driverName,
-    driverPhone,
-    rawOrderData: orderData
-  });
-  
-  // Calculate ETA from estimatedArrival timestamp
-  const estimatedMinutes = orderData?.estimatedArrival 
-    ? Math.max(1, Math.ceil((new Date(orderData.estimatedArrival).getTime() - Date.now()) / 60000))
-    : 5;
-
-  // Use actual customer coordinates from order
-  const actualCustomerLat = orderData?.customerLat 
-    ? parseFloat(orderData.customerLat) 
-    : customerLocation.lat;
-  const actualCustomerLng = orderData?.customerLng 
-    ? parseFloat(orderData.customerLng) 
-    : customerLocation.lng;
 
   const mapHTML = `
 <!DOCTYPE html>
@@ -170,18 +63,20 @@ export default function OrderTrackingScreen() {
 <body>
   <div id="map"></div>
   <script>
-    const customerLat = ${actualCustomerLat};
-    const customerLng = ${actualCustomerLng};
+    const customerLat = ${customerLocation.lat};
+    const customerLng = ${customerLocation.lng};
     
     const map = L.map('map', {
       zoomControl: false,
       attributionControl: false
     }).setView([customerLat, customerLng], 15);
     
+    // Light map tiles
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19
     }).addTo(map);
     
+    // Customer location (Blue home icon)
     const customerIcon = L.divIcon({
       html: \`
         <div style="position: relative; width: 40px; height: 48px;">
@@ -217,6 +112,7 @@ export default function OrderTrackingScreen() {
       const driverPos = [lat, lng];
       const customerPos = [customerLat, customerLng];
 
+      // Create or update driver marker
       if (!driverMarker) {
         const driverIcon = L.divIcon({
           html: \`
@@ -254,6 +150,7 @@ export default function OrderTrackingScreen() {
         }
       }
 
+      // Update route line (yellow)
       if (routeLine) map.removeLayer(routeLine);
       
       routeLine = L.polyline([driverPos, customerPos], {
@@ -263,6 +160,7 @@ export default function OrderTrackingScreen() {
         smoothFactor: 1
       }).addTo(map);
 
+      // Fit bounds to show both markers
       const bounds = L.latLngBounds([driverPos, customerPos]);
       map.fitBounds(bounds, { 
         padding: [80, 80],
@@ -270,12 +168,14 @@ export default function OrderTrackingScreen() {
       });
     }
     
+    // Listen for messages from parent
     window.addEventListener('message', function(event) {
       if (event.data && event.data.type === 'updateDriver') {
         updateDriverLocation(event.data.lat, event.data.lng, event.data.heading);
       }
     });
     
+    // Initial position
     updateDriverLocation(${driverLocation.lat}, ${driverLocation.lng}, ${heading});
   </script>
 </body>
@@ -361,10 +261,10 @@ export default function OrderTrackingScreen() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1E88E5" strokeWidth="2">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
             </svg>
-            <span style={{ fontSize: '14px', fontWeight: '600', color: '#1E88E5' }}>{estimatedMinutes} min</span>
+            <span style={{ fontSize: '14px', fontWeight: '600', color: '#1E88E5' }}>5-8 min</span>
           </div>
           <h2 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 8px 0' }}>Rider is on the way</h2>
-          <p style={{ color: '#6b7280', fontSize: '14px', margin: 0 }}>Order {orderNumber}</p>
+          <p style={{ color: '#6b7280', fontSize: '14px', margin: 0 }}>Order #12345</p>
           
           {/* Distance */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '8px' }}>
@@ -443,55 +343,43 @@ export default function OrderTrackingScreen() {
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <span style={{ color: 'white', fontWeight: 'bold', fontSize: '18px' }}>
-              {driverName.charAt(0).toUpperCase()}
-            </span>
+            <span style={{ color: 'white', fontWeight: 'bold', fontSize: '18px' }}>A</span>
           </div>
           <div style={{ flex: 1 }}>
-            <h3 style={{ margin: 0, fontWeight: '600', fontSize: '16px' }}>{driverName}</h3>
-            <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
-              {driverPhone || "Flash Courier Partner"}
-            </p>
+            <h3 style={{ margin: 0, fontWeight: '600', fontSize: '16px' }}>Alex Rider</h3>
+            <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>Flash Courier Partner</p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button 
-              style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '50%',
-                backgroundColor: '#1E88E5',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-              onClick={() => {
-                const chatUrl = `/chat?orderId=${orderId}`;
-                window.location.href = chatUrl;
-              }}
-            >
+            <button style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              backgroundColor: '#1E88E5',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
             </button>
-            {driverPhone && (
-              <button style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '50%',
-                backgroundColor: '#10b981',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }} onClick={() => window.location.href = `tel:${driverPhone}`}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                </svg>
-              </button>
-            )}
+            <button style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              backgroundColor: '#10b981',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -504,7 +392,7 @@ export default function OrderTrackingScreen() {
           textAlign: 'center'
         }}>
           <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 8px 0' }}>Delivery PIN Code</p>
-          <h1 style={{ fontSize: '36px', fontWeight: 'bold', color: '#10b981', letterSpacing: '8px', margin: '0 0 8px 0' }}>{deliveryPin}</h1>
+          <h1 style={{ fontSize: '36px', fontWeight: 'bold', color: '#10b981', letterSpacing: '8px', margin: '0 0 8px 0' }}>5789</h1>
           <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>Share this code with the driver upon arrival</p>
         </div>
       </div>
