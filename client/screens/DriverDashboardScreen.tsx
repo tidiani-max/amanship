@@ -1,11 +1,11 @@
-// Replace your entire driver dashboard file with this
-
-import React, { useState } from "react";
+// app/screens/DriverDashboardScreen.tsx
+import React, { useState, useEffect } from "react";
 import { View, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Pressable, Alert, Linking, Platform, TextInput, Modal, TouchableOpacity } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import * as Location from 'expo-location';
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -15,6 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import { Spacing } from "@/constants/theme";
 
+// ==================== PIN MODAL COMPONENT ====================
 function PINModal({ 
   visible, 
   onClose, 
@@ -100,6 +101,7 @@ function PINModal({
   );
 }
 
+// ==================== ORDER CARD COMPONENT ====================
 function OrderCard({ 
   order, 
   onPickup,
@@ -166,7 +168,8 @@ function OrderCard({
       </View>
 
       <View style={[styles.divider, { backgroundColor: theme.border }]} />
-      {/* ✅ NEW: Customer Address Section */}
+      
+      {/* Customer Address Section */}
       {order.address && (
         <View style={[styles.addressSection, { 
           backgroundColor: theme.backgroundDefault, 
@@ -181,19 +184,16 @@ function OrderCard({
             </ThemedText>
           </View>
           
-          {/* Address Label */}
           {order.address.label && (
             <ThemedText type="h3" style={{ marginBottom: 4 }}>
               {order.address.label}
             </ThemedText>
           )}
           
-          {/* Full Address */}
           <ThemedText type="body" style={{ color: theme.textSecondary }}>
             {order.address.fullAddress}
           </ThemedText>
           
-          {/* Additional Details */}
           {order.address.details && (
             <View style={{ 
               marginTop: 8, 
@@ -208,7 +208,6 @@ function OrderCard({
           )}
         </View>
       )}
-
 
       <View style={styles.orderDetails}>
         {!isDelivered && (
@@ -298,34 +297,21 @@ function OrderCard({
   );
 }
 
+// ==================== MAIN COMPONENT ====================
 export default function DriverDashboardScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { user, logout } = useAuth();
   const queryClient = useQueryClient();
   const navigation = useNavigation<any>();
+  
   const [showCompleted, setShowCompleted] = useState(false);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [locationPermission, setLocationPermission] = useState(false);
 
-  const handleLogout = () => {
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Logout",
-          style: "destructive",
-          onPress: async () => {
-            await logout();
-          },
-        },
-      ]
-    );
-  };
-
+  // ==================== DATA FETCHING ====================
   const { data: dashboard, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["/api/driver/dashboard", user?.id],
     queryFn: async () => {
@@ -339,6 +325,96 @@ export default function DriverDashboardScreen() {
     refetchOnWindowFocus: true,
   });
 
+  // ==================== LOCATION TRACKING ====================
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(status === 'granted');
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location Required',
+          'Please enable location services to use delivery tracking.',
+          [{ text: 'OK' }]
+        );
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!locationPermission || !user?.id) return;
+
+    const activeOrders = dashboard?.orders?.active || [];
+    const activeDelivery = activeOrders.find((o: any) => o.status === 'delivering');
+
+    if (!activeDelivery) {
+      console.log('📍 No active delivery - location tracking paused');
+      return;
+    }
+
+    console.log('📍 Starting location tracking for order:', activeDelivery.id);
+
+    let locationSubscription: Location.LocationSubscription | null = null;
+
+    const startTracking = async () => {
+      try {
+        locationSubscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 3000,
+            distanceInterval: 10,
+          },
+          async (location) => {
+            try {
+              console.log('📍 Sending location update:', {
+                lat: location.coords.latitude,
+                lng: location.coords.longitude,
+                speed: location.coords.speed,
+              });
+
+              const response = await fetch(
+                `${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/update`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    driverId: user.id,
+                    orderId: activeDelivery.id,
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                    heading: location.coords.heading || 0,
+                    speed: location.coords.speed || 0,
+                    accuracy: location.coords.accuracy || 0,
+                  }),
+                }
+              );
+
+              if (!response.ok) {
+                console.error('❌ Location update failed:', await response.text());
+              } else {
+                const data = await response.json();
+                console.log('✅ Location updated. ETA:', data.etaMinutes, 'min');
+              }
+            } catch (error) {
+              console.error('❌ Location update error:', error);
+            }
+          }
+        );
+      } catch (error) {
+        console.error('❌ Failed to start location tracking:', error);
+      }
+    };
+
+    startTracking();
+
+    return () => {
+      if (locationSubscription) {
+        console.log('📍 Stopping location tracking');
+        locationSubscription.remove();
+      }
+    };
+  }, [dashboard?.orders?.active, user?.id, locationPermission]);
+
+  // ==================== MUTATIONS ====================
   const pickupMutation = useMutation({
     mutationFn: async (orderId: string) => {
       setUpdatingOrderId(orderId);
@@ -386,6 +462,24 @@ export default function DriverDashboardScreen() {
     }
   });
 
+  // ==================== HANDLERS ====================
+  const handleLogout = () => {
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: async () => {
+            await logout();
+          },
+        },
+      ]
+    );
+  };
+
   const handleComplete = (orderId: string) => {
     setSelectedOrderId(orderId);
     setPinModalVisible(true);
@@ -397,6 +491,7 @@ export default function DriverDashboardScreen() {
     }
   };
 
+  // ==================== GUARDS ====================
   if (!user || user.role !== "driver") {
     return (
       <ThemedView style={styles.container}>
@@ -416,6 +511,7 @@ export default function DriverDashboardScreen() {
     );
   }
 
+  // ==================== DATA PROCESSING ====================
   const readyOrders = dashboard?.orders?.ready || [];
   const activeOrders = dashboard?.orders?.active || [];
   const completedOrders = dashboard?.orders?.completed || [];
@@ -429,11 +525,11 @@ export default function DriverDashboardScreen() {
   
   const todayEarnings = completedOrders.reduce((sum: number, order: any) => sum + order.total, 0);
 
+  // ==================== RENDER ====================
   return (
     <ThemedView style={styles.container}>
-      {/* ✅ HEADER WITH BUTTONS AT TOP */}
+      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: theme.backgroundDefault, borderBottomWidth: 1, borderBottomColor: theme.border }]}>
-        {/* Top row: Title + Buttons */}
         <View style={styles.titleRow}>
           <ThemedText type="h2">Delivery Hub</ThemedText>
           
@@ -454,7 +550,6 @@ export default function DriverDashboardScreen() {
           </View>
         </View>
 
-        {/* Status row */}
         <View style={[styles.statusRow, { marginTop: 8, marginBottom: 16 }]}>
           <View style={[styles.statusDot, { backgroundColor: theme.success }]} />
           <ThemedText type="caption" style={{ color: theme.textSecondary, marginLeft: 6 }}>
@@ -463,11 +558,13 @@ export default function DriverDashboardScreen() {
         </View>
       </View>
 
+      {/* Content */}
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing.xl }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.primary} />}
       >
+        {/* Active Deliveries Section */}
         <View style={styles.sectionHeader}>
           <Feather name="truck" size={20} color={theme.primary} />
           <ThemedText type="h3" style={styles.sectionTitle}>
@@ -496,6 +593,7 @@ export default function DriverDashboardScreen() {
           </Card>
         )}
 
+        {/* Completed Deliveries Section */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.xl, marginBottom: 12 }}>
           <View style={styles.sectionHeader}>
             <Feather name="check-circle" size={20} color={theme.success} />
@@ -543,6 +641,7 @@ export default function DriverDashboardScreen() {
         )}
       </ScrollView>
 
+      {/* PIN Modal */}
       <PINModal
         visible={pinModalVisible}
         onClose={() => {
@@ -556,6 +655,7 @@ export default function DriverDashboardScreen() {
   );
 }
 
+// ==================== STYLES ====================
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: 20 },
@@ -573,6 +673,7 @@ const styles = StyleSheet.create({
   orderHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
   divider: { height: 1, marginVertical: 12 },
+  addressSection: {},
   orderDetails: { marginBottom: 12 },
   detailRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
   codBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginTop: 8 },
@@ -584,7 +685,4 @@ const styles = StyleSheet.create({
   modalContent: { width: "80%", padding: 24, borderRadius: 16, alignItems: "center" },
   pinInput: { fontSize: 32, fontWeight: "bold", letterSpacing: 12, textAlign: "center", paddingVertical: 16, paddingHorizontal: 24, borderRadius: 12, borderWidth: 2, width: "100%" },
   modalButton: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center" },
-  addressSection: {
-    // Added inline in component
-  },
 });

@@ -143,7 +143,7 @@ export default function OrderTrackingScreen() {
   const hasDriverLocation = driverData?.hasLocation && driverData.location;
 
   // Create HTML for the map
- const mapHTML = `
+const mapHTML = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -156,7 +156,7 @@ export default function OrderTrackingScreen() {
     .leaflet-container { background: #f5f5f5; }
     @keyframes pulse {
       0% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.6; transform: scale(1.3); }
+      50% { opacity: 0.4; transform: scale(1.5); }
       100% { opacity: 1; transform: scale(1); }
     }
     .pulse-ring {
@@ -178,13 +178,13 @@ export default function OrderTrackingScreen() {
       attributionControl: false
     }).setView([customerLat, customerLng], 14);
     
-    // Add OpenStreetMap tiles with Grab-like styling
+    // Add OpenStreetMap tiles
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       className: 'map-tiles'
     }).addTo(map);
     
-    // Store marker (orange pin)
+    // Store marker (green pin with store icon)
     const storeIcon = L.divIcon({
       html: \`
         <div style="position: relative;">
@@ -202,7 +202,7 @@ export default function OrderTrackingScreen() {
     });
     L.marker([storeLat, storeLng], { icon: storeIcon }).addTo(map);
     
-    // Customer marker (blue pin with house)
+    // Customer marker (blue pin with house icon)
     const customerIcon = L.divIcon({
       html: \`
         <div style="position: relative;">
@@ -220,29 +220,34 @@ export default function OrderTrackingScreen() {
     });
     L.marker([customerLat, customerLng], { icon: customerIcon }).addTo(map);
     
-    // Driver marker (will be updated) - Grab-style motorcycle
+    // Driver marker with Grab-style design
     let driverMarker = null;
     let routeLine = null;
-    let pulseCircle = null;
+    let routeBorder = null;
     
     // Function to update driver location (called from React Native)
-    window.updateDriverLocation = function(lat, lng, heading) {
+    window.updateDriverLocation = function(lat, lng, heading = 0) {
       if (!driverMarker) {
-        // Create driver marker - Grab green motorcycle icon
+        // Create driver marker - Grab-style with motorcycle icon
         const driverIcon = L.divIcon({
           html: \`
-            <div style="position: relative; width: 50px; height: 50px;">
-              <div class="pulse-ring" style="position: absolute; top: 5px; left: 5px; width: 40px; height: 40px; border-radius: 50%; background: rgba(0,177,79,0.3); border: 2px solid #00B14F;"></div>
-              <div style="position: absolute; top: 8px; left: 8px; background: #00B14F; width: 34px; height: 34px; border-radius: 50%; border: 3px solid white; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,177,79,0.5); transform: rotate(\${heading}deg);">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-                  <path d="M5 11L2 20h20l-3-9M12 4v8M8 12c0-2.21 1.79-4 4-4s4 1.79 4 4"/>
-                </svg>
+            <div style="position: relative; width: 60px; height: 60px;">
+              <!-- Outer pulse ring -->
+              <div class="pulse-ring" style="position: absolute; top: 10px; left: 10px; width: 40px; height: 40px; border-radius: 50%; background: rgba(0,177,79,0.2); border: 3px solid rgba(0,177,79,0.4);"></div>
+              <!-- Inner marker -->
+              <div style="position: absolute; top: 15px; left: 15px; background: #00B14F; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,177,79,0.6);">
+                <div style="transform: rotate(\${heading}deg); transition: transform 0.3s ease;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+                    <path d="M12 2L4 8v6c0 5.5 3.8 10.7 8 12 4.2-1.3 8-6.5 8-12V8l-8-6z"/>
+                    <path d="M12 7v10M9 10h6" stroke="white" stroke-width="1.5"/>
+                  </svg>
+                </div>
               </div>
             </div>
           \`,
           className: 'driver-icon',
-          iconSize: [50, 50],
-          iconAnchor: [25, 25]
+          iconSize: [60, 60],
+          iconAnchor: [30, 30]
         });
         driverMarker = L.marker([lat, lng], { 
           icon: driverIcon,
@@ -251,64 +256,47 @@ export default function OrderTrackingScreen() {
       } else {
         // Smooth update
         driverMarker.setLatLng([lat, lng]);
+        
+        // Update heading rotation
         const iconHtml = driverMarker.getElement();
         if (iconHtml) {
-          const innerDiv = iconHtml.querySelector('div > div:last-child');
-          if (innerDiv) {
-            innerDiv.style.transform = 'rotate(' + heading + 'deg)';
+          const rotatingDiv = iconHtml.querySelector('div > div:last-child > div');
+          if (rotatingDiv) {
+            rotatingDiv.style.transform = 'rotate(' + heading + 'deg)';
           }
         }
       }
       
-      // Draw Grab-style route line (blue-green gradient)
-      if (routeLine) {
-        map.removeLayer(routeLine);
-      }
+      // Remove old route lines
+      if (routeLine) map.removeLayer(routeLine);
+      if (routeBorder) map.removeLayer(routeBorder);
       
-      // Route from store to driver (green)
-      const storeToDriver = L.polyline([
+      // Create route path (single continuous line)
+      const routePath = [
         [storeLat, storeLng],
-        [lat, lng]
-      ], {
-        color: '#00B14F',
-        weight: 6,
-        opacity: 0.8,
-        smoothFactor: 1,
-        lineCap: 'round',
-        lineJoin: 'round'
-      }).addTo(map);
-      
-      // Route from driver to customer (blue gradient effect)
-      routeLine = L.polyline([
         [lat, lng],
         [customerLat, customerLng]
-      ], {
-        color: '#1E88E5',
-        weight: 6,
-        opacity: 0.8,
-        smoothFactor: 1,
-        lineCap: 'round',
-        lineJoin: 'round',
-        dashArray: '0, 10',
-        dashOffset: '0'
-      }).addTo(map);
+      ];
       
-      // Add white border effect for better visibility
-      L.polyline([
-        [lat, lng],
-        [customerLat, customerLng]
-      ], {
+      // White border for depth effect
+      routeBorder = L.polyline(routePath, {
         color: '#FFFFFF',
         weight: 8,
-        opacity: 0.5,
+        opacity: 0.6,
         smoothFactor: 1,
         lineCap: 'round',
         lineJoin: 'round'
       }).addTo(map);
       
-      // Re-add the blue line on top
-      routeLine.bringToFront();
-      storeToDriver.bringToFront();
+      // Main blue route line (Grab style)
+      routeLine = L.polyline(routePath, {
+        color: '#1E88E5',
+        weight: 5,
+        opacity: 0.9,
+        smoothFactor: 1,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(map);
       
       // Fit map to show all markers
       const bounds = L.latLngBounds([
@@ -322,7 +310,7 @@ export default function OrderTrackingScreen() {
       });
     };
     
-    // Initial fit
+    // Initial fit to show store and customer
     const initialBounds = L.latLngBounds([
       [storeLat, storeLng],
       [customerLat, customerLng]
@@ -334,7 +322,7 @@ export default function OrderTrackingScreen() {
   </script>
 </body>
 </html>
-  `;
+`;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
