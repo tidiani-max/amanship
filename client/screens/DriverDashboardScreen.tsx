@@ -326,93 +326,99 @@ export default function DriverDashboardScreen() {
   });
 
   // ==================== LOCATION TRACKING ====================
-  useEffect(() => {
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setLocationPermission(status === 'granted');
-      if (status !== 'granted') {
-        Alert.alert(
-          'Location Required',
-          'Please enable location services to use delivery tracking.',
-          [{ text: 'OK' }]
-        );
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (!locationPermission || !user?.id) return;
-
-    const activeOrders = dashboard?.orders?.active || [];
-    const activeDelivery = activeOrders.find((o: any) => o.status === 'delivering');
-
-    if (!activeDelivery) {
-      console.log('📍 No active delivery - location tracking paused');
-      return;
+useEffect(() => {
+  (async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    setLocationPermission(status === 'granted');
+    if (status !== 'granted') {
+      Alert.alert(
+        'Location Required',
+        'Please enable location services to use delivery tracking.',
+        [{ text: 'OK' }]
+      );
     }
+  })();
+}, []);
 
-    console.log('📍 Starting location tracking for order:', activeDelivery.id);
+useEffect(() => {
+  // ✅ Platform guard - location tracking only works on native
+  if (Platform.OS === 'web') {
+    console.log('📍 Location tracking disabled on web');
+    return;
+  }
 
-    let locationSubscription: Location.LocationSubscription | null = null;
+  if (!locationPermission || !user?.id) return;
 
-    const startTracking = async () => {
-      try {
-        locationSubscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 3000,
-            distanceInterval: 10,
-          },
-          async (location) => {
-            try {
-              console.log('📍 Sending location update:', {
-                lat: location.coords.latitude,
-                lng: location.coords.longitude,
-                speed: location.coords.speed,
-              });
+  const activeOrders = dashboard?.orders?.active || [];
+  const activeDelivery = activeOrders.find((o: any) => o.status === 'delivering');
 
-              const response = await fetch(
-                `${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/update`,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    driverId: user.id,
-                    orderId: activeDelivery.id,
-                    latitude: location.coords.latitude,
-                    longitude: location.coords.longitude,
-                    heading: location.coords.heading || 0,
-                    speed: location.coords.speed || 0,
-                    accuracy: location.coords.accuracy || 0,
-                  }),
-                }
-              );
+  if (!activeDelivery) {
+    console.log('📍 No active delivery - location tracking paused');
+    return;
+  }
 
-              if (!response.ok) {
-                console.error('❌ Location update failed:', await response.text());
-              } else {
-                const data = await response.json();
-                console.log('✅ Location updated. ETA:', data.etaMinutes, 'min');
+  console.log('📍 Starting location tracking for order:', activeDelivery.id);
+
+  let locationSubscription: Location.LocationSubscription | null = null;
+
+  const startTracking = async () => {
+    try {
+      locationSubscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 3000,
+          distanceInterval: 10,
+        },
+        async (location) => {
+          try {
+            console.log('📍 Sending location update:', {
+              lat: location.coords.latitude,
+              lng: location.coords.longitude,
+              speed: location.coords.speed,
+            });
+
+            const response = await fetch(
+              `${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/update`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  driverId: user.id,
+                  orderId: activeDelivery.id,
+                  latitude: location.coords.latitude,
+                  longitude: location.coords.longitude,
+                  heading: location.coords.heading || 0,
+                  speed: location.coords.speed || 0,
+                  accuracy: location.coords.accuracy || 0,
+                }),
               }
-            } catch (error) {
-              console.error('❌ Location update error:', error);
+            );
+
+            if (!response.ok) {
+              console.error('❌ Location update failed:', await response.text());
+            } else {
+              const data = await response.json();
+              console.log('✅ Location updated. ETA:', data.etaMinutes, 'min');
             }
+          } catch (error) {
+            console.error('❌ Location update error:', error);
           }
-        );
-      } catch (error) {
-        console.error('❌ Failed to start location tracking:', error);
-      }
-    };
+        }
+      );
+    } catch (error) {
+      console.error('❌ Failed to start location tracking:', error);
+    }
+  };
 
-    startTracking();
+  startTracking();
 
-    return () => {
-      if (locationSubscription) {
-        console.log('📍 Stopping location tracking');
-        locationSubscription.remove();
-      }
-    };
-  }, [dashboard?.orders?.active, user?.id, locationPermission]);
+  return () => {
+    if (locationSubscription) {
+      console.log('📍 Stopping location tracking');
+      locationSubscription.remove();
+    }
+  };
+}, [dashboard?.orders?.active, user?.id, locationPermission]);
 
   // ==================== MUTATIONS ====================
   const pickupMutation = useMutation({

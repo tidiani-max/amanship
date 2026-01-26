@@ -11,8 +11,6 @@ const log = console.log;
 // Detect if we are running on Railway or locally
 const isProd = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT;
 
-
-
 function setupCors(app: express.Application) {
   app.use(cors({
     origin: [
@@ -24,7 +22,6 @@ function setupCors(app: express.Application) {
     allowedHeaders: ["Content-Type", "Authorization"],
   }));
 }
-
 
 function setupBodyParsing(app: express.Application) {
   app.use(express.json({
@@ -43,17 +40,17 @@ function configureStaticFiles(app: express.Application) {
 }
 
 (async () => {
-  // 1. Setup CORS first
+  // ✅ 1. CORS MUST BE FIRST
   setupCors(app);
-
-  // 2. Setup static files (uploads, assets, build)
-  configureStaticFiles(app);
-
-  // 3. Register routes (multer must run BEFORE body parsing)
-  const server = await registerRoutes(app);
-
-  // 4. Setup body parsing AFTER routes
+  
+  // ✅ 2. Body parsing BEFORE routes
   setupBodyParsing(app);
+  
+  // ✅ 3. Static files
+  configureStaticFiles(app);
+  
+  // ✅ 4. Register routes LAST
+  const server = await registerRoutes(app);
 
   const port = parseInt(process.env.PORT || "5000", 10);
 

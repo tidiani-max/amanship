@@ -33,14 +33,14 @@ interface LocationContextType {
   manualAddress: string | null;
   addressLabel: string | null;
   gpsLocationName: string | null;
-  accuracy: number | null; // GPS accuracy in meters
-  heading: number | null; // Direction user/driver is facing
+  accuracy: number | null;
+  heading: number | null;
   requestLocationPermission: () => Promise<boolean>;
   refreshStoreAvailability: () => void;
   setManualLocation: (location: ManualLocation) => void;
   clearManualLocation: () => void;
   useCurrentLocation: () => Promise<void>;
-  startContinuousTracking: () => void; // For drivers
+  startContinuousTracking: () => void;
   stopContinuousTracking: () => void;
 }
 
@@ -99,7 +99,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
             enableHighAccuracy: true,
             timeout: 15000,
-            maximumAge: 0, // Force fresh location
+            maximumAge: 0,
           });
         });
         
@@ -127,9 +127,8 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
 
-      // ✅ REQUEST HIGHEST ACCURACY POSSIBLE
       const currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation, // Highest accuracy
+        accuracy: Location.Accuracy.BestForNavigation,
       });
 
       const lat = currentLocation.coords.latitude;
@@ -158,8 +157,14 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // ===== CONTINUOUS TRACKING (For Drivers) =====
+  // ===== CONTINUOUS TRACKING (For Drivers - NATIVE ONLY) =====
   const startContinuousTracking = useCallback(async () => {
+    // ✅ Guard against web platform
+    if (Platform.OS === 'web') {
+      console.warn('⚠️ Continuous tracking not supported on web');
+      return;
+    }
+
     try {
       console.log("🚗 Starting continuous location tracking...");
       
@@ -169,12 +174,11 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Subscribe to location updates
       const subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 3000, // Update every 3 seconds
-          distanceInterval: 10, // Or every 10 meters moved
+          timeInterval: 3000,
+          distanceInterval: 10,
         },
         (location) => {
           const { latitude, longitude, heading, speed, accuracy } = location.coords;
@@ -200,17 +204,20 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const stopContinuousTracking = useCallback(() => {
-    if (locationSubscription) {
-      locationSubscription.remove();
-      setLocationSubscription(null);
-      console.log("🛑 Continuous tracking stopped");
+    // ✅ Guard against web platform
+    if (Platform.OS === 'web' || !locationSubscription) {
+      return;
     }
+    
+    locationSubscription.remove();
+    setLocationSubscription(null);
+    console.log("🛑 Continuous tracking stopped");
   }, [locationSubscription]);
 
-  // Cleanup on unmount
+  // ✅ Cleanup with platform guard
   useEffect(() => {
     return () => {
-      if (locationSubscription) {
+      if (Platform.OS !== 'web' && locationSubscription) {
         locationSubscription.remove();
       }
     };

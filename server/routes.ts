@@ -51,8 +51,7 @@ const uploadMiddleware = multer({ storage: fileStorage });
 
 export async function registerRoutes(app: Express): Promise<Server> {
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
 
 // 🟢 HEALTH CHECK & DEBUG ROUTE
 app.get("/api/health", (req, res) => {
@@ -84,39 +83,7 @@ app.post("/api/users/push-token", async (req, res) => {
   }
 });
   
-  
-  // ==================== 1. CORS MIDDLEWARE (MUST BE FIRST!) ====================
-  // ==================== 1. CORS MIDDLEWARE (FIXED) ====================
-  
-
-  app.post("/api/auth/google", async (req, res) => {
-  const { googleId, email, name } = req.body;
-
-  try {
-    // 1. Try to find user by email first
-    let user = await storage.getUserByEmail(email);
-
-    // 2. If no user found, create one
-    if (!user) {
-      user = await storage.createUser({
-        username: name || email.split('@')[0],
-        email: email,
-        password: "google-auth-user", // Placeholder since they use Google
-        role: "customer",
-        phone: null,
-      });
-    }
-
-    // 3. Set session/return user
-    // (If you use express-session) req.session.userId = user.id;
-    res.json({ user });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to authenticate with Google" });
-  }
-});
-
   // ==================== 2. STATIC FILES ====================
-  app.use('/attached_assets', express.static(path.join(process.cwd(), 'attached_assets')));
   app.use('/attached_assets', express.static(path.join(process.cwd(), 'attached_assets')));
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
   // Replace those long ../../../ paths with this:
