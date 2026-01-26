@@ -390,11 +390,6 @@ const renderProductCard = (product: UIProduct) => {
             <ThemedText style={styles.logoText}>KilatGo</ThemedText>
           </View>
           
-          <View style={styles.headerRight}>
-            <Pressable onPress={() => navigation.navigate("Notifications")}>
-              <Feather name="bell" size={20} color={theme.text} />
-            </Pressable>
-          </View>
         </View>
       </View>
 
