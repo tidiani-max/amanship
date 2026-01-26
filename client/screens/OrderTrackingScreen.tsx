@@ -4,7 +4,7 @@ export default function OrderTrackingScreen() {
   const [driverLocation, setDriverLocation] = useState({ lat: 13.7548, lng: 100.4990 });
   const [customerLocation] = useState({ lat: 13.7563, lng: 100.5018 });
   const [heading, setHeading] = useState(45);
-  const webViewRef = useRef<any>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Simulate driver movement for demo
   useEffect(() => {
@@ -20,18 +20,13 @@ export default function OrderTrackingScreen() {
 
   // Update map when driver moves
   useEffect(() => {
-    if (webViewRef.current) {
-      const updateScript = `
-        if (window.updateDriverLocation) {
-          window.updateDriverLocation(
-            ${driverLocation.lat},
-            ${driverLocation.lng},
-            ${heading}
-          );
-        }
-        true;
-      `;
-      webViewRef.current.injectJavaScript(updateScript);
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage({
+        type: 'updateDriver',
+        lat: driverLocation.lat,
+        lng: driverLocation.lng,
+        heading: heading
+      }, '*');
     }
   }, [driverLocation, heading]);
 
@@ -113,7 +108,7 @@ export default function OrderTrackingScreen() {
     let driverMarker = null;
     let routeLine = null;
 
-    window.updateDriverLocation = function(lat, lng, heading = 0) {
+    function updateDriverLocation(lat, lng, heading) {
       const driverPos = [lat, lng];
       const customerPos = [customerLat, customerLng];
 
@@ -131,16 +126,11 @@ export default function OrderTrackingScreen() {
                 transition: transform 0.5s ease;
               ">
                 <svg width="50" height="50" viewBox="0 0 100 100">
-                  <!-- Yellow circle background -->
                   <circle cx="50" cy="50" r="22" fill="#FFD700" stroke="white" stroke-width="4"/>
-                  <!-- Motorcycle icon -->
                   <g transform="translate(50, 50)">
-                    <!-- Wheels -->
                     <circle cx="-8" cy="8" r="4" fill="#333"/>
                     <circle cx="8" cy="8" r="4" fill="#333"/>
-                    <!-- Body -->
                     <rect x="-10" y="0" width="20" height="6" rx="2" fill="#333"/>
-                    <!-- Handlebar -->
                     <rect x="-2" y="-8" width="4" height="10" rx="2" fill="#666"/>
                   </g>
                 </svg>
@@ -160,7 +150,7 @@ export default function OrderTrackingScreen() {
         }
       }
 
-      // Update route line (yellow, matching the image)
+      // Update route line (yellow)
       if (routeLine) map.removeLayer(routeLine);
       
       routeLine = L.polyline([driverPos, customerPos], {
@@ -176,10 +166,17 @@ export default function OrderTrackingScreen() {
         padding: [80, 80],
         maxZoom: 16
       });
-    };
+    }
+    
+    // Listen for messages from parent
+    window.addEventListener('message', function(event) {
+      if (event.data && event.data.type === 'updateDriver') {
+        updateDriverLocation(event.data.lat, event.data.lng, event.data.heading);
+      }
+    });
     
     // Initial position
-    window.updateDriverLocation(${driverLocation.lat}, ${driverLocation.lng}, ${heading});
+    updateDriverLocation(${driverLocation.lat}, ${driverLocation.lng}, ${heading});
   </script>
 </body>
 </html>
@@ -190,7 +187,7 @@ export default function OrderTrackingScreen() {
       {/* Map Section */}
       <div style={{ position: 'relative', height: '50%' }}>
         <iframe
-          ref={webViewRef}
+          ref={iframeRef}
           srcDoc={mapHTML}
           style={{ width: '100%', height: '100%', border: 'none' }}
           title="Delivery Map"
@@ -400,5 +397,6 @@ export default function OrderTrackingScreen() {
         </div>
       </div>
     </div>
-  );
+ 
+);
 }
