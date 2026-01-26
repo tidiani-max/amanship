@@ -1,8 +1,8 @@
 // app/screens/OrderTrackingScreen.tsx
-// Grab-style map with live driver tracking
+// REAL MAP with live driver tracking like Uber/Grab
 
 import React, { useEffect, useState, useRef } from "react";
-import { View, StyleSheet, Pressable, ActivityIndicator, Dimensions, Animated } from "react-native";
+import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
@@ -10,8 +10,9 @@ import { useQuery } from "@tanstack/react-query";
 import { WebView } from "react-native-webview";
 
 import { ThemedText } from "@/components/ThemedText";
+import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { CallButton } from "@/components/CallButton";
 
@@ -38,7 +39,7 @@ export default function OrderTrackingScreen() {
       if (!response.ok) throw new Error("Order not found");
       const data = await response.json();
       
-      // Get customer location (DELIVERY DESTINATION)
+      // Get customer location from order
       if (data.customerLat && data.customerLng) {
         setCustomerLocation({
           lat: parseFloat(data.customerLat),
@@ -46,7 +47,7 @@ export default function OrderTrackingScreen() {
         });
       }
       
-      // Get store location (PICKUP POINT)
+      // Get store location
       if (data.storeId) {
         const storeRes = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/stores/${data.storeId}`);
         const storeData = await storeRes.json();
@@ -70,7 +71,7 @@ export default function OrderTrackingScreen() {
       const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/${orderId}`);
       return response.json();
     },
-    refetchInterval: 3000,
+    refetchInterval: 3000, // Update every 3 seconds
     enabled: order?.status === "delivering",
   });
 
@@ -94,7 +95,7 @@ export default function OrderTrackingScreen() {
   if (orderLoading || !order) {
     return (
       <View style={[styles.centered, { backgroundColor: theme.backgroundRoot }]}>
-        <ActivityIndicator size="large" color="#00BFA6" />
+        <ActivityIndicator size="large" color={theme.primary} />
         <ThemedText style={{ marginTop: 10 }}>Loading order details...</ThemedText>
       </View>
     );
@@ -114,9 +115,9 @@ export default function OrderTrackingScreen() {
   const getStatusText = () => {
     switch (status) {
       case "preparing": return "Preparing your order";
-      case "picked_up": return "Rider picked up your order";
+      case "picked_up": return "Rider picked up";
       case "on_the_way": return "Rider is on the way";
-      case "arriving": return "Arriving soon!";
+      case "arriving": return "Almost there!";
       default: return "Processing";
     }
   };
@@ -130,10 +131,10 @@ export default function OrderTrackingScreen() {
     }
     
     switch (status) {
-      case "preparing": return "15 min";
-      case "picked_up": return "12 min";
-      case "on_the_way": return "8 min";
-      case "arriving": return "2 min";
+      case "preparing": return "12-15 min";
+      case "picked_up": return "10-12 min";
+      case "on_the_way": return "5-8 min";
+      case "arriving": return "1-2 min";
       default: return "-- min";
     }
   };
@@ -142,7 +143,7 @@ export default function OrderTrackingScreen() {
   const hasDriverLocation = driverData?.hasLocation && driverData.location;
 
   // Create HTML for the map
-  const mapHTML = `
+ const mapHTML = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -152,99 +153,173 @@ export default function OrderTrackingScreen() {
   <style>
     body { margin: 0; padding: 0; }
     #map { width: 100%; height: 100vh; }
-    .pulse {
-      animation: pulse 2s infinite;
-    }
+    .leaflet-container { background: #f5f5f5; }
     @keyframes pulse {
-      0% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.5); opacity: 0.3; }
-      100% { transform: scale(1); opacity: 1; }
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.3); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    .pulse-ring {
+      animation: pulse 2s ease-in-out infinite;
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <script>
+    // Initialize map
     const customerLat = ${customerLocation?.lat || 13.7563};
     const customerLng = ${customerLocation?.lng || 100.5018};
     const storeLat = ${storeLocation?.lat || 13.7563};
     const storeLng = ${storeLocation?.lng || 100.5018};
     
     const map = L.map('map', {
-      zoomControl: false,
+      zoomControl: true,
       attributionControl: false
     }).setView([customerLat, customerLng], 14);
     
+    // Add OpenStreetMap tiles with Grab-like styling
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19
+      maxZoom: 19,
+      className: 'map-tiles'
     }).addTo(map);
     
-    // Pickup point (Store - Green with building icon)
-    const pickupIcon = L.divIcon({
-      html: '<div style="position: relative;"><div style="background: #00BFA6; width: 12px; height: 12px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); position: absolute; top: 0; left: 50%; transform: translateX(-50%);"></div></div>',
-      className: 'pickup-icon',
-      iconSize: [18, 18],
-      iconAnchor: [9, 9]
+    // Store marker (orange pin)
+    const storeIcon = L.divIcon({
+      html: \`
+        <div style="position: relative;">
+          <div style="background: #00B14F; width: 32px; height: 32px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="white" style="transform: rotate(45deg);">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+          </div>
+        </div>
+      \`,
+      className: 'store-marker',
+      iconSize: [32, 40],
+      iconAnchor: [16, 32]
     });
-    L.marker([storeLat, storeLng], { icon: pickupIcon }).addTo(map);
+    L.marker([storeLat, storeLng], { icon: storeIcon }).addTo(map);
     
-    // Delivery destination (Customer - Blue with pin)
-    const destinationIcon = L.divIcon({
-      html: '<div style="position: relative;"><div style="width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-top: 30px solid #1E88E5; position: absolute; top: -30px; left: 50%; transform: translateX(-50%);"></div><div style="background: #1E88E5; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; position: absolute; top: -28px; left: 50%; transform: translateX(-50%); box-shadow: 0 2px 8px rgba(0,0,0,0.3);"></div></div>',
-      className: 'destination-icon',
-      iconSize: [30, 30],
-      iconAnchor: [15, 0]
+    // Customer marker (blue pin with house)
+    const customerIcon = L.divIcon({
+      html: \`
+        <div style="position: relative;">
+          <div style="background: #1E88E5; width: 36px; height: 36px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 3px 12px rgba(30,136,229,0.4); display: flex; align-items: center; justify-content: center;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="white" style="transform: rotate(45deg);">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+          </div>
+        </div>
+      \`,
+      className: 'customer-marker',
+      iconSize: [36, 44],
+      iconAnchor: [18, 36]
     });
-    L.marker([customerLat, customerLng], { icon: destinationIcon }).addTo(map);
+    L.marker([customerLat, customerLng], { icon: customerIcon }).addTo(map);
     
-    // Route line from pickup to destination
-    const routeLine = L.polyline([
-      [storeLat, storeLng],
-      [customerLat, customerLng]
-    ], {
-      color: '#00BFA6',
-      weight: 5,
-      opacity: 0.8
-    }).addTo(map);
-    
-    // Driver marker
+    // Driver marker (will be updated) - Grab-style motorcycle
     let driverMarker = null;
-    let driverRouteLine = null;
+    let routeLine = null;
+    let pulseCircle = null;
     
+    // Function to update driver location (called from React Native)
     window.updateDriverLocation = function(lat, lng, heading) {
       if (!driverMarker) {
+        // Create driver marker - Grab green motorcycle icon
         const driverIcon = L.divIcon({
-          html: '<div style="position: relative;"><div class="pulse" style="background: rgba(0, 191, 166, 0.3); width: 60px; height: 60px; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div><div style="background: #00BFA6; width: 40px; height: 40px; border-radius: 50%; border: 4px solid white; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,191,166,0.6); position: relative; z-index: 10;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><circle cx="12" cy="12" r="1"></circle><path d="M19 12h-2M7 12H5M12 19v-2M12 7V5"></path></svg></div></div>',
+          html: \`
+            <div style="position: relative; width: 50px; height: 50px;">
+              <div class="pulse-ring" style="position: absolute; top: 5px; left: 5px; width: 40px; height: 40px; border-radius: 50%; background: rgba(0,177,79,0.3); border: 2px solid #00B14F;"></div>
+              <div style="position: absolute; top: 8px; left: 8px; background: #00B14F; width: 34px; height: 34px; border-radius: 50%; border: 3px solid white; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,177,79,0.5); transform: rotate(\${heading}deg);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                  <path d="M5 11L2 20h20l-3-9M12 4v8M8 12c0-2.21 1.79-4 4-4s4 1.79 4 4"/>
+                </svg>
+              </div>
+            </div>
+          \`,
           className: 'driver-icon',
-          iconSize: [60, 60],
-          iconAnchor: [30, 30]
+          iconSize: [50, 50],
+          iconAnchor: [25, 25]
         });
-        driverMarker = L.marker([lat, lng], { icon: driverIcon }).addTo(map);
+        driverMarker = L.marker([lat, lng], { 
+          icon: driverIcon,
+          zIndexOffset: 1000 
+        }).addTo(map);
       } else {
+        // Smooth update
         driverMarker.setLatLng([lat, lng]);
+        const iconHtml = driverMarker.getElement();
+        if (iconHtml) {
+          const innerDiv = iconHtml.querySelector('div > div:last-child');
+          if (innerDiv) {
+            innerDiv.style.transform = 'rotate(' + heading + 'deg)';
+          }
+        }
       }
       
-      // Draw route from driver to destination
-      if (driverRouteLine) {
-        map.removeLayer(driverRouteLine);
+      // Draw Grab-style route line (blue-green gradient)
+      if (routeLine) {
+        map.removeLayer(routeLine);
       }
-      driverRouteLine = L.polyline([
+      
+      // Route from store to driver (green)
+      const storeToDriver = L.polyline([
+        [storeLat, storeLng],
+        [lat, lng]
+      ], {
+        color: '#00B14F',
+        weight: 6,
+        opacity: 0.8,
+        smoothFactor: 1,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(map);
+      
+      // Route from driver to customer (blue gradient effect)
+      routeLine = L.polyline([
         [lat, lng],
         [customerLat, customerLng]
       ], {
-        color: '#00BFA6',
-        weight: 5,
+        color: '#1E88E5',
+        weight: 6,
         opacity: 0.8,
-        dashArray: '10, 10'
+        smoothFactor: 1,
+        lineCap: 'round',
+        lineJoin: 'round',
+        dashArray: '0, 10',
+        dashOffset: '0'
       }).addTo(map);
       
-      // Fit bounds to show all markers
+      // Add white border effect for better visibility
+      L.polyline([
+        [lat, lng],
+        [customerLat, customerLng]
+      ], {
+        color: '#FFFFFF',
+        weight: 8,
+        opacity: 0.5,
+        smoothFactor: 1,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(map);
+      
+      // Re-add the blue line on top
+      routeLine.bringToFront();
+      storeToDriver.bringToFront();
+      
+      // Fit map to show all markers
       const bounds = L.latLngBounds([
         [storeLat, storeLng],
         [lat, lng],
         [customerLat, customerLng]
       ]);
-      map.fitBounds(bounds, { padding: [80, 80] });
+      map.fitBounds(bounds, { 
+        padding: [60, 60],
+        maxZoom: 15 
+      });
     };
     
     // Initial fit
@@ -252,15 +327,18 @@ export default function OrderTrackingScreen() {
       [storeLat, storeLng],
       [customerLat, customerLng]
     ]);
-    map.fitBounds(initialBounds, { padding: [80, 80] });
+    map.fitBounds(initialBounds, { 
+      padding: [60, 60],
+      maxZoom: 14 
+    });
   </script>
 </body>
 </html>
   `;
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-      {/* Full-height Map */}
+    <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+      {/* Real Map View */}
       <View style={styles.mapContainer}>
         {storeLocation && customerLocation ? (
           <WebView
@@ -271,162 +349,149 @@ export default function OrderTrackingScreen() {
             domStorageEnabled={true}
           />
         ) : (
-          <View style={[styles.centered, { backgroundColor: '#F5F5F5' }]}>
-            <ActivityIndicator size="large" color="#00BFA6" />
+          <View style={[styles.centered, { backgroundColor: theme.backgroundDefault }]}>
+            <ActivityIndicator size="large" color={theme.primary} />
             <ThemedText style={{ marginTop: 10 }}>Loading map...</ThemedText>
           </View>
         )}
 
-        {/* Floating Back Button */}
-        <Pressable 
-          onPress={() => navigation.goBack()}
-          style={[styles.backButton, { top: insets.top + 16 }]}
-        >
-          <Feather name="chevron-down" size={28} color="#000" />
-        </Pressable>
+        {/* GPS Accuracy Badge */}
+        {hasDriverLocation && driverData.location.accuracy && (
+          <View style={[styles.accuracyBadge, { backgroundColor: theme.cardBackground }]}>
+            <Feather name="crosshair" size={12} color="#10b981" />
+            <ThemedText style={styles.accuracyText}>
+              GPS: ±{Math.round(driverData.location.accuracy)}m
+            </ThemedText>
+          </View>
+        )}
 
-        {/* Floating Action Buttons */}
-        <View style={[styles.floatingActions, { top: insets.top + 16 }]}>
-          <Pressable style={styles.floatingBtn}>
-            <Feather name="cloud-rain" size={22} color="#00BFA6" />
-          </Pressable>
-          
-          <Pressable 
-            style={styles.floatingBtn}
-            onPress={() => {
-              if (webViewRef.current && storeLocation && customerLocation) {
-                webViewRef.current.injectJavaScript(`
-                  const bounds = L.latLngBounds([
-                    [${storeLocation.lat}, ${storeLocation.lng}],
-                    [${customerLocation.lat}, ${customerLocation.lng}]
-                  ]);
-                  map.fitBounds(bounds, { padding: [80, 80] });
-                  true;
-                `);
-              }
-            }}
-          >
-            <Feather name="crosshair" size={22} color="#000" />
-          </Pressable>
-        </View>
+        {/* Speed Badge */}
+        {hasDriverLocation && driverData.location.speed && (
+          <View style={[styles.speedBadge, { backgroundColor: theme.cardBackground }]}>
+            <Feather name="navigation" size={12} color={theme.primary} />
+            <ThemedText style={[styles.accuracyText, { color: theme.primary }]}>
+              {Math.round(driverData.location.speed * 3.6)} km/h
+            </ThemedText>
+          </View>
+        )}
       </View>
 
-      {/* Bottom Sheet */}
-      <View style={[styles.bottomSheet, { paddingBottom: insets.bottom + 20 }]}>
-        {/* Handle Bar */}
-        <View style={styles.handleBar} />
-
-        {/* Pickup Location Card */}
-        <Pressable style={styles.locationCard}>
-          <View style={styles.locationIconContainer}>
-            <View style={[styles.locationDot, { backgroundColor: '#00BFA6' }]} />
-          </View>
-          <View style={styles.locationInfo}>
-            <ThemedText type="caption" style={{ color: '#666', fontSize: 12 }}>
-              {status === "preparing" ? "Pickup point" : "Delivering to"}
+      {/* Bottom Panel */}
+      <ScrollView 
+        style={styles.bottomPanel}
+        contentContainerStyle={{
+          paddingBottom: insets.bottom + Spacing.lg,
+          paddingHorizontal: Spacing.lg,
+          paddingTop: Spacing.lg,
+        }}
+      >
+        {/* Status Header */}
+        <View style={styles.statusHeader}>
+          <View style={[styles.statusBadge, { backgroundColor: theme.primary + "20" }]}>
+            <Feather name="zap" size={16} color={theme.primary} />
+            <ThemedText type="caption" style={{ color: theme.primary, fontWeight: "600" }}>
+              {getTimeEstimate()}
             </ThemedText>
-            <ThemedText type="body" style={{ fontWeight: '600', marginTop: 2, fontSize: 15 }}>
-              {status === "preparing" ? (order.storeName || 'Store Location') : (order.customerAddress || 'Your Location')}
-            </ThemedText>
           </View>
-          <Feather name="chevron-right" size={20} color="#999" />
-        </Pressable>
-
-        {/* Safety Centre Banner */}
-        <Pressable style={styles.safetyBanner}>
-          <View style={styles.safetyIcon}>
-            <Feather name="shield" size={18} color="#00BFA6" />
-          </View>
-          <ThemedText type="caption" style={{ flex: 1, color: '#00BFA6', fontWeight: '700', fontSize: 13 }}>
-            SAFETY CENTRE
+          <ThemedText type="h3">{getStatusText()}</ThemedText>
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            Order #{order.orderNumber}
           </ThemedText>
-        </Pressable>
 
-        {/* Driver Info Section */}
-        <View style={styles.driverSection}>
-          <View style={styles.driverHeader}>
-            <View style={styles.riderAvatar}>
-              <ThemedText type="h3" style={{ color: '#FFF', fontSize: 20 }}>
+          {/* Distance to Customer */}
+          {hasDriverLocation && (
+            <View style={styles.distanceBadge}>
+              <Feather name="navigation" size={14} color={theme.success} />
+              <ThemedText type="caption" style={{ color: theme.success, fontWeight: "600" }}>
+                {driverData.distance.toFixed(1)} km away
+              </ThemedText>
+            </View>
+          )}
+        </View>
+
+        {/* Progress Tracker */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressStep}>
+            <View style={[styles.progressDot, { backgroundColor: theme.success }]}>
+              <Feather name="check" size={12} color="#FFF" />
+            </View>
+            <ThemedText type="small" style={styles.progressLabel}>Confirmed</ThemedText>
+          </View>
+
+          <View style={[styles.progressLine, { 
+            backgroundColor: ["picked_up", "on_the_way", "arriving"].includes(status) 
+              ? theme.success : theme.border 
+          }]} />
+
+          <View style={styles.progressStep}>
+            <View style={[styles.progressDot, { 
+              backgroundColor: ["picked_up", "on_the_way", "arriving"].includes(status)
+                ? theme.success : theme.border 
+            }]}>
+              {["picked_up", "on_the_way", "arriving"].includes(status) && (
+                <Feather name="check" size={12} color="#FFF" />
+              )}
+            </View>
+            <ThemedText type="small" style={styles.progressLabel}>Picked Up</ThemedText>
+          </View>
+
+          <View style={[styles.progressLine, { 
+            backgroundColor: status === "arriving" ? theme.success : theme.border 
+          }]} />
+
+          <View style={styles.progressStep}>
+            <View style={[styles.progressDot, { 
+              backgroundColor: status === "arriving" ? theme.success : theme.border 
+            }]}>
+              {status === "arriving" && <Feather name="check" size={12} color="#FFF" />}
+            </View>
+            <ThemedText type="small" style={styles.progressLabel}>Delivered</ThemedText>
+          </View>
+        </View>
+
+        {/* Driver Info Card */}
+        <Card style={styles.riderCard}>
+          <View style={styles.riderInfo}>
+            <View style={[styles.riderAvatar, { backgroundColor: theme.primary }]}>
+              <ThemedText type="h3" style={{ color: '#FFF' }}>
                 {order.driverName?.charAt(0) || "D"}
               </ThemedText>
             </View>
-            <View style={styles.driverInfo}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <ThemedText type="body" style={{ fontWeight: "700", fontSize: 16 }}>
-                  {order.driverName || "Finding Driver..."}
-                </ThemedText>
-                <View style={styles.etaBadge}>
-                  <ThemedText type="caption" style={{ color: '#00BFA6', fontWeight: "700", fontSize: 12 }}>
-                    {getTimeEstimate()}
-                  </ThemedText>
-                </View>
-              </View>
-              <ThemedText type="small" style={{ color: '#666', marginTop: 4, fontSize: 13 }}>
-                {order.deliveryVehicle || "Motorcycle"} • {order.vehiclePlate || "ABC-1234"}
+            <View style={styles.riderDetails}>
+              <ThemedText type="body" style={{ fontWeight: "600" }}>
+                {order.driverName || "Finding Driver..."}
+              </ThemedText>
+              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                Flash Courier Partner
               </ThemedText>
             </View>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {showMessageButton && (
+                <Pressable 
+                  onPress={() => navigation.navigate("Chat", { orderId: order.id })}
+                  style={[styles.actionBtn, { backgroundColor: theme.primary }]}
+                >
+                  <Feather name="message-square" size={20} color="#FFFFFF" />
+                </Pressable>
+              )}
+              {order.driverPhone && <CallButton phoneNumber={order.driverPhone} />}
+            </View>
           </View>
-
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            {showMessageButton && (
-              <Pressable 
-                onPress={() => navigation.navigate("Chat", { orderId: order.id })}
-                style={styles.actionBtn}
-              >
-                <Feather name="message-square" size={22} color="#000" />
-              </Pressable>
-            )}
-            {order.driverPhone && (
-              <View style={{ transform: [{ scale: 1.1 }] }}>
-                <CallButton phoneNumber={order.driverPhone} />
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Status Text */}
-        <ThemedText type="caption" style={{ color: '#666', marginTop: 16, paddingHorizontal: 20, fontSize: 13 }}>
-          {getStatusText()}
-        </ThemedText>
+        </Card>
 
         {/* Delivery PIN */}
-        {order.deliveryPin && (
-          <View style={styles.pinContainer}>
-            <ThemedText type="caption" style={{ color: '#666', fontSize: 12 }}>
-              Delivery PIN:
-            </ThemedText>
-            <ThemedText type="h2" style={{ color: '#00BFA6', fontWeight: '800', letterSpacing: 6, fontSize: 28 }}>
-              {order.deliveryPin}
-            </ThemedText>
-          </View>
-        )}
-
-        {/* Distance Badge */}
-        {hasDriverLocation && (
-          <View style={styles.distanceInfo}>
-            <Feather name="navigation" size={14} color="#00BFA6" />
-            <ThemedText type="caption" style={{ color: '#00BFA6', fontWeight: "600", fontSize: 12 }}>
-              {driverData.distance.toFixed(1)} km away
-            </ThemedText>
-          </View>
-        )}
-
-        {/* Schedule Banner (like in the image) */}
-        <Pressable style={styles.scheduleBanner}>
-          <View style={{ flex: 1 }}>
-            <ThemedText type="body" style={{ fontWeight: '700', fontSize: 16, marginBottom: 4 }}>
-              Schedule your airport ride ahead
-            </ThemedText>
-            <ThemedText type="caption" style={{ color: '#666', fontSize: 13 }}>
-              And relax knowing we'll pick you on time.
-            </ThemedText>
-          </View>
-          <View style={styles.scheduleIcon}>
-            <Feather name="arrow-right" size={20} color="#000" />
-          </View>
-        </Pressable>
-      </View>
+        <Card style={styles.pinCard}>
+          <ThemedText type="caption" style={{ color: theme.textSecondary, marginBottom: 4 }}>
+            Delivery PIN Code
+          </ThemedText>
+          <ThemedText type="h1" style={{ letterSpacing: 8, color: theme.primary }}>
+            {order.deliveryPin}
+          </ThemedText>
+          <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 4 }}>
+            Share this code with the driver upon arrival
+          </ThemedText>
+        </Card>
+      </ScrollView>
     </View>
   );
 }
@@ -434,177 +499,77 @@ export default function OrderTrackingScreen() {
 const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   mapContainer: { 
-    flex: 1,
+    flex: 0.5, 
     position: 'relative',
   },
   map: {
     flex: 1,
   },
-  backButton: {
+  accuracyBadge: {
     position: 'absolute',
+    bottom: 16,
     left: 16,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'white',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  floatingActions: {
-    position: 'absolute',
-    right: 16,
-    gap: 12,
-  },
-  floatingBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'white',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  bottomSheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'white',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 12,
-    paddingHorizontal: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 10,
-  },
-  handleBar: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  locationCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    backgroundColor: '#F8F8F8',
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  locationIconContainer: {
-    width: 8,
-    marginRight: 16,
-  },
-  locationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  locationInfo: {
-    flex: 1,
-  },
-  safetyBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#E0F7F4',
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  safetyIcon: {
-    marginRight: 12,
-  },
-  driverSection: {
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  driverHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  riderAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#00BFA6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  driverInfo: {
-    flex: 1,
-  },
-  etaBadge: {
-    backgroundColor: '#E0F7F4',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    position: 'absolute',
-    right: 0,
-    top: 16,
-  },
-  actionBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F5F5F5',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pinContainer: {
-    alignItems: 'center',
-    paddingVertical: 20,
-    marginTop: 8,
-    backgroundColor: '#F8F8F8',
-    borderRadius: 12,
-    marginHorizontal: -20,
-    paddingHorizontal: 20,
-  },
-  distanceInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     gap: 6,
-    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  scheduleBanner: {
+  speedBadge: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 20,
-    backgroundColor: '#E3F2FD',
-    borderRadius: 12,
-    marginTop: 16,
-    marginHorizontal: -20,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  scheduleIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'white',
+  accuracyText: { fontSize: 12, fontWeight: '600', color: '#065f46' },
+  bottomPanel: { flex: 0.5 },
+  statusHeader: { alignItems: "center", marginBottom: Spacing.xl },
+  statusBadge: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingHorizontal: Spacing.md, 
+    paddingVertical: Spacing.xs, 
+    borderRadius: BorderRadius.xs, 
+    gap: Spacing.xs, 
+    marginBottom: Spacing.sm 
+  },
+  distanceBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 12,
+    gap: 6,
+    marginTop: 8,
+  },
+  progressContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.lg },
+  progressStep: { alignItems: 'center' },
+  progressDot: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  progressLine: { width: 60, height: 2, marginHorizontal: 8 },
+  progressLabel: { fontSize: 10 },
+  riderCard: { padding: 12, marginBottom: Spacing.md },
+  riderInfo: { flexDirection: "row", alignItems: "center" },
+  riderAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  riderDetails: { flex: 1, marginLeft: Spacing.md },
+  actionBtn: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  pinCard: {
+    padding: 20,
+    alignItems: 'center',
+    backgroundColor: '#ecfdf5',
+    borderWidth: 2,
+    borderColor: '#10b981',
   },
 });
