@@ -16,6 +16,13 @@ export type OrderStatus = typeof orderStatuses[number];
 export const paymentMethodTypes = ["midtrans", "cod"] as const;
 export type PaymentMethodType = typeof paymentMethodTypes[number];
 
+// ===== NEW: Promotion Types =====
+export const promotionTypes = ["percentage", "fixed_amount", "buy_x_get_y", "free_delivery", "bundle"] as const;
+export type PromotionType = typeof promotionTypes[number];
+
+export const promotionTargets = ["all", "new_users", "returning_users", "specific_users"] as const;
+export type PromotionTarget = typeof promotionTargets[number];
+
 // --- Tables ---
 
 export const users = pgTable("users", {
@@ -32,7 +39,11 @@ export const users = pgTable("users", {
   areaId: integer("area_id"),
   storeId: integer("store_id"),
   pushToken: text("push_token"),
-  firstLogin: boolean("first_login").default(true).notNull(), 
+  firstLogin: boolean("first_login").default(true).notNull(),
+  // ===== NEW: Track if user is new (for targeting new user promotions) =====
+  isNewUser: boolean("is_new_user").default(true).notNull(),
+  firstOrderAt: timestamp("first_order_at"),
+  totalOrders: integer("total_orders").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -94,6 +105,9 @@ export const products = pgTable("products", {
   categoryId: varchar("category_id").notNull().references(() => categories.id),
   description: text("description"),
   nutrition: jsonb("nutrition"),
+  // ===== NEW: Special Ramadan flags =====
+  isRamadanSpecial: boolean("is_ramadan_special").default(false).notNull(),
+  ramadanDiscount: integer("ramadan_discount"), // percentage
 });
 
 export const storeInventory = pgTable("store_inventory", {
@@ -123,7 +137,6 @@ export const cartItems = pgTable("cart_items", {
   quantity: integer("quantity").notNull().default(1),
 });
 
-// ===== ENHANCED: Added tracking fields to existing orders table =====
 export const orders = pgTable("orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orderNumber: text("order_number").notNull().unique(),
@@ -134,7 +147,15 @@ export const orders = pgTable("orders", {
   items: jsonb("items").notNull(),
   status: text("status").notNull().default("pending"),
   total: integer("total").notNull(),
+  subtotal: integer("subtotal").notNull(), // Before discounts
   deliveryFee: integer("delivery_fee").notNull().default(10000),
+  discount: integer("discount").default(0).notNull(), // Total discount applied
+  // ===== NEW: Promotion tracking =====
+  appliedPromotionId: varchar("applied_promotion_id").references(() => promotions.id),
+  appliedVoucherId: varchar("applied_voucher_id").references(() => vouchers.id),
+  promotionDiscount: integer("promotion_discount").default(0).notNull(),
+  voucherDiscount: integer("voucher_discount").default(0).notNull(),
+  freeDelivery: boolean("free_delivery").default(false).notNull(),
   addressId: varchar("address_id").references(() => addresses.id),
   paymentMethod: text("payment_method").default("midtrans"),
   paymentStatus: text("payment_status").default("pending"),
@@ -147,7 +168,6 @@ export const orders = pgTable("orders", {
   estimatedDelivery: timestamp("estimated_delivery"),
   customerLat: decimal("customer_lat", { precision: 10, scale: 7 }),
   customerLng: decimal("customer_lng", { precision: 10, scale: 7 }),
-  // NEW FIELDS FOR TRACKING
   estimatedArrival: timestamp("estimated_arrival"),
   actualDistance: decimal("actual_distance", { precision: 6, scale: 2 }),
   trackingStarted: timestamp("tracking_started"),
@@ -159,9 +179,11 @@ export const orderItems = pgTable("order_items", {
   productId: varchar("product_id").references(() => products.id).notNull(),
   quantity: integer("quantity").notNull(),
   priceAtEntry: decimal("price_at_entry", { precision: 10, scale: 2 }).notNull(),
+  // ===== NEW: Track if item was part of promotion =====
+  isFreeItem: boolean("is_free_item").default(false).notNull(),
+  promotionApplied: text("promotion_applied"),
 });
 
-// ===== NEW TABLE: Driver location tracking =====
 export const driverLocations = pgTable("driver_locations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   driverId: varchar("driver_id").notNull().references(() => users.id),
@@ -174,14 +196,97 @@ export const driverLocations = pgTable("driver_locations", {
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
+// ===== ENHANCED VOUCHERS TABLE =====
 export const vouchers = pgTable("vouchers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   code: text("code").notNull().unique(),
   discount: integer("discount").notNull(),
-  discountType: text("discount_type").notNull(),
+  discountType: text("discount_type").notNull(), // "percentage" or "fixed_amount"
   minOrder: integer("min_order").default(0).notNull(),
+  maxDiscount: integer("max_discount"), // Max discount for percentage types
+  validFrom: timestamp("valid_from").defaultNow().notNull(),
   validUntil: timestamp("valid_until").notNull(),
   description: text("description"),
+  // ===== NEW: Enhanced voucher features =====
+  isActive: boolean("is_active").default(true).notNull(),
+  usageLimit: integer("usage_limit"), // null = unlimited
+  usedCount: integer("used_count").default(0).notNull(),
+  userLimit: integer("user_limit").default(1).notNull(), // Per user limit
+  targetUsers: text("target_users").default("all").notNull(), // "all", "new_users", "returning_users"
+  isRamadanSpecial: boolean("is_ramadan_special").default(false).notNull(),
+  icon: text("icon").default("tag"), // Icon name for display
+  color: text("color").default("#10b981"), // Theme color
+  priority: integer("priority").default(0).notNull(), // Higher = shown first
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ===== NEW: PROMOTIONS TABLE =====
+export const promotions = pgTable("promotions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  type: text("type").notNull(), // "percentage", "fixed_amount", "buy_x_get_y", "free_delivery", "bundle"
+  
+  // Discount details
+  discountValue: integer("discount_value"), // percentage or fixed amount
+  maxDiscount: integer("max_discount"), // For percentage discounts
+  minOrder: integer("min_order").default(0).notNull(),
+  
+  // Buy X Get Y details
+  buyQuantity: integer("buy_quantity"), // Buy X items
+  getQuantity: integer("get_quantity"), // Get Y items free
+  applicableProductIds: jsonb("applicable_product_ids"), // Which products qualify
+  
+  // Bundle details
+  bundleItems: jsonb("bundle_items"), // Array of {productId, quantity}
+  bundlePrice: integer("bundle_price"), // Special bundle price
+  
+  // Targeting
+  targetUsers: text("target_users").default("all").notNull(), // "all", "new_users", "returning_users", "specific_users"
+  specificUserIds: jsonb("specific_user_ids"), // Array of user IDs
+  applicableStoreIds: jsonb("applicable_store_ids"), // Which stores, null = all
+  
+  // Display
+  image: text("image"),
+  bannerImage: text("banner_image"),
+  icon: text("icon").default("gift"),
+  color: text("color").default("#f59e0b"),
+  priority: integer("priority").default(0).notNull(),
+  
+  // Limits
+  isActive: boolean("is_active").default(true).notNull(),
+  usageLimit: integer("usage_limit"), // Total usage limit
+  usedCount: integer("used_count").default(0).notNull(),
+  userLimit: integer("user_limit").default(1).notNull(),
+  
+  // Schedule
+  validFrom: timestamp("valid_from").defaultNow().notNull(),
+  validUntil: timestamp("valid_until").notNull(),
+  
+  // Special flags
+  isRamadanSpecial: boolean("is_ramadan_special").default(false).notNull(),
+  isFeatured: boolean("is_featured").default(false).notNull(),
+  showInBanner: boolean("show_in_banner").default(false).notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ===== NEW: USER PROMOTION USAGE TRACKING =====
+export const userPromotionUsage = pgTable("user_promotion_usage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  promotionId: varchar("promotion_id").notNull().references(() => promotions.id),
+  orderId: varchar("order_id").references(() => orders.id),
+  usedAt: timestamp("used_at").defaultNow().notNull(),
+});
+
+// ===== NEW: USER VOUCHER USAGE TRACKING =====
+export const userVoucherUsage = pgTable("user_voucher_usage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  voucherId: varchar("voucher_id").notNull().references(() => vouchers.id),
+  orderId: varchar("order_id").references(() => orders.id),
+  usedAt: timestamp("used_at").defaultNow().notNull(),
 });
 
 // --- Relations ---
@@ -206,6 +311,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   storeStaff: many(storeStaff),
   ownedStores: many(stores),
   driverLocations: many(driverLocations),
+  promotionUsage: many(userPromotionUsage),
+  voucherUsage: many(userVoucherUsage),
 }));
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
@@ -232,7 +339,55 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     references: [users.id],
     relationName: "driver_orders",
   }),
+  appliedPromotion: one(promotions, {
+    fields: [orders.appliedPromotionId],
+    references: [promotions.id],
+  }),
+  appliedVoucher: one(vouchers, {
+    fields: [orders.appliedVoucherId],
+    references: [vouchers.id],
+  }),
   driverLocations: many(driverLocations),
+}));
+
+export const promotionsRelations = relations(promotions, ({ many }) => ({
+  orders: many(orders),
+  usage: many(userPromotionUsage),
+}));
+
+export const vouchersRelations = relations(vouchers, ({ many }) => ({
+  orders: many(orders),
+  usage: many(userVoucherUsage),
+}));
+
+export const userPromotionUsageRelations = relations(userPromotionUsage, ({ one }) => ({
+  user: one(users, {
+    fields: [userPromotionUsage.userId],
+    references: [users.id],
+  }),
+  promotion: one(promotions, {
+    fields: [userPromotionUsage.promotionId],
+    references: [promotions.id],
+  }),
+  order: one(orders, {
+    fields: [userPromotionUsage.orderId],
+    references: [orders.id],
+  }),
+}));
+
+export const userVoucherUsageRelations = relations(userVoucherUsage, ({ one }) => ({
+  user: one(users, {
+    fields: [userVoucherUsage.userId],
+    references: [users.id],
+  }),
+  voucher: one(vouchers, {
+    fields: [userVoucherUsage.voucherId],
+    references: [vouchers.id],
+  }),
+  order: one(orders, {
+    fields: [userVoucherUsage.orderId],
+    references: [orders.id],
+  }),
 }));
 
 export const driverLocationsRelations = relations(driverLocations, ({ one }) => ({
@@ -322,6 +477,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   appleId: true,
   accountStatus: true,
   firstLogin: true,
+  isNewUser: true,
 });
 
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
@@ -333,9 +489,12 @@ export const insertProductSchema = createInsertSchema(products).omit({ id: true 
 export const insertAddressSchema = createInsertSchema(addresses).omit({ id: true });
 export const insertCartItemSchema = createInsertSchema(cartItems).omit({ id: true });
 export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true });
-export const insertVoucherSchema = createInsertSchema(vouchers).omit({ id: true });
+export const insertVoucherSchema = createInsertSchema(vouchers).omit({ id: true, createdAt: true, usedCount: true });
+export const insertPromotionSchema = createInsertSchema(promotions).omit({ id: true, createdAt: true, usedCount: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
 export const insertDriverLocationSchema = createInsertSchema(driverLocations).omit({ id: true, timestamp: true });
+export const insertUserPromotionUsageSchema = createInsertSchema(userPromotionUsage).omit({ id: true, usedAt: true });
+export const insertUserVoucherUsageSchema = createInsertSchema(userVoucherUsage).omit({ id: true, usedAt: true });
 
 // --- Type Exports ---
 export type User = typeof users.$inferSelect;
@@ -371,8 +530,17 @@ export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 export type Voucher = typeof vouchers.$inferSelect;
 export type InsertVoucher = z.infer<typeof insertVoucherSchema>;
 
+export type Promotion = typeof promotions.$inferSelect;
+export type InsertPromotion = z.infer<typeof insertPromotionSchema>;
+
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 
 export type DriverLocation = typeof driverLocations.$inferSelect;
 export type InsertDriverLocation = z.infer<typeof insertDriverLocationSchema>;
+
+export type UserPromotionUsage = typeof userPromotionUsage.$inferSelect;
+export type InsertUserPromotionUsage = z.infer<typeof insertUserPromotionUsageSchema>;
+
+export type UserVoucherUsage = typeof userVoucherUsage.$inferSelect;
+export type InsertUserVoucherUsage = z.infer<typeof insertUserVoucherUsageSchema>;

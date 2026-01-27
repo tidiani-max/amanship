@@ -1,12 +1,14 @@
 import type { Request, Response } from "express";
 import { createServer, type Server } from "node:http";
-import { eq, and, gt, sql, or, isNull } from "drizzle-orm";
+import { eq, and, gt, sql, or, gte, lte, isNull } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
 import { 
   categories, products, vouchers, users, stores, storeStaff, 
   storeInventory, otpCodes, addresses, orders, orderItems, 
-  cartItems, messages
+  cartItems, messages, promotions,              
+  userPromotionUsage,      
+  userVoucherUsage,     
 } from "../shared/schema";
 import { findNearestAvailableStore, getStoresWithAvailability, estimateDeliveryTime } from "./storeAvailability";
 import express, { Express } from 'express';
@@ -14,6 +16,7 @@ import fs from "fs";
 import path from 'path';
 import multer from "multer";
 import { driverLocations } from "../shared/schema";
+
 
 // ✅ IMPORT NOTIFICATION FUNCTIONS (removed local duplicate)
 import { 
@@ -1679,21 +1682,22 @@ app.post("/api/orders", async (req, res) => {
       const deliveryPin = Math.floor(1000 + Math.random() * 9000).toString();
 
       const [order] = await db
-        .insert(orders)
-        .values({
-          userId,
-          storeId,
-          addressId,
-          total,
-          deliveryFee: DELIVERY_FEE_PER_STORE,
-          status: "pending",
-          orderNumber: `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`,
-          items: storeItems,
-          customerLat: String(customerLat),
-          customerLng: String(customerLng),
-          deliveryPin,
-        })
-        .returning();
+  .insert(orders)
+  .values({
+    userId,
+    storeId,
+    addressId,
+    subtotal: itemsTotal,  // ✅ ADD THIS LINE
+    total,
+    deliveryFee: DELIVERY_FEE_PER_STORE,
+    status: "pending",
+    orderNumber: `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`,
+    items: storeItems,
+    customerLat: String(customerLat),
+    customerLng: String(customerLng),
+    deliveryPin,
+  })
+  .returning();
 
       await db.insert(orderItems).values(
         storeItems.map(i => ({
@@ -2817,6 +2821,615 @@ app.post("/api/seed", async (_req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to seed data" });
   }
 });
+
+
+
+
+// ===== GET ACTIVE PROMOTIONS =====
+console.log("🌙 Registering Ramadan promotions routes...");
+app.get("/api/promotions/active", async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const now = new Date();
+
+    // Get all active promotions
+    const activePromotions = await db
+      .select()
+      .from(promotions)
+      .where(
+        and(
+          eq(promotions.isActive, true),
+          lte(promotions.validFrom, now),
+          gte(promotions.validUntil, now)
+        )
+      )
+      .orderBy(sql`${promotions.priority} DESC, ${promotions.createdAt} DESC`);
+
+    if (!userId) {
+      return res.json(activePromotions);
+    }
+
+    // Get user info for targeting
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    
+    // Get user's promotion usage
+    const userUsage = await db
+      .select({
+        promotionId: userPromotionUsage.promotionId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(userPromotionUsage)
+      .where(eq(userPromotionUsage.userId, userId as string))
+      .groupBy(userPromotionUsage.promotionId);
+
+    const usageMap = new Map(userUsage.map(u => [u.promotionId, u.count]));
+
+    // Filter promotions based on user eligibility
+    const eligiblePromotions = activePromotions.filter(promo => {
+      // Check usage limit per user
+      const userUsageCount = usageMap.get(promo.id) || 0;
+      if (userUsageCount >= promo.userLimit) return false;
+
+      // Check total usage limit
+      if (promo.usageLimit && promo.usedCount >= promo.usageLimit) return false;
+
+      // Check targeting
+      if (promo.targetUsers === "new_users" && !user?.isNewUser) return false;
+      if (promo.targetUsers === "returning_users" && user?.isNewUser) return false;
+      if (promo.targetUsers === "specific_users") {
+        const specificIds = promo.specificUserIds as string[] || [];
+        if (!specificIds.includes(userId as string)) return false;
+      }
+
+      return true;
+    });
+
+    res.json(eligiblePromotions);
+  } catch (error) {
+    console.error("❌ Get promotions error:", error);
+    res.status(500).json({ error: "Failed to fetch promotions" });
+  }
+});
+
+// ===== GET FEATURED RAMADAN PROMOTIONS (FOR BANNER) =====
+app.get("/api/promotions/featured", async (req, res) => {
+  try {
+    const now = new Date();
+
+    const featured = await db
+      .select()
+      .from(promotions)
+      .where(
+        and(
+          eq(promotions.isActive, true),
+          eq(promotions.isFeatured, true),
+          lte(promotions.validFrom, now),
+          gte(promotions.validUntil, now)
+        )
+      )
+      .orderBy(sql`${promotions.priority} DESC`)
+      .limit(5);
+
+    res.json(featured);
+  } catch (error) {
+    console.error("❌ Get featured promotions error:", error);
+    res.status(500).json({ error: "Failed to fetch featured promotions" });
+  }
+});
+
+// ===== GET ACTIVE VOUCHERS =====
+app.get("/api/vouchers/active", async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const now = new Date();
+
+    const activeVouchers = await db
+      .select()
+      .from(vouchers)
+      .where(
+        and(
+          eq(vouchers.isActive, true),
+          lte(vouchers.validFrom, now),
+          gte(vouchers.validUntil, now)
+        )
+      )
+      .orderBy(sql`${vouchers.priority} DESC, ${vouchers.createdAt} DESC`);
+
+    if (!userId) {
+      return res.json(activeVouchers);
+    }
+
+    // Get user info
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    
+    // Get user's voucher usage
+    const userUsage = await db
+      .select({
+        voucherId: userVoucherUsage.voucherId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(userVoucherUsage)
+      .where(eq(userVoucherUsage.userId, userId as string))
+      .groupBy(userVoucherUsage.voucherId);
+
+    const usageMap = new Map(userUsage.map(u => [u.voucherId, u.count]));
+
+    // Filter vouchers based on eligibility
+    const eligibleVouchers = activeVouchers.filter(voucher => {
+      const userUsageCount = usageMap.get(voucher.id) || 0;
+      if (userUsageCount >= voucher.userLimit) return false;
+
+      if (voucher.usageLimit && voucher.usedCount >= voucher.usageLimit) return false;
+
+      if (voucher.targetUsers === "new_users" && !user?.isNewUser) return false;
+      if (voucher.targetUsers === "returning_users" && user?.isNewUser) return false;
+
+      return true;
+    });
+
+    res.json(eligibleVouchers);
+  } catch (error) {
+    console.error("❌ Get vouchers error:", error);
+    res.status(500).json({ error: "Failed to fetch vouchers" });
+  }
+});
+
+// ===== VALIDATE VOUCHER CODE =====
+app.post("/api/vouchers/validate", async (req, res) => {
+  try {
+    const { code, userId, orderTotal } = req.body;
+
+    if (!code || !userId || orderTotal === undefined) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const now = new Date();
+
+    // Find voucher
+    const [voucher] = await db
+      .select()
+      .from(vouchers)
+      .where(
+        and(
+          eq(vouchers.code, code.toUpperCase()),
+          eq(vouchers.isActive, true),
+          lte(vouchers.validFrom, now),
+          gte(vouchers.validUntil, now)
+        )
+      );
+
+    if (!voucher) {
+      return res.status(404).json({ 
+        valid: false, 
+        error: "Voucher not found or expired" 
+      });
+    }
+
+    // Check usage limits
+    if (voucher.usageLimit && voucher.usedCount >= voucher.usageLimit) {
+      return res.status(400).json({ 
+        valid: false, 
+        error: "Voucher usage limit reached" 
+      });
+    }
+
+    // Check user usage
+    const userUsageCount = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(userVoucherUsage)
+      .where(
+        and(
+          eq(userVoucherUsage.userId, userId),
+          eq(userVoucherUsage.voucherId, voucher.id)
+        )
+      );
+
+    if (userUsageCount[0].count >= voucher.userLimit) {
+      return res.status(400).json({ 
+        valid: false, 
+        error: "You've already used this voucher" 
+      });
+    }
+
+    // Check minimum order
+    if (orderTotal < voucher.minOrder) {
+      return res.status(400).json({ 
+        valid: false, 
+        error: `Minimum order is ${voucher.minOrder}` 
+      });
+    }
+
+    // Check user targeting
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (voucher.targetUsers === "new_users" && !user?.isNewUser) {
+      return res.status(400).json({ 
+        valid: false, 
+        error: "This voucher is for new users only" 
+      });
+    }
+    if (voucher.targetUsers === "returning_users" && user?.isNewUser) {
+      return res.status(400).json({ 
+        valid: false, 
+        error: "This voucher is for returning users only" 
+      });
+    }
+
+    // Calculate discount
+    let discount = 0;
+    if (voucher.discountType === "percentage") {
+      discount = Math.floor((orderTotal * voucher.discount) / 100);
+      if (voucher.maxDiscount && discount > voucher.maxDiscount) {
+        discount = voucher.maxDiscount;
+      }
+    } else {
+      discount = voucher.discount;
+    }
+
+    res.json({
+      valid: true,
+      voucher: {
+        id: voucher.id,
+        code: voucher.code,
+        discount,
+        description: voucher.description,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Validate voucher error:", error);
+    res.status(500).json({ error: "Failed to validate voucher" });
+  }
+});
+
+// ===== CALCULATE ORDER WITH PROMOTIONS =====
+app.post("/api/orders/calculate", async (req, res) => {
+  try {
+    const { userId, items, voucherCode, promotionId } = req.body;
+
+    if (!userId || !items?.length) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Calculate subtotal
+    let subtotal = 0;
+    for (const item of items) {
+      const [product] = await db
+        .select()
+        .from(products)
+        .where(eq(products.id, item.productId));
+      
+      if (product) {
+        subtotal += product.price * item.quantity;
+      }
+    }
+
+    const deliveryFee = 10000;
+    let promotionDiscount = 0;
+    let voucherDiscount = 0;
+    let freeDelivery = false;
+    let appliedPromotion = null;
+    let appliedVoucher = null;
+
+    // Apply promotion if provided
+    if (promotionId) {
+      const [promotion] = await db
+        .select()
+        .from(promotions)
+        .where(eq(promotions.id, promotionId));
+
+      if (promotion && promotion.isActive) {
+        if (subtotal >= promotion.minOrder) {
+          if (promotion.type === "percentage") {
+            promotionDiscount = Math.floor((subtotal * promotion.discountValue!) / 100);
+            if (promotion.maxDiscount && promotionDiscount > promotion.maxDiscount) {
+              promotionDiscount = promotion.maxDiscount;
+            }
+          } else if (promotion.type === "fixed_amount") {
+            promotionDiscount = promotion.discountValue!;
+          } else if (promotion.type === "free_delivery") {
+            freeDelivery = true;
+          }
+          appliedPromotion = promotion;
+        }
+      }
+    }
+
+    // Apply voucher if provided
+    if (voucherCode) {
+      const validateResult = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/vouchers/validate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code: voucherCode,
+            userId,
+            orderTotal: subtotal - promotionDiscount,
+          }),
+        }
+      );
+
+      if (validateResult.ok) {
+        const data = await validateResult.json();
+        if (data.valid) {
+          voucherDiscount = data.voucher.discount;
+          appliedVoucher = data.voucher;
+        }
+      }
+    }
+
+    const finalDeliveryFee = freeDelivery ? 0 : deliveryFee;
+    const total = subtotal - promotionDiscount - voucherDiscount + finalDeliveryFee;
+
+    res.json({
+      subtotal,
+      promotionDiscount,
+      voucherDiscount,
+      deliveryFee: finalDeliveryFee,
+      freeDelivery,
+      total: Math.max(0, total),
+      appliedPromotion,
+      appliedVoucher,
+    });
+  } catch (error) {
+    console.error("❌ Calculate order error:", error);
+    res.status(500).json({ error: "Failed to calculate order" });
+  }
+});
+
+// ===== SEND RAMADAN PROMOTION NOTIFICATIONS =====
+
+app.post("/api/promotions/notify", async (req, res) => {
+  try {
+    const { promotionId, targetUsers } = req.body;
+
+    if (!promotionId) {
+      return res.status(400).json({ error: "Promotion ID required" });
+    }
+
+    const [promotion] = await db
+      .select()
+      .from(promotions)
+      .where(eq(promotions.id, promotionId));
+
+    if (!promotion) {
+      return res.status(404).json({ error: "Promotion not found" });
+    }
+
+    // ✅ FIXED: Explicitly type usersToNotify
+    let usersToNotify: Array<{
+      id: string;
+      username: string;
+      password: string;
+      name: string | null;
+      phone: string | null;
+      email: string | null;
+      appleId: string | null;
+      googleId: string | null;
+      role: string;
+      accountStatus: string;
+      areaId: number | null;
+      storeId: number | null;
+      pushToken: string | null;
+      firstLogin: boolean;
+      isNewUser: boolean;
+      firstOrderAt: Date | null;
+      totalOrders: number;
+      createdAt: Date;
+    }> = [];
+    
+    if (targetUsers === "all" || !targetUsers) {
+      usersToNotify = await db
+        .select()
+        .from(users)
+        .where(
+          and(
+            eq(users.role, "customer"),
+            sql`${users.pushToken} IS NOT NULL`
+          )
+        );
+    } else if (targetUsers === "new_users") {
+      usersToNotify = await db
+        .select()
+        .from(users)
+        .where(
+          and(
+            eq(users.role, "customer"),
+            eq(users.isNewUser, true),
+            sql`${users.pushToken} IS NOT NULL`
+          )
+        );
+    } else if (targetUsers === "returning_users") {
+      usersToNotify = await db
+        .select()
+        .from(users)
+        .where(
+          and(
+            eq(users.role, "customer"),
+            eq(users.isNewUser, false),
+            sql`${users.pushToken} IS NOT NULL`
+          )
+        );
+    }
+
+    // Send push notifications
+    const notifications = usersToNotify.map(user => ({
+      to: user.pushToken!,
+      sound: 'default' as const,
+      title: `🌙 ${promotion.title}`,
+      body: promotion.description,
+      data: {
+        type: 'ramadan_promotion',
+        promotionId: promotion.id,
+        screen: 'Home',
+      },
+    }));
+
+    // Send in batches
+    const BATCH_SIZE = 100;
+    let successCount = 0;
+    
+    for (let i = 0; i < notifications.length; i += BATCH_SIZE) {
+      const batch = notifications.slice(i, i + BATCH_SIZE);
+      
+      try {
+        const response = await fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(batch),
+        });
+        
+        if (response.ok) {
+          successCount += batch.length;
+        }
+      } catch (batchError) {
+        console.error('Batch notification error:', batchError);
+      }
+    }
+
+    console.log(`✅ Sent ${successCount} Ramadan promotion notifications`);
+    
+    res.json({
+      success: true,
+      sent: successCount,
+      total: notifications.length,
+    });
+  } catch (error) {
+    console.error("❌ Send promotion notifications error:", error);
+    res.status(500).json({ error: "Failed to send notifications" });
+  }
+});
+
+// ===== ADMIN: CREATE RAMADAN PROMOTION =====
+app.post("/api/admin/promotions", async (req, res) => {
+  try {
+    const promotionData = req.body;
+
+    const [newPromotion] = await db
+      .insert(promotions)
+      .values({
+        ...promotionData,
+        isActive: true,
+        usedCount: 0,
+      })
+      .returning();
+
+    console.log(`✅ Created promotion: ${newPromotion.title}`);
+
+    res.json(newPromotion);
+  } catch (error) {
+    console.error("❌ Create promotion error:", error);
+    res.status(500).json({ error: "Failed to create promotion" });
+  }
+});
+
+// ===== ADMIN: CREATE RAMADAN VOUCHER =====
+app.post("/api/admin/vouchers", async (req, res) => {
+  try {
+    const voucherData = req.body;
+
+    const [newVoucher] = await db
+      .insert(vouchers)
+      .values({
+        ...voucherData,
+        code: voucherData.code.toUpperCase(),
+        isActive: true,
+        usedCount: 0,
+      })
+      .returning();
+
+    console.log(`✅ Created voucher: ${newVoucher.code}`);
+
+    res.json(newVoucher);
+  } catch (error) {
+    console.error("❌ Create voucher error:", error);
+    res.status(500).json({ error: "Failed to create voucher" });
+  }
+});
+
+// ===== GET RAMADAN SPECIAL PRODUCTS =====
+app.get("/api/products/ramadan-specials", async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({ error: "Location required" });
+    }
+
+    const result = await db.execute(sql`
+      SELECT
+        p.id,
+        p.name,
+        p.brand,
+        p.price,
+        p.original_price AS "originalPrice",
+        p.ramadan_discount AS "ramadanDiscount",
+        p.image,
+        p.category_id AS "categoryId",
+        p.description,
+        si.stock_count AS "stockCount",
+        s.id AS "storeId",
+        s.name AS "storeName",
+        (
+          6371 * acos(
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${parseFloat(lat as string)}::numeric))
+              * cos(radians(s.latitude::numeric))
+              * cos(radians(s.longitude::numeric) - radians(${parseFloat(lng as string)}::numeric))
+              + sin(radians(${parseFloat(lat as string)}::numeric))
+              * sin(radians(s.latitude::numeric))
+            ))
+          )
+        ) AS distance
+      FROM stores s
+      JOIN store_inventory si ON si.store_id = s.id
+      JOIN products p ON p.id = si.product_id
+      WHERE
+        p.is_ramadan_special = true
+        AND s.is_active = true
+        AND si.stock_count > 0
+        AND (
+          6371 * acos(
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${parseFloat(lat as string)}::numeric))
+              * cos(radians(s.latitude::numeric))
+              * cos(radians(s.longitude::numeric) - radians(${parseFloat(lng as string)}::numeric))
+              + sin(radians(${parseFloat(lat as string)}::numeric))
+              * sin(radians(s.latitude::numeric))
+            ))
+          )
+        ) <= 5
+      ORDER BY distance ASC
+      LIMIT 20;
+    `);
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("❌ Get Ramadan specials error:", error);
+    res.status(500).json({ error: "Failed to fetch Ramadan specials" });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // 🌐 SERVE THE WEBSITE PAGE
 // Put this AFTER all app.post and app.get("/api/...") routes

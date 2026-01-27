@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image, TextInput, ActivityIndicator, Dimensions, Animated, Platform } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Image, TextInput, ActivityIndicator, Dimensions, Animated, Platform, Clipboard, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -17,6 +17,7 @@ import { Category, Product } from "@/types";
 import { useCart } from "@/context/CartContext";
 import { useLocation } from "@/context/LocationContext";
 import { getImageUrl } from "@/lib/image-url";
+import { useAuth } from "@/context/AuthContext";
 
 const { width } = Dimensions.get("window");
 
@@ -88,6 +89,7 @@ export default function HomeScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
+  const { user } = useAuth();
   const { addToCart } = useCart();
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -96,6 +98,7 @@ export default function HomeScreen() {
   const [screenWidth, setScreenWidth] = useState(width);
   const [selectedStore, setSelectedStore] = useState<APIStore | null>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const [activePromotions, setActivePromotions] = useState<any[]>([]);
   
   const bannerScrollRef = useRef<ScrollView>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -129,12 +132,12 @@ export default function HomeScreen() {
   const containerPadding = screenWidth > maxWidth ? (screenWidth - maxWidth) / 2 : 0;
 
   // Get location display name
-const getLocationDisplayName = (): string => {
-  if (isManualLocation && addressLabel) return String(addressLabel);
-  if (gpsLocationName) return String(gpsLocationName);
-  if (nearestStore?.name) return String(nearestStore.name);
-  return "Detecting location...";
-};
+  const getLocationDisplayName = (): string => {
+    if (isManualLocation && addressLabel) return String(addressLabel);
+    if (gpsLocationName) return String(gpsLocationName);
+    if (nearestStore?.name) return String(nearestStore.name);
+    return "Detecting location...";
+  };
 
   // Fetch categories
   const { data: categoriesData } = useQuery<{ data: APICategory[] }>({
@@ -183,6 +186,28 @@ const getLocationDisplayName = (): string => {
     },
   });
 
+  // Fetch active promotions
+  const { data: promotionsData } = useQuery({
+    queryKey: ["/api/promotions/featured"],
+    queryFn: async () => {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/featured`);
+      return res.json();
+    },
+  });
+
+  // ✅ FIXED: Fetch active vouchers with proper null check
+  const { data: vouchersData } = useQuery({
+    queryKey: ["/api/vouchers/active", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/vouchers/active?userId=${user.id}`
+      );
+      return res.json();
+    },
+  });
+
   // Auto-scroll banners
   useEffect(() => {
     if (!bannersData?.length) return;
@@ -204,32 +229,32 @@ const getLocationDisplayName = (): string => {
   }, [bannersData, screenWidth, maxWidth, responsivePadding]);
 
   // Map products with store info
-const products: UIProduct[] = (apiProducts || []).map((p) => ({
-  id: String(p.id || ''),
-  name: String(p.name || 'Product'),
-  brand: String(p.brand || 'Brand'),
-  price: Number(p.price) || 0,
-  originalPrice: p.originalPrice ? Number(p.originalPrice) : undefined,
-  image: p.image ? String(p.image) : "",
-  category: String(p.categoryId || ''),
-  description: p.description ? String(p.description) : "",
-  nutrition: p.nutrition,
-  stockCount: Number(p.stockCount) || 0,
-  inStock: Number(p.stockCount) > 0,
-  storeName: p.storeName ? String(p.storeName) : undefined,
-  storeDistance: p.distance ? Number(p.distance) : undefined,
-  deliveryMinutes: p.deliveryMinutes ? Number(p.deliveryMinutes) : undefined,
-  storeId: p.storeId ? String(p.storeId) : undefined,
-}));
+  const products: UIProduct[] = (apiProducts || []).map((p) => ({
+    id: String(p.id || ''),
+    name: String(p.name || 'Product'),
+    brand: String(p.brand || 'Brand'),
+    price: Number(p.price) || 0,
+    originalPrice: p.originalPrice ? Number(p.originalPrice) : undefined,
+    image: p.image ? String(p.image) : "",
+    category: String(p.categoryId || ''),
+    description: p.description ? String(p.description) : "",
+    nutrition: p.nutrition,
+    stockCount: Number(p.stockCount) || 0,
+    inStock: Number(p.stockCount) > 0,
+    storeName: p.storeName ? String(p.storeName) : undefined,
+    storeDistance: p.distance ? Number(p.distance) : undefined,
+    deliveryMinutes: p.deliveryMinutes ? Number(p.deliveryMinutes) : undefined,
+    storeId: p.storeId ? String(p.storeId) : undefined,
+  }));
 
   // Map categories
-const categories: Category[] = (apiCategories || []).map((c) => ({
-  id: String(c.id || ''),
-  name: String(c.name || 'Category'),
-  icon: String(c.icon || 'package'),
-  color: String(c.color || '#10b981'),
-  image: c.image ? String(c.image) : undefined,
-}));
+  const categories: Category[] = (apiCategories || []).map((c) => ({
+    id: String(c.id || ''),
+    name: String(c.name || 'Category'),
+    icon: String(c.icon || 'package'),
+    color: String(c.color || '#10b981'),
+    image: c.image ? String(c.image) : undefined,
+  }));
 
   // Filter categories that have products in stock
   const availableCategories = useMemo(() => {
@@ -248,10 +273,10 @@ const categories: Category[] = (apiCategories || []).map((c) => ({
     );
   }, [searchQuery, products]);
 
-const formatPrice = (price: number): string => {
-  const safePrice = Number(price) || 0;
-  return `Rp ${safePrice.toLocaleString("id-ID")}`;
-};
+  const formatPrice = (price: number): string => {
+    const safePrice = Number(price) || 0;
+    return `Rp ${safePrice.toLocaleString("id-ID")}`;
+  };
 
   const handleAddToCart = (product: UIProduct) => {
     if (!product.inStock) return;
@@ -264,101 +289,101 @@ const formatPrice = (price: number): string => {
     navigation.navigate("Category", { category });
   };
 
-const renderProductCard = (product: UIProduct) => {
-  const hasDiscount = product.originalPrice && product.originalPrice > product.price;
-  const discountPercent = hasDiscount 
-    ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
-    : 0;
+  const renderProductCard = (product: UIProduct) => {
+    const hasDiscount = product.originalPrice && product.originalPrice > product.price;
+    const discountPercent = hasDiscount 
+      ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
+      : 0;
 
-  const cardWidth = getProductCardWidth(
-    screenWidth > maxWidth ? maxWidth : screenWidth, 
-    responsiveColumns, 
-    responsivePadding
-  );
+    const cardWidth = getProductCardWidth(
+      screenWidth > maxWidth ? maxWidth : screenWidth, 
+      responsiveColumns, 
+      responsivePadding
+    );
 
-  return (
-    <Pressable
-      key={product.id}
-      style={[
-        styles.productCard,
-        { 
-          backgroundColor: theme.cardBackground,
-          width: cardWidth,
-        },
-        !product.inStock && { opacity: 0.5 }
-      ]}
-      onPress={() => navigation.navigate("ProductDetail", { product })}
-    >
-      {hasDiscount && product.inStock && (
-        <View style={styles.discountBadge}>
-          <ThemedText style={styles.discountText}>{String(discountPercent)}% OFF</ThemedText>
-        </View>
-      )}
-      
-      <View style={styles.productImageContainer}>
-        {product.image ? (
-          <Image
-            source={{ uri: getImageUrl(product.image) }}
-            style={styles.productImage}
-            resizeMode="contain"
-          />
-        ) : (
-          <Feather name="package" size={40} color="#d1d5db" />
+    return (
+      <Pressable
+        key={product.id}
+        style={[
+          styles.productCard,
+          { 
+            backgroundColor: theme.cardBackground,
+            width: cardWidth,
+          },
+          !product.inStock && { opacity: 0.5 }
+        ]}
+        onPress={() => navigation.navigate("ProductDetail", { product })}
+      >
+        {hasDiscount && product.inStock && (
+          <View style={styles.discountBadge}>
+            <ThemedText style={styles.discountText}>{String(discountPercent)}% OFF</ThemedText>
+          </View>
         )}
-      </View>
-
-      <View style={styles.productInfo}>
-        <View style={styles.deliveryInfoRow}>
-          <View style={styles.storeBadge}>
-            <Feather name="map-pin" size={9} color="#059669" />
-            <ThemedText style={styles.storeText} numberOfLines={1}>
-              {String(product.storeName || "Store")}
-            </ThemedText>
-          </View>
-          <View style={styles.timeBadge}>
-            <Feather name="clock" size={9} color="#10b981" />
-            <ThemedText style={styles.timeText}>
-              {String(product.deliveryMinutes || 15)} min
-            </ThemedText>
-          </View>
+        
+        <View style={styles.productImageContainer}>
+          {product.image ? (
+            <Image
+              source={{ uri: getImageUrl(product.image) }}
+              style={styles.productImage}
+              resizeMode="contain"
+            />
+          ) : (
+            <Feather name="package" size={40} color="#d1d5db" />
+          )}
         </View>
 
-        <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
-          {String(product.name || 'Product')}
-        </ThemedText>
-        <ThemedText type="small" style={styles.brandText} numberOfLines={1}>
-          {String(product.brand || 'Brand')}
-        </ThemedText>
-
-        <View style={styles.productFooter}>
-          <View style={{ flex: 1 }}>
-            <ThemedText type="body" style={styles.priceText}>
-              {formatPrice(product.price)}
-            </ThemedText>
-            {hasDiscount && (
-              <ThemedText type="small" style={styles.originalPriceText}>
-                {formatPrice(product.originalPrice!)}
+        <View style={styles.productInfo}>
+          <View style={styles.deliveryInfoRow}>
+            <View style={styles.storeBadge}>
+              <Feather name="map-pin" size={9} color="#059669" />
+              <ThemedText style={styles.storeText} numberOfLines={1}>
+                {String(product.storeName || "Store")}
               </ThemedText>
-            )}
+            </View>
+            <View style={styles.timeBadge}>
+              <Feather name="clock" size={9} color="#10b981" />
+              <ThemedText style={styles.timeText}>
+                {String(product.deliveryMinutes || 15)} min
+              </ThemedText>
+            </View>
           </View>
-          <Pressable
-            disabled={!product.inStock}
-            style={[
-              styles.addButton,
-              { backgroundColor: product.inStock ? theme.primary : '#e5e7eb' }
-            ]}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleAddToCart(product);
-            }}
-          >
-            <ThemedText style={styles.addButtonText}>ADD</ThemedText>
-          </Pressable>
+
+          <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
+            {String(product.name || 'Product')}
+          </ThemedText>
+          <ThemedText type="small" style={styles.brandText} numberOfLines={1}>
+            {String(product.brand || 'Brand')}
+          </ThemedText>
+
+          <View style={styles.productFooter}>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="body" style={styles.priceText}>
+                {formatPrice(product.price)}
+              </ThemedText>
+              {hasDiscount && (
+                <ThemedText type="small" style={styles.originalPriceText}>
+                  {formatPrice(product.originalPrice!)}
+                </ThemedText>
+              )}
+            </View>
+            <Pressable
+              disabled={!product.inStock}
+              style={[
+                styles.addButton,
+                { backgroundColor: product.inStock ? theme.primary : '#e5e7eb' }
+              ]}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleAddToCart(product);
+              }}
+            >
+              <ThemedText style={styles.addButtonText}>ADD</ThemedText>
+            </Pressable>
+          </View>
         </View>
-      </View>
-    </Pressable>
-  );
-};
+      </Pressable>
+    );
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
@@ -373,23 +398,22 @@ const renderProductCard = (product: UIProduct) => {
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
             {nearestStore && (
-  <View style={styles.storeInfoCompact}>
-    <Feather name="navigation" size={12} color="#10b981" />
-    <ThemedText style={styles.storeNameSmall} numberOfLines={1}>
-      {String(nearestStore.name || 'Store')}
-    </ThemedText>
-    <View style={styles.storeDot} />
-    <ThemedText style={styles.storeMinutesSmall}>
-      {String((storesData[0]?.deliveryMinutes || 15))}min
-    </ThemedText>
-  </View>
-)}
+              <View style={styles.storeInfoCompact}>
+                <Feather name="navigation" size={12} color="#10b981" />
+                <ThemedText style={styles.storeNameSmall} numberOfLines={1}>
+                  {String(nearestStore.name || 'Store')}
+                </ThemedText>
+                <View style={styles.storeDot} />
+                <ThemedText style={styles.storeMinutesSmall}>
+                  {String((storesData[0]?.deliveryMinutes || 15))}min
+                </ThemedText>
+              </View>
+            )}
           </View>
           
           <View style={styles.headerCenter}>
             <ThemedText style={styles.logoText}>KilatGo</ThemedText>
           </View>
-          
         </View>
       </View>
 
@@ -508,6 +532,105 @@ const renderProductCard = (product: UIProduct) => {
           </View>
         )}
 
+        {/* ===== RAMADAN PROMOTIONS ===== */}
+        {promotionsData && promotionsData.length > 0 && (
+          <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
+            <View style={styles.ramadanHeader}>
+              <ThemedText type="h3" style={styles.sectionTitle}>
+                🌙 Ramadan Specials
+              </ThemedText>
+              {/* Note: You need to add "Promotions" to RootStackParamList to make this navigation work */}
+              <Pressable onPress={() => {
+                // Temporary workaround - navigate to a screen that exists
+                console.log('Navigate to promotions page');
+              }}>
+                <ThemedText style={{ color: theme.primary, fontWeight: '600' }}>
+                  View All
+                </ThemedText>
+              </Pressable>
+            </View>
+            
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: Spacing.md, paddingVertical: Spacing.sm }}
+            >
+              {promotionsData.map((promo: any) => (
+                <Pressable
+                  key={promo.id}
+                  style={[styles.promoCard, { 
+                    backgroundColor: promo.color + '15',
+                    borderColor: promo.color 
+                  }]}
+                  onPress={() => {
+                    // Apply promotion logic
+                  }}
+                >
+                  <Feather name={promo.icon} size={32} color={promo.color} />
+                  <ThemedText style={styles.promoTitle} numberOfLines={2}>
+                    {promo.title}
+                  </ThemedText>
+                  <ThemedText style={styles.promoDesc} numberOfLines={2}>
+                    {promo.description}
+                  </ThemedText>
+                  <View style={[styles.promoButton, { backgroundColor: promo.color }]}>
+                    <ThemedText style={{ color: 'white', fontWeight: '700' }}>
+                      CLAIM NOW
+                    </ThemedText>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ===== VOUCHERS SECTION ===== */}
+        {vouchersData && vouchersData.length > 0 && (
+          <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
+            <ThemedText type="h3" style={styles.sectionTitle}>
+              🎫 Available Vouchers
+            </ThemedText>
+            
+            <View style={{ gap: Spacing.sm }}>
+              {vouchersData.slice(0, 3).map((voucher: any) => (
+                <Pressable
+                  key={voucher.id}
+                  style={[styles.voucherCard, { 
+                    backgroundColor: theme.cardBackground,
+                    borderLeftColor: voucher.color,
+                    borderLeftWidth: 4
+                  }]}
+                  onPress={() => {
+                    // Copy voucher code
+                    Clipboard.setString(voucher.code);
+                    Alert.alert('Copied!', `Voucher code "${voucher.code}" copied to clipboard`);
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Feather name={voucher.icon} size={16} color={voucher.color} />
+                      <ThemedText style={{ fontWeight: '800', fontSize: 16 }}>
+                        {voucher.code}
+                      </ThemedText>
+                      {voucher.isRamadanSpecial && (
+                        <View style={styles.ramadanBadge}>
+                          <ThemedText style={{ fontSize: 10, color: '#f59e0b' }}>
+                            🌙 RAMADAN
+                          </ThemedText>
+                        </View>
+                      )}
+                    </View>
+                    <ThemedText style={{ color: theme.textSecondary, marginTop: 4 }}>
+                      {voucher.description}
+                    </ThemedText>
+                  </View>
+                  <Feather name="copy" size={20} color={theme.primary} />
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* ===== CATEGORIES SECTION ===== */}
         {!searchQuery && availableCategories.length > 0 && (
           <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
@@ -569,33 +692,33 @@ const renderProductCard = (product: UIProduct) => {
               </Pressable>
               
               {storesData.map(store => (
-  <Pressable
-    key={store.id}
-    style={[
-      styles.storeChip,
-      { backgroundColor: selectedStore?.id === store.id ? '#d1fae5' : theme.cardBackground }
-    ]}
-    onPress={() => setSelectedStore(store)}
-  >
-    <Feather 
-      name="map-pin" 
-      size={14} 
-      color={selectedStore?.id === store.id ? "#10b981" : "#6b7280"} 
-    />
-    <ThemedText style={[
-      styles.storeChipText,
-      { color: selectedStore?.id === store.id ? "#10b981" : "#6b7280" }
-    ]}>
-      {String(store.name || 'Store')}
-    </ThemedText>
-    <ThemedText style={[
-      styles.storeChipDistance,
-      { color: selectedStore?.id === store.id ? "#10b981" : "#9ca3af" }
-    ]}>
-      {String((store.distance || 0).toFixed(1))}km
-    </ThemedText>
-  </Pressable>
-))}
+                <Pressable
+                  key={store.id}
+                  style={[
+                    styles.storeChip,
+                    { backgroundColor: selectedStore?.id === store.id ? '#d1fae5' : theme.cardBackground }
+                  ]}
+                  onPress={() => setSelectedStore(store)}
+                >
+                  <Feather 
+                    name="map-pin" 
+                    size={14} 
+                    color={selectedStore?.id === store.id ? "#10b981" : "#6b7280"} 
+                  />
+                  <ThemedText style={[
+                    styles.storeChipText,
+                    { color: selectedStore?.id === store.id ? "#10b981" : "#6b7280" }
+                  ]}>
+                    {String(store.name || 'Store')}
+                  </ThemedText>
+                  <ThemedText style={[
+                    styles.storeChipDistance,
+                    { color: selectedStore?.id === store.id ? "#10b981" : "#9ca3af" }
+                  ]}>
+                    {String((store.distance || 0).toFixed(1))}km
+                  </ThemedText>
+                </Pressable>
+              ))}
             </ScrollView>
           </View>
         )}
@@ -607,10 +730,10 @@ const renderProductCard = (product: UIProduct) => {
               {selectedStore ? `${selectedStore.name} Products` : "All Products"}
             </ThemedText>
             {filteredProducts.length > 0 && (
-  <ThemedText style={styles.productCount}>
-    {String(filteredProducts.length)} items
-  </ThemedText>
-)}
+              <ThemedText style={styles.productCount}>
+                {String(filteredProducts.length)} items
+              </ThemedText>
+            )}
           </View>
           
           {productsLoading ? (
@@ -881,5 +1004,57 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     padding: 60,
+  },
+  ramadanHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  promoCard: {
+    width: 200,
+    padding: Spacing.lg,
+    borderRadius: 16,
+    borderWidth: 2,
+    gap: Spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  promoTitle: {
+    fontWeight: '800',
+    fontSize: 15,
+    marginTop: Spacing.xs,
+  },
+  promoDesc: {
+    fontSize: 12,
+    color: '#666',
+  },
+  promoButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: Spacing.xs,
+  },
+  voucherCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: 12,
+    gap: Spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  ramadanBadge: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
 });
