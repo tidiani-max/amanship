@@ -5,7 +5,7 @@ import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import { WebView } from 'react-native-webview'; // ADD THIS IMPORT
+import { WebView } from 'react-native-webview';
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
@@ -19,6 +19,84 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isSmallDevice = SCREEN_WIDTH < 375;
 const isMediumDevice = SCREEN_WIDTH >= 375 && SCREEN_WIDTH < 768;
 const isTablet = SCREEN_WIDTH >= 768;
+
+// ==================== PENDING ANIMATION COMPONENT ====================
+function PendingAnimation() {
+  const { theme } = useTheme();
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.2,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const rotate = Animated.loop(
+      Animated.timing(rotateAnim, {
+        toValue: 1,
+        duration: 3000,
+        useNativeDriver: true,
+      })
+    );
+
+    pulse.start();
+    rotate.start();
+
+    return () => {
+      pulse.stop();
+      rotate.stop();
+    };
+  }, []);
+
+  const rotate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  const iconSize = isSmallDevice ? 50 : isTablet ? 100 : 70;
+  const circleSize = isSmallDevice ? 120 : isTablet ? 200 : 150;
+
+  return (
+    <View style={styles.pendingContainer}>
+      <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+        <View style={[styles.pendingCircle, { 
+          backgroundColor: theme.warning + '20', 
+          borderColor: theme.warning,
+          width: circleSize,
+          height: circleSize,
+        }]}>
+          <Animated.View style={{ transform: [{ rotate }] }}>
+            <Feather name="clock" size={iconSize} color={theme.warning} />
+          </Animated.View>
+        </View>
+      </Animated.View>
+      
+      <ThemedText type="h2" style={[styles.centerText, { marginTop: isTablet ? 40 : isSmallDevice ? 24 : 32, fontSize: isSmallDevice ? 20 : undefined }]}>
+        Order Pending
+      </ThemedText>
+      <ThemedText type="body" style={[styles.centerText, { color: theme.textSecondary, marginTop: 8, fontSize: isSmallDevice ? 13 : undefined, paddingHorizontal: 16 }]}>
+        Waiting for restaurant confirmation...
+      </ThemedText>
+      
+      <View style={styles.loadingDots}>
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={[styles.dot, { backgroundColor: theme.warning }]} />
+        ))}
+      </View>
+    </View>
+  );
+}
 
 // ==================== PICKING ANIMATION COMPONENT ====================
 function PickingAnimation() {
@@ -266,7 +344,7 @@ export default function OrderTrackingScreen() {
   const [driverLocation, setDriverLocation] = useState({ lat: 13.7548, lng: 100.4990 });
   const [customerLocation] = useState({ lat: 13.7563, lng: 100.5018 });
   const [heading, setHeading] = useState(45);
-  const webViewRef = useRef<WebView>(null); // CHANGED FROM HTMLIFrameElement
+  const webViewRef = useRef<WebView>(null);
 
   const fetchWithErrorHandling = async (url: string) => {
     try {
@@ -344,7 +422,6 @@ export default function OrderTrackingScreen() {
     }
   }, [locationData, order?.status]);
 
-  // UPDATED: Send messages to WebView instead of iframe
   useEffect(() => {
     if (webViewRef.current && (order?.status === "delivering" || order?.status === "packed")) {
       const message = JSON.stringify({
@@ -408,6 +485,7 @@ export default function OrderTrackingScreen() {
   }
 
   const status = order.status;
+  const isPending = status === "pending";
   const isConfirmed = status === "confirmed";
   const isPicking = status === "picking";
   const isPacking = status === "packing";
@@ -418,6 +496,7 @@ export default function OrderTrackingScreen() {
   const showMap = isPacked || isDelivering || isDelivered;
   const showRoute = isDelivering || isDelivered;
 
+  // Updated mapHTML with motorcycle icon
   const mapHTML = `
 <!DOCTYPE html>
 <html>
@@ -436,13 +515,13 @@ export default function OrderTrackingScreen() {
     }
     .pulse-ring {
       position: absolute;
-      width: 60px;
-      height: 60px;
+      width: 70px;
+      height: 70px;
       background: rgba(255, 215, 0, 0.3);
       border-radius: 50%;
       animation: pulse 2s infinite;
-      top: -5px;
-      left: -5px;
+      top: -10px;
+      left: -10px;
     }
   </style>
 </head>
@@ -509,14 +588,46 @@ export default function OrderTrackingScreen() {
                 transform: rotate(\${heading}deg);
                 transition: transform 0.5s ease;
               ">
-                <svg width="50" height="50" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="22" fill="#FFD700" stroke="white" stroke-width="4"/>
-                  <g transform="translate(50, 50)">
-                    <circle cx="-8" cy="8" r="4" fill="#333"/>
-                    <circle cx="8" cy="8" r="4" fill="#333"/>
-                    <rect x="-10" y="0" width="20" height="6" rx="2" fill="#333"/>
-                    <rect x="-2" y="-8" width="4" height="10" rx="2" fill="#666"/>
-                  </g>
+                <svg width="50" height="50" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+                  <!-- Pulse shadow/glow -->
+                  <ellipse cx="60" cy="90" rx="25" ry="8" fill="rgba(255, 215, 0, 0.2)"/>
+                  
+                  <!-- Back wheel -->
+                  <circle cx="35" cy="75" r="12" fill="#333" stroke="#FFD700" stroke-width="2"/>
+                  <circle cx="35" cy="75" r="6" fill="#666"/>
+                  
+                  <!-- Front wheel -->
+                  <circle cx="85" cy="75" r="12" fill="#333" stroke="#FFD700" stroke-width="2"/>
+                  <circle cx="85" cy="75" r="6" fill="#666"/>
+                  
+                  <!-- Motorcycle body -->
+                  <path d="M 35 75 Q 45 60 60 55 L 75 55 Q 85 60 85 75" 
+                        fill="#FFD700" stroke="#333" stroke-width="2"/>
+                  
+                  <!-- Seat -->
+                  <ellipse cx="55" cy="52" rx="15" ry="6" fill="#444"/>
+                  
+                  <!-- Handlebars -->
+                  <path d="M 75 55 L 82 45" stroke="#666" stroke-width="3" stroke-linecap="round"/>
+                  <circle cx="82" cy="43" r="3" fill="#888"/>
+                  
+                  <!-- Front fairing -->
+                  <path d="M 75 55 L 85 50 L 90 55 L 85 60 Z" fill="#FFB700" stroke="#333" stroke-width="1.5"/>
+                  
+                  <!-- Headlight -->
+                  <circle cx="88" cy="55" r="3" fill="#FFF" stroke="#FFD700" stroke-width="1"/>
+                  
+                  <!-- Rider helmet -->
+                  <circle cx="52" cy="38" r="10" fill="#FFD700" stroke="#333" stroke-width="2"/>
+                  <ellipse cx="52" cy="38" rx="8" ry="5" fill="rgba(0,0,0,0.3)"/>
+                  
+                  <!-- Rider body -->
+                  <ellipse cx="52" cy="50" rx="8" ry="12" fill="#E8E8E8"/>
+                  
+                  <!-- Delivery box -->
+                  <rect x="28" y="48" width="18" height="18" rx="2" fill="#FFD700" stroke="#333" stroke-width="2"/>
+                  <path d="M 28 57 L 46 57" stroke="#333" stroke-width="1"/>
+                  <path d="M 37 48 L 37 66" stroke="#333" stroke-width="1"/>
                 </svg>
               </div>
             </div>
@@ -540,7 +651,9 @@ export default function OrderTrackingScreen() {
           color: '#FFD700',
           weight: 6,
           opacity: 0.9,
-          smoothFactor: 1
+          smoothFactor: 1,
+          dashArray: '10, 10',
+          dashOffset: '0'
         }).addTo(map);
         const bounds = L.latLngBounds([driverPos, customerPos]);
         map.fitBounds(bounds, { padding: [80, 80], maxZoom: 16 });
@@ -554,7 +667,6 @@ export default function OrderTrackingScreen() {
       }
     }
     
-    // UPDATED: Listen for React Native WebView messages
     window.addEventListener('message', function(event) {
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
@@ -566,7 +678,6 @@ export default function OrderTrackingScreen() {
       }
     });
     
-    // Also listen for postMessage (iOS compatibility)
     document.addEventListener('message', function(event) {
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
@@ -587,6 +698,41 @@ export default function OrderTrackingScreen() {
   const estimatedMinutes = locationData?.distance ? Math.ceil(locationData.distance * 3) : "5-8";
   const horizontalPadding = isSmallDevice ? 16 : isTablet ? 40 : 24;
   const verticalPadding = isSmallDevice ? 32 : isTablet ? 40 : 36;
+
+  // NEW: Pending status screen
+  if (isPending) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+        <ScrollView contentContainerStyle={{ 
+          paddingTop: insets.top + verticalPadding, 
+          paddingBottom: insets.bottom + verticalPadding,
+          paddingHorizontal: horizontalPadding,
+        }}>
+          <View style={StyleSheet.flatten([styles.confirmationContainer, { maxWidth: isTablet ? 600 : '100%', alignSelf: 'center', width: '100%' }])}>
+            <PendingAnimation />
+          </View>
+          
+          <Card style={StyleSheet.flatten([styles.infoCard, { maxWidth: isTablet ? 600 : '100%', alignSelf: 'center', width: '100%' }])}>
+            <View style={{ alignItems: 'center', marginBottom: 16 }}>
+              <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+                Order #{order.orderNumber || order.id.slice(0, 8)}
+              </ThemedText>
+            </View>
+            
+            <View style={styles.timeline}>
+              <TimelineItem icon="clock" iconColor={theme.warning} title="Pending" subtitle="Awaiting confirmation..." isActive showSpinner theme={theme} />
+              <TimelineConnector color={theme.border} />
+              <TimelineItem icon="loader" iconColor={theme.border} title="Picking" subtitle="Not started" theme={theme} />
+              <TimelineConnector color={theme.border} />
+              <TimelineItem icon="package" iconColor={theme.border} title="Packed" subtitle="Not started" theme={theme} />
+              <TimelineConnector color={theme.border} />
+              <TimelineItem icon="truck" iconColor={theme.border} title="Delivering" subtitle="Not started" theme={theme} />
+            </View>
+          </Card>
+        </ScrollView>
+      </View>
+    );
+  }
 
   if (isConfirmed) {
     return (
@@ -969,6 +1115,19 @@ const styles = StyleSheet.create({
     padding: isTablet ? 60 : isSmallDevice ? 32 : 40,
   },
   successCircle: {
+    borderRadius: 1000,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // NEW: Pending styles
+  pendingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: isTablet ? 60 : isSmallDevice ? 32 : 40,
+  },
+  pendingCircle: {
     borderRadius: 1000,
     borderWidth: 3,
     alignItems: 'center',
