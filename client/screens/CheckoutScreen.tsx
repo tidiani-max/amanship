@@ -7,6 +7,7 @@ import {
   Pressable,
   Image,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -63,12 +64,12 @@ export default function CheckoutScreen() {
 
   const { items, subtotal } = useCart();
   const { 
-  location, 
-  codAllowed, 
-  estimatedDeliveryMinutes,
-  isManualLocation,
-  manualAddress 
-} = useLocation();
+    location, 
+    codAllowed, 
+    estimatedDeliveryMinutes,
+    isManualLocation,
+    manualAddress 
+  } = useLocation();
   const { user } = useAuth();
   const { t } = useLanguage();
 
@@ -77,6 +78,17 @@ export default function CheckoutScreen() {
   );
   const [itemsWithStore, setItemsWithStore] = useState<any[]>([]);
   const [isLoadingStores, setIsLoadingStores] = useState(true);
+  
+  // Voucher state
+  const [voucherCode, setVoucherCode] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<any>(null);
+  const [voucherDiscount, setVoucherDiscount] = useState(0);
+  const [isValidatingVoucher, setIsValidatingVoucher] = useState(false);
+
+  // Promotion state
+  const [selectedPromotion, setSelectedPromotion] = useState<any>(null);
+  const [promotionDiscount, setPromotionDiscount] = useState(0);
+  const [freeDelivery, setFreeDelivery] = useState(false);
 
   const { data: addresses = [] } = useQuery<Address[]>({
     queryKey: ["/api/addresses", user?.id],
@@ -185,9 +197,10 @@ export default function CheckoutScreen() {
     }
   );
 
-  // Final totals
-  const total = storeTotals.reduce((sum, s) => sum + s.total, 0);
-  const totalDeliveryFee = storeTotals.length * DELIVERY_FEE_PER_STORE;
+  // Final totals with promotions
+  const totalDeliveryFee = freeDelivery ? 0 : (storeTotals.length * DELIVERY_FEE_PER_STORE);
+  const totalBeforeDiscounts = subtotal + totalDeliveryFee;
+  const finalTotal = totalBeforeDiscounts - promotionDiscount - voucherDiscount;
 
   const availablePayments = codAllowed
     ? [...PAYMENT_METHODS, COD_OPTION]
@@ -195,6 +208,53 @@ export default function CheckoutScreen() {
 
   const formatPrice = (price: number) => {
     return `Rp ${price.toLocaleString("id-ID")}`;
+  };
+
+  // Apply voucher function
+  const handleApplyVoucher = async () => {
+    if (!voucherCode.trim()) {
+      Alert.alert('Error', 'Please enter a voucher code');
+      return;
+    }
+
+    setIsValidatingVoucher(true);
+
+    try {
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/vouchers/validate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: voucherCode.toUpperCase(),
+            userId: user?.id,
+            orderTotal: subtotal - promotionDiscount,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (data.valid) {
+        setAppliedVoucher(data.voucher);
+        setVoucherDiscount(data.voucher.discount);
+        Alert.alert('Success! 🎉', `Voucher "${data.voucher.code}" applied!\nYou saved ${formatPrice(data.voucher.discount)}`);
+      } else {
+        Alert.alert('Invalid Voucher', data.error || 'This voucher code is not valid');
+      }
+    } catch (error) {
+      console.error('Voucher validation error:', error);
+      Alert.alert('Error', 'Failed to validate voucher. Please try again.');
+    } finally {
+      setIsValidatingVoucher(false);
+    }
+  };
+
+  // Remove voucher
+  const handleRemoveVoucher = () => {
+    setAppliedVoucher(null);
+    setVoucherDiscount(0);
+    setVoucherCode('');
   };
 
   const saveAddressMutation = useMutation({
@@ -237,7 +297,12 @@ export default function CheckoutScreen() {
         customerLng: location.longitude.toString(),
         paymentMethod: selectedPayment.type === "cod" ? "cod" : "midtrans",
         items: itemsPayload,
-        total,
+        total: finalTotal,
+        voucherCode: appliedVoucher?.code,
+        voucherDiscount,
+        promotionId: selectedPromotion?.id,
+        promotionDiscount,
+        freeDelivery,
         addressId,
         userId: user.id,
       });
@@ -289,46 +354,45 @@ export default function CheckoutScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Address Section */}
-        {/* Address Section */}
-<View style={styles.section}>
-  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.md }}>
-    <ThemedText type="h3">
-      {t.checkout.deliveryAddress}
-    </ThemedText>
-    <Pressable onPress={() => navigation.navigate("EditAddress")}>
-      <ThemedText type="caption" style={{ color: theme.primary, fontWeight: "600" }}>
-        Change
-      </ThemedText>
-    </Pressable>
-  </View>
-  
-  <Card>
-    <View style={styles.addressRow}>
-      <View
-        style={[
-          styles.addressIcon,
-          { backgroundColor: theme.primary + "20" },
-        ]}
-      >
-        <Feather 
-          name={isManualLocation ? "map-pin" : "navigation"} 
-          size={20} 
-          color={theme.primary} 
-        />
-      </View>
-      <View style={{ flex: 1 }}>
-        <ThemedText type="body" style={{ fontWeight: "600" }}>
-          {isManualLocation ? "Delivery Address" : "Current GPS Location"}
-        </ThemedText>
-        <ThemedText type="caption" style={{ color: theme.textSecondary }} numberOfLines={2}>
-          {isManualLocation && manualAddress
-            ? manualAddress
-            : "Location detected automatically from GPS"}
-        </ThemedText>
-      </View>
-    </View>
-  </Card>
-</View>
+        <View style={styles.section}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.md }}>
+            <ThemedText type="h3">
+              {t.checkout.deliveryAddress}
+            </ThemedText>
+            <Pressable onPress={() => navigation.navigate("EditAddress")}>
+              <ThemedText type="caption" style={{ color: theme.primary, fontWeight: "600" }}>
+                Change
+              </ThemedText>
+            </Pressable>
+          </View>
+          
+          <Card>
+            <View style={styles.addressRow}>
+              <View
+                style={[
+                  styles.addressIcon,
+                  { backgroundColor: theme.primary + "20" },
+                ]}
+              >
+                <Feather 
+                  name={isManualLocation ? "map-pin" : "navigation"} 
+                  size={20} 
+                  color={theme.primary} 
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText type="body" style={{ fontWeight: "600" }}>
+                  {isManualLocation ? "Delivery Address" : "Current GPS Location"}
+                </ThemedText>
+                <ThemedText type="caption" style={{ color: theme.textSecondary }} numberOfLines={2}>
+                  {isManualLocation && manualAddress
+                    ? manualAddress
+                    : "Location detected automatically from GPS"}
+                </ThemedText>
+              </View>
+            </View>
+          </Card>
+        </View>
 
         {/* Per-Store Order Breakdown */}
         <View style={styles.section}>
@@ -426,6 +490,86 @@ export default function CheckoutScreen() {
           )}
         </View>
 
+        {/* Voucher Section */}
+        <View style={styles.section}>
+          <ThemedText type="h3" style={{ marginBottom: Spacing.md }}>
+            Voucher Code
+          </ThemedText>
+          
+          {appliedVoucher ? (
+            <Card style={{
+              ...styles.appliedVoucherCard,
+              backgroundColor: theme.success + '10',
+              borderColor: theme.success
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <Feather name="check-circle" size={20} color={theme.success} />
+                <View style={{ marginLeft: Spacing.sm, flex: 1 }}>
+                  <ThemedText type="body" style={{ fontWeight: '600', color: theme.success }}>
+                    {appliedVoucher.code}
+                  </ThemedText>
+                  <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                    Saved {formatPrice(voucherDiscount)}
+                  </ThemedText>
+                </View>
+                <Pressable onPress={handleRemoveVoucher}>
+                  <Feather name="x" size={20} color={theme.error} />
+                </Pressable>
+              </View>
+            </Card>
+          ) : (
+            <Card>
+              <View style={styles.voucherInputContainer}>
+                <TextInput
+                  style={[styles.voucherInput, { 
+                    color: theme.text, 
+                    backgroundColor: theme.backgroundDefault,
+                    borderColor: theme.border 
+                  }]}
+                  placeholder="Enter voucher code (e.g., RAMADAN50)"
+                  placeholderTextColor={theme.textSecondary}
+                  value={voucherCode}
+                  onChangeText={setVoucherCode}
+                  autoCapitalize="characters"
+                  editable={!isValidatingVoucher}
+                />
+                <Pressable 
+                  onPress={handleApplyVoucher}
+                  disabled={!voucherCode.trim() || isValidatingVoucher}
+                  style={[
+                    styles.applyButton, 
+                    { 
+                      backgroundColor: (!voucherCode.trim() || isValidatingVoucher) 
+                        ? theme.backgroundDefault 
+                        : theme.primary 
+                    }
+                  ]}
+                >
+                  {isValidatingVoucher ? (
+                    <ActivityIndicator size="small" color={theme.buttonText} />
+                  ) : (
+                    <ThemedText style={{ 
+                      color: theme.buttonText, 
+                      fontWeight: '600' 
+                    }}>
+                      APPLY
+                    </ThemedText>
+                  )}
+                </Pressable>
+              </View>
+              
+              <Pressable 
+                onPress={() => navigation.navigate('Vouchers')}
+                style={{ marginTop: Spacing.sm }}
+              >
+                <ThemedText type="small" style={{ color: theme.primary }}>
+                  📋 View available vouchers
+                </ThemedText>
+              </Pressable>
+            </Card>
+          )}
+        </View>
+
         {/* Payment Methods */}
         <View style={styles.section}>
           <ThemedText type="h3" style={{ marginBottom: Spacing.md }}>
@@ -488,16 +632,45 @@ export default function CheckoutScreen() {
               Total Delivery ({storeTotals.length} {storeTotals.length === 1 ? 'store' : 'stores'})
             </ThemedText>
             <ThemedText type="caption">
-              {formatPrice(totalDeliveryFee)}
+              {freeDelivery ? (
+                <ThemedText type="caption" style={{ color: theme.success }}>FREE</ThemedText>
+              ) : (
+                formatPrice(totalDeliveryFee)
+              )}
             </ThemedText>
           </View>
+          
+          {/* Show promotion discount if applied */}
+          {promotionDiscount > 0 && (
+            <View style={styles.summaryRow}>
+              <ThemedText type="caption" style={{ color: theme.secondary }}>
+                Promotion Discount
+              </ThemedText>
+              <ThemedText type="caption" style={{ color: theme.secondary }}>
+                -{formatPrice(promotionDiscount)}
+              </ThemedText>
+            </View>
+          )}
+          
+          {/* Show voucher discount if applied */}
+          {voucherDiscount > 0 && (
+            <View style={styles.summaryRow}>
+              <ThemedText type="caption" style={{ color: theme.success }}>
+                Voucher Discount ({appliedVoucher?.code})
+              </ThemedText>
+              <ThemedText type="caption" style={{ color: theme.success }}>
+                -{formatPrice(voucherDiscount)}
+              </ThemedText>
+            </View>
+          )}
+          
           <View style={[styles.summaryRow, styles.grandTotalRow]}>
             <View>
               <ThemedText type="caption" style={{ color: theme.textSecondary }}>
                 Grand Total
               </ThemedText>
               <ThemedText type="h2" style={{ color: theme.primary }}>
-                {formatPrice(total)}
+                {formatPrice(finalTotal)}
               </ThemedText>
             </View>
             <Button
@@ -610,6 +783,34 @@ const styles = StyleSheet.create({
     borderTopColor: "#E0E0E0",
   },
 
+  voucherInputContainer: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+
+  voucherInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontSize: 14,
+  },
+
+  applyButton: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 80,
+  },
+
+  appliedVoucherCard: {
+    borderWidth: 2,
+    padding: Spacing.md,
+  },
+
   paymentMethods: {
     gap: Spacing.sm,
   },
@@ -646,14 +847,5 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
     borderTopWidth: 1,
     borderTopColor: "#E0E0E0",
-  },
-  changeLocationButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: Spacing.sm,
-    borderRadius: BorderRadius.sm,
-    gap: Spacing.xs,
-    marginTop: Spacing.sm,
   },
 });

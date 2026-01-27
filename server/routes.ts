@@ -2923,6 +2923,9 @@ app.get("/api/vouchers/active", async (req, res) => {
     const { userId } = req.query;
     const now = new Date();
 
+    console.log("📋 Fetching active vouchers for user:", userId);
+
+    // Get all active vouchers
     const activeVouchers = await db
       .select()
       .from(vouchers)
@@ -2933,15 +2936,35 @@ app.get("/api/vouchers/active", async (req, res) => {
           gte(vouchers.validUntil, now)
         )
       )
-      .orderBy(sql`${vouchers.priority} DESC, ${vouchers.createdAt} DESC`);
+      .orderBy(sql`${vouchers.priority} DESC, ${vouchers.createdAt} DESC`)
+      .catch(error => {
+        console.error("❌ Database error fetching vouchers:", error);
+        throw error;
+      });
 
+    console.log(`✅ Found ${activeVouchers.length} active vouchers`);
+
+    // If no userId provided, return all active vouchers
     if (!userId) {
+      console.log("⚠️ No userId provided, returning all vouchers");
       return res.json(activeVouchers);
     }
 
-    // Get user info
-    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
-    
+    // Get user info for targeting
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId as string))
+      .catch(error => {
+        console.error("❌ Database error fetching user:", error);
+        throw error;
+      });
+
+    if (!user) {
+      console.log("⚠️ User not found, returning all vouchers");
+      return res.json(activeVouchers);
+    }
+
     // Get user's voucher usage
     const userUsage = await db
       .select({
@@ -2950,7 +2973,12 @@ app.get("/api/vouchers/active", async (req, res) => {
       })
       .from(userVoucherUsage)
       .where(eq(userVoucherUsage.userId, userId as string))
-      .groupBy(userVoucherUsage.voucherId);
+      .groupBy(userVoucherUsage.voucherId)
+      .catch(error => {
+        console.error("❌ Database error fetching usage:", error);
+        // Return empty array on error instead of throwing
+        return [];
+      });
 
     const usageMap = new Map(userUsage.map(u => [u.voucherId, u.count]));
 
@@ -2967,10 +2995,15 @@ app.get("/api/vouchers/active", async (req, res) => {
       return true;
     });
 
+    console.log(`✅ Returning ${eligibleVouchers.length} eligible vouchers for user`);
     res.json(eligibleVouchers);
   } catch (error) {
     console.error("❌ Get vouchers error:", error);
-    res.status(500).json({ error: "Failed to fetch vouchers" });
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack");
+    res.status(500).json({ 
+      error: "Failed to fetch vouchers",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
   }
 });
 

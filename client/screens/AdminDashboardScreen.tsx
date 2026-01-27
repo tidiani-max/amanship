@@ -34,7 +34,21 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-// ---------------------- STYLES ----------------------
+// ---------------------- CONFIRMATION HELPER ----------------------
+const confirmAction = (title: string, message: string, onConfirm: () => void) => {
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n\n${message}`)) {
+      onConfirm();
+    }
+  } else {
+    Alert.alert(title, message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: onConfirm }
+    ]);
+  }
+};
+
+// [Previous styles object - same as before]
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
@@ -157,7 +171,7 @@ interface AdminMetrics {
   timestamp: string;
 }
 
-// ---------------------- STORE MODAL (same as before with logging) ----------------------
+// [Previous StoreModal component - same as before]
 function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: {
   visible: boolean;
   store: StoreData | null;
@@ -213,7 +227,6 @@ function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: 
       }
     } catch (error) {
       console.error("Geocode error:", error);
-      // Set default Jakarta coordinates
       setLatitude("-6.2088");
       setLongitude("106.8456");
       Alert.alert(
@@ -228,7 +241,6 @@ function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: 
   const handleSubmit = () => {
     if (!name.trim() || !address.trim()) {
       Alert.alert("Error", "Store name and address are required");
-      
       return;
     }
 
@@ -328,26 +340,20 @@ function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: 
           </Pressable>
 
           {store && onDelete && (
-  <Pressable
-    style={[styles.deleteButton, { backgroundColor: theme.error + "20", borderWidth: 1, borderColor: theme.error }]}
-    onPress={() => {
-      console.log("🔴 Modal delete button pressed for store:", store.id);
-      if (onDelete) {
-        console.log("🔴 Calling onDelete function");
-        onDelete(); // This will now call handleStoreDelete with the store already set
-      }
-    }}
-  >
-    <ThemedText type="button" style={{ color: theme.error }}>Delete Store</ThemedText>
-  </Pressable>
-)}
+            <Pressable
+              style={[styles.deleteButton, { backgroundColor: theme.error + "20", borderWidth: 1, borderColor: theme.error }]}
+              onPress={onDelete}
+            >
+              <ThemedText type="button" style={{ color: theme.error }}>Delete Store</ThemedText>
+            </Pressable>
+          )}
         </KeyboardAwareScrollViewCompat>
       </Card>
     </View>
   );
 }
 
-// ---------------------- STAFF MODAL (same as before) ----------------------
+// [Previous StaffModal component - same as before]
 function StaffModal({ visible, storeId, storeName, staff, onClose, onSubmit, onDelete, isLoading }: {
   visible: boolean;
   storeId: string;
@@ -491,7 +497,7 @@ function StaffModal({ visible, storeId, storeName, staff, onClose, onSubmit, onD
   );
 }
 
-// ---------------------- STAFF ROW WITH STATS ----------------------
+// [Previous StaffRow component - same as before]
 function StaffRow({ staff, onToggleStatus, onEdit, onDelete }: { 
   staff: StaffMember; 
   onToggleStatus: (userId: string, currentStatus: string) => void;
@@ -539,7 +545,7 @@ function StaffRow({ staff, onToggleStatus, onEdit, onDelete }: {
   );
 }
 
-// ---------------------- ENHANCED STORE CARD ----------------------
+// [Previous StoreCard component - same structure but with fixed callbacks]
 function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteStaff, onToggleStatus }: { 
   store: StoreData;
   onEdit: () => void;
@@ -570,18 +576,7 @@ function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteS
           <Pressable style={[styles.iconButton, { backgroundColor: theme.secondary + "15" }]} onPress={onEdit}>
             <Feather name="edit-2" size={14} color={theme.secondary} />
           </Pressable>
-          <Pressable 
-            style={[styles.iconButton, { backgroundColor: theme.error + "15" }]} 
-            onPress={() => {
-              console.log("🔴 StoreCard trash icon pressed for store:", store.id, store.name);
-              if (onDelete) {
-                console.log("🔴 Calling onDelete callback");
-                onDelete();
-              } else {
-                console.error("❌ onDelete callback is undefined!");
-              }
-            }}
-          >
+          <Pressable style={[styles.iconButton, { backgroundColor: theme.error + "15" }]} onPress={onDelete}>
             <Feather name="trash-2" size={14} color={theme.error} />
           </Pressable>
           <Pressable style={[styles.iconButton, { backgroundColor: theme.border }]} onPress={() => setExpanded(!expanded)}>
@@ -704,7 +699,7 @@ function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteS
   );
 }
 
-// ---------------------- METRIC CARD ----------------------
+// [Previous MetricCard component - same as before]
 function MetricCard({ icon, label, value, color, subtext }: { 
   icon: string; 
   label: string; 
@@ -792,33 +787,33 @@ export default function AdminDashboardScreen() {
     },
   });
 
-const deleteStoreMutation = useMutation({
-  mutationFn: async (id: string) => {
-    console.log("🗑️ Delete mutation started for store:", id);
-    const response = await apiRequest("DELETE", `/api/admin/stores/${id}`);
-    
-    console.log("Delete response status:", response.status);
-    const responseData = await response.json();
-    console.log("Delete response data:", responseData);
-    
-    if (!response.ok) {
-      console.error("Delete error response:", responseData);
-      throw new Error(responseData.error || "Failed to delete store");
-    }
-    return responseData;
-  },
-  onSuccess: (data) => {
-    console.log("✅ Store deleted successfully:", data);
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
-    setShowStoreModal(false);
-    setSelectedStore(null);
-    Alert.alert("Success", "Store deactivated successfully");
-  },
-  onError: (error: Error) => {
-    console.error("❌ Delete store mutation error:", error);
-    Alert.alert("Error", error.message);
-  },
-});
+  const deleteStoreMutation = useMutation({
+    mutationFn: async (id: string) => {
+      console.log("🗑️ Delete mutation started for store:", id);
+      const response = await apiRequest("DELETE", `/api/admin/stores/${id}`);
+      
+      console.log("Delete response status:", response.status);
+      const responseData = await response.json();
+      console.log("Delete response data:", responseData);
+      
+      if (!response.ok) {
+        console.error("Delete error response:", responseData);
+        throw new Error(responseData.error || "Failed to delete store");
+      }
+      return responseData;
+    },
+    onSuccess: (data) => {
+      console.log("✅ Store deleted successfully:", data);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
+      setShowStoreModal(false);
+      setSelectedStore(null);
+      Alert.alert("Success", "Store deactivated successfully");
+    },
+    onError: (error: Error) => {
+      console.error("❌ Delete store mutation error:", error);
+      Alert.alert("Error", error.message);
+    },
+  });
 
   // ---------------------- STAFF MUTATIONS ----------------------
   const addStaffMutation = useMutation({
@@ -914,28 +909,13 @@ const deleteStoreMutation = useMutation({
     }
   };
 
-const confirmAction = (title: string, message: string, onConfirm: () => void) => {
-    if (Platform.OS === 'web') {
-      if (window.confirm(`${title}\n\n${message}`)) {
-        onConfirm();
-      }
-    } else {
-      Alert.alert(title, message, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: onConfirm }
-      ]);
-    }
-  };
-
- const handleStoreDelete = (storeToDelete: StoreData) => {
+  const handleStoreDelete = (storeToDelete: StoreData) => {
     confirmAction(
       "Delete Store",
       `Delete ${storeToDelete.name}? This will deactivate the store.`,
       () => deleteStoreMutation.mutate(storeToDelete.id)
     );
   };
-
-
 
   const handleStaffSubmit = (data: any) => {
     if (selectedStaff) {
@@ -949,7 +929,7 @@ const confirmAction = (title: string, message: string, onConfirm: () => void) =>
     }
   };
 
-const handleStaffDelete = (storeId: string, staffId: string, staffName?: string) => {
+  const handleStaffDelete = (storeId: string, staffId: string, staffName?: string) => {
     confirmAction(
       "Remove Staff",
       `Remove ${staffName || "this staff member"}?`,
@@ -1116,35 +1096,31 @@ const handleStaffDelete = (storeId: string, staffId: string, staffName?: string)
           </View>
 
           {stores.map((store) => (
- <StoreCard
-  key={store.id}
-  store={store}
-  onEdit={() => {
-    setSelectedStore(store);
-    setShowStoreModal(true);
-  }}
-  onDelete={() => {
-    console.log("StoreCard onDelete triggered for:", store.id);
-    handleStoreDelete(store); // Pass the store directly
-  }}
-  onAddStaff={() => {
-    setCurrentStoreId(store.id);
-    setSelectedStaff(null);
-    setShowStaffModal(true);
-  }}
-  onEditStaff={(staff) => {
-    setCurrentStoreId(store.id);
-    setSelectedStaff(staff);
-    setShowStaffModal(true);
-  }}
-  onDeleteStaff={(staffId) => {
-    const staffMember = store.staff.find(s => s.id === staffId);
-    const staffName = staffMember?.user?.name || staffMember?.user?.username || "this staff member";
-    handleStaffDelete(store.id, staffId, staffName);
-  }}
-  onToggleStatus={handleToggleStatus}
-/>
-
+            <StoreCard
+              key={store.id}
+              store={store}
+              onEdit={() => {
+                setSelectedStore(store);
+                setShowStoreModal(true);
+              }}
+              onDelete={() => handleStoreDelete(store)}
+              onAddStaff={() => {
+                setCurrentStoreId(store.id);
+                setSelectedStaff(null);
+                setShowStaffModal(true);
+              }}
+              onEditStaff={(staff) => {
+                setCurrentStoreId(store.id);
+                setSelectedStaff(staff);
+                setShowStaffModal(true);
+              }}
+              onDeleteStaff={(staffId) => {
+                const staffMember = store.staff.find(s => s.id === staffId);
+                const staffName = staffMember?.user?.name || staffMember?.user?.username || "this staff member";
+                handleStaffDelete(store.id, staffId, staffName);
+              }}
+              onToggleStatus={handleToggleStatus}
+            />
           ))}
 
           {stores.length === 0 && (
@@ -1166,33 +1142,33 @@ const handleStaffDelete = (storeId: string, staffId: string, staffName?: string)
       </ScrollView>
 
       <StoreModal
-  visible={showStoreModal}
-  store={selectedStore}
-  onClose={() => {
-    setShowStoreModal(false);
-    setSelectedStore(null);
-  }}
-  onSubmit={handleStoreSubmit}
-  onDelete={selectedStore ? () => handleStoreDelete(selectedStore) : undefined}
-  isLoading={isSubmitting}
-/>
+        visible={showStoreModal}
+        store={selectedStore}
+        onClose={() => {
+          setShowStoreModal(false);
+          setSelectedStore(null);
+        }}
+        onSubmit={handleStoreSubmit}
+        onDelete={selectedStore ? () => handleStoreDelete(selectedStore) : undefined}
+        isLoading={isSubmitting}
+      />
 
       <StaffModal
-  visible={showStaffModal}
-  storeId={currentStoreId}
-  storeName={stores.find(s => s.id === currentStoreId)?.name || ""}
-  staff={selectedStaff}
-  onClose={() => {
-    setShowStaffModal(false);
-    setSelectedStaff(null);
-  }}
-  onSubmit={handleStaffSubmit}
-  onDelete={selectedStaff ? () => {
-    const staffName = selectedStaff.user?.name || selectedStaff.user?.username || "this staff member";
-    handleStaffDelete(currentStoreId, selectedStaff.id, staffName);  // ✅ CORRECT - passing all 3 args
-  } : undefined}
-  isLoading={isSubmitting}
-/>
+        visible={showStaffModal}
+        storeId={currentStoreId}
+        storeName={stores.find(s => s.id === currentStoreId)?.name || ""}
+        staff={selectedStaff}
+        onClose={() => {
+          setShowStaffModal(false);
+          setSelectedStaff(null);
+        }}
+        onSubmit={handleStaffSubmit}
+        onDelete={selectedStaff ? () => {
+          const staffName = selectedStaff.user?.name || selectedStaff.user?.username || "this staff member";
+          handleStaffDelete(currentStoreId, selectedStaff.id, staffName);
+        } : undefined}
+        isLoading={isSubmitting}
+      />
     </ThemedView>
   );
 }
