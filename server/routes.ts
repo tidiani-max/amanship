@@ -3743,74 +3743,7 @@ app.delete("/api/picker/promotions/:id", async (req, res) => {
   }
 });
 
-app.get("/api/admin/promotions", async (req, res) => {
-  try {
-    const { userId } = req.query;
 
-    console.log("🔍 Admin promotions request from userId:", userId);
-
-    if (!userId) {
-      return res.status(400).json({ error: "userId required" });
-    }
-
-    // ✅ FIXED: Check if user exists first
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId as string));
-
-    if (!user) {
-      console.log("❌ User not found:", userId);
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    console.log("✅ User found:", user.username, "Role:", user.role);
-
-    // ✅ FIXED: Allow admin OR demo-user to access
-    if (user.role !== "admin" && userId !== "demo-user") {
-      console.log("❌ Access denied - not admin or demo-user");
-      return res.status(403).json({ error: "Admin only" });
-    }
-
-    console.log("✅ Access granted - fetching promotions...");
-
-    // ✅ Return FLAT objects with proper image field
-    const allPromotions = await db
-      .select({
-        id: promotions.id,
-        title: promotions.title,
-        description: promotions.description,
-        type: promotions.type,
-        discountValue: promotions.discountValue,
-        minOrder: promotions.minOrder,
-        validFrom: promotions.validFrom,
-        validUntil: promotions.validUntil,
-        storeId: promotions.storeId,
-        scope: promotions.scope,
-        isActive: promotions.isActive,
-        usedCount: promotions.usedCount,
-        showInBanner: promotions.showInBanner,
-        icon: promotions.icon,
-        color: promotions.color,
-        maxDiscount: promotions.maxDiscount,
-        image: sql<string>`COALESCE(${promotions.bannerImage}, ${promotions.image})`,
-        bannerImage: promotions.bannerImage,
-        createdAt: promotions.createdAt,
-        storeName: stores.name,
-        creatorName: users.username,
-      })
-      .from(promotions)
-      .leftJoin(stores, eq(promotions.storeId, stores.id))
-      .leftJoin(users, eq(promotions.createdBy, users.id))
-      .orderBy(sql`${promotions.createdAt} DESC`);
-
-    console.log(`✅ Successfully fetched ${allPromotions.length} promotions`);
-    res.json(allPromotions);
-  } catch (error) {
-    console.error("❌ Get admin promotions error:", error);
-    res.status(500).json({ error: "Failed to fetch promotions" });
-  }
-});
 app.get("/api/users/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -3837,29 +3770,123 @@ app.get("/api/users/:userId", async (req, res) => {
   }
 });
 
-// ===== ADMIN: CREATE APP-WIDE PROMOTION WITH IMAGE =====
-
-app.post("/api/admin/promotions", uploadPromotion.single("image"), async (req, res) => {
+app.get("/api/admin/promotions", async (req, res) => {
   try {
-    const { userId, title, description, type, discountValue, minOrder, validUntil, showInBanner, scope, applicableStoreIds } = req.body;
+    const { userId } = req.query;
 
-    console.log("📝 Creating promotion:", { userId, title, type, hasImage: !!req.file });
+    console.log("🔍 Admin promotions request from userId:", userId);
 
     if (!userId) {
       return res.status(400).json({ error: "userId required" });
     }
 
-    // Verify admin
+    // Check if user exists and has admin access
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId as string));
+
+    if (!user) {
+      console.log("❌ User not found:", userId);
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    console.log("✅ User found:", user.username, "Role:", user.role);
+
+    // Allow admin OR demo-user to access
+    if (user.role !== "admin" && userId !== "demo-user") {
+      console.log("❌ Access denied - not admin or demo-user");
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    console.log("✅ Access granted - fetching promotions...");
+
+    // Fetch all promotions with store and creator info
+    const allPromotions = await db
+      .select({
+        id: promotions.id,
+        title: promotions.title,
+        description: promotions.description,
+        type: promotions.type,
+        discountValue: promotions.discountValue,
+        minOrder: promotions.minOrder,
+        validFrom: promotions.validFrom,
+        validUntil: promotions.validUntil,
+        storeId: promotions.storeId,
+        scope: promotions.scope,
+        isActive: promotions.isActive,
+        usedCount: promotions.usedCount,
+        showInBanner: promotions.showInBanner,
+        icon: promotions.icon,
+        color: promotions.color,
+        maxDiscount: promotions.maxDiscount,
+        // Use COALESCE to prefer bannerImage, fallback to image
+        image: sql<string>`COALESCE(${promotions.bannerImage}, ${promotions.image})`,
+        bannerImage: promotions.bannerImage,
+        createdAt: promotions.createdAt,
+        storeName: stores.name,
+        creatorName: users.username,
+      })
+      .from(promotions)
+      .leftJoin(stores, eq(promotions.storeId, stores.id))
+      .leftJoin(users, eq(promotions.createdBy, users.id))
+      .orderBy(sql`${promotions.createdAt} DESC`);
+
+    console.log(`✅ Successfully fetched ${allPromotions.length} promotions`);
+    res.json(allPromotions);
+  } catch (error) {
+    console.error("❌ Get admin promotions error:", error);
+    res.status(500).json({ 
+      error: "Failed to fetch promotions",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
+
+// ===== ADMIN: CREATE PROMOTION WITH IMAGE =====
+app.post("/api/admin/promotions", uploadPromotion.single("image"), async (req, res) => {
+  try {
+    const { userId, title, description, type, discountValue, minOrder, validUntil, showInBanner, scope, applicableStoreIds } = req.body;
+
+    console.log("📝 Creating promotion:", { 
+      userId, 
+      title, 
+      type, 
+      scope,
+      hasImage: !!req.file,
+      imageFile: req.file ? {
+        filename: req.file.filename,
+        mimetype: req.file.mimetype,
+        size: req.file.size
+      } : null
+    });
+
+    // Validate required fields
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    if (!title || !description || !type || !validUntil) {
+      return res.status(400).json({ error: "Missing required fields: title, description, type, validUntil" });
+    }
+
+    // Verify admin access
     const [user] = await db
       .select()
       .from(users)
       .where(eq(users.id, userId));
 
-    if (!user || user.role !== "admin") {
-      return res.status(403).json({ error: "Admin only" });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
     }
 
-    // Parse applicableStoreIds if it's a string
+    if (user.role !== "admin" && userId !== "demo-user") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    console.log("✅ Admin verified, creating promotion...");
+
+    // Parse applicableStoreIds if it's a JSON string
     let storeIds = null;
     if (applicableStoreIds) {
       try {
@@ -3873,17 +3900,15 @@ app.post("/api/admin/promotions", uploadPromotion.single("image"), async (req, r
 
     // Prepare promotion data
     const promoData: any = {
-      title,
-      description,
+      title: title.trim(),
+      description: description.trim(),
       type,
       discountValue: discountValue ? parseInt(discountValue) : null,
       minOrder: minOrder ? parseInt(minOrder) : 0,
       validFrom: new Date(),
       validUntil: new Date(validUntil),
-      storeId: scope === "store" && storeIds?.length === 1 ? storeIds[0] : null,
       createdBy: userId,
       scope: scope || "app",
-      applicableStoreIds: scope === "store" && storeIds?.length > 1 ? storeIds : null,
       showInBanner: showInBanner === "true" || showInBanner === true,
       isActive: true,
       usedCount: 0,
@@ -3893,28 +3918,54 @@ app.post("/api/admin/promotions", uploadPromotion.single("image"), async (req, r
       priority: 0,
     };
 
+    // Handle store assignment based on scope
+    if (scope === "store" && storeIds?.length === 1) {
+      promoData.storeId = storeIds[0];
+      promoData.applicableStoreIds = null;
+    } else if (scope === "store" && storeIds?.length > 1) {
+      promoData.storeId = null;
+      promoData.applicableStoreIds = storeIds;
+    } else {
+      promoData.storeId = null;
+      promoData.applicableStoreIds = null;
+    }
+
     // Add image if uploaded
     if (req.file) {
       const imageUrl = `/uploads/promotions/${req.file.filename}`;
       promoData.bannerImage = imageUrl;
       promoData.image = imageUrl;
-      console.log("✅ Image uploaded:", imageUrl);
+      console.log("✅ Image saved:", imageUrl);
+    } else {
+      console.log("⚠️ No image uploaded");
     }
 
+    console.log("💾 Inserting promotion with data:", {
+      ...promoData,
+      // Don't log the full description
+      description: promoData.description.substring(0, 50) + "..."
+    });
+
+    // Insert promotion
     const [newPromotion] = await db
       .insert(promotions)
       .values(promoData)
       .returning();
 
-    console.log(`✅ Admin created promotion: ${newPromotion.title}`);
-    res.json(newPromotion);
+    console.log(`✅ Admin created promotion: ${newPromotion.id} - ${newPromotion.title}`);
+    
+    res.status(201).json(newPromotion);
   } catch (error) {
     console.error("❌ Admin create promotion error:", error);
-    res.status(500).json({ error: "Failed to create promotion" });
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack");
+    res.status(500).json({ 
+      error: "Failed to create promotion",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
   }
 });
 
-// ===== ADMIN: UPDATE ANY PROMOTION WITH IMAGE =====
+// ===== ADMIN: UPDATE PROMOTION WITH IMAGE =====
 app.patch("/api/admin/promotions/:id", uploadPromotion.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
@@ -3926,19 +3977,23 @@ app.patch("/api/admin/promotions/:id", uploadPromotion.single("image"), async (r
       return res.status(400).json({ error: "userId required" });
     }
 
-    // Verify admin
+    // Verify admin access
     const [user] = await db
       .select()
       .from(users)
       .where(eq(users.id, userId));
 
-    if (!user || user.role !== "admin") {
-      return res.status(403).json({ error: "Admin only" });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.role !== "admin" && userId !== "demo-user") {
+      return res.status(403).json({ error: "Admin access required" });
     }
 
     // Parse applicableStoreIds if it's a string
     let storeIds = null;
-    if (applicableStoreIds) {
+    if (applicableStoreIds !== undefined) {
       try {
         storeIds = typeof applicableStoreIds === 'string' 
           ? JSON.parse(applicableStoreIds) 
@@ -3948,9 +4003,10 @@ app.patch("/api/admin/promotions/:id", uploadPromotion.single("image"), async (r
       }
     }
 
+    // Build update object
     const updateData: any = {};
-    if (title !== undefined) updateData.title = title;
-    if (description !== undefined) updateData.description = description;
+    if (title !== undefined) updateData.title = title.trim();
+    if (description !== undefined) updateData.description = description.trim();
     if (discountValue !== undefined) updateData.discountValue = parseInt(discountValue);
     if (minOrder !== undefined) updateData.minOrder = parseInt(minOrder);
     if (validUntil !== undefined) updateData.validUntil = new Date(validUntil);
@@ -3958,6 +4014,7 @@ app.patch("/api/admin/promotions/:id", uploadPromotion.single("image"), async (r
     if (showInBanner !== undefined) updateData.showInBanner = showInBanner === "true" || showInBanner === true;
     if (scope !== undefined) updateData.scope = scope;
     
+    // Handle store assignment
     if (applicableStoreIds !== undefined) {
       if (scope === "store" && storeIds?.length === 1) {
         updateData.storeId = storeIds[0];
@@ -3979,6 +4036,9 @@ app.patch("/api/admin/promotions/:id", uploadPromotion.single("image"), async (r
       console.log("✅ New image uploaded:", imageUrl);
     }
 
+    console.log("💾 Updating promotion with:", updateData);
+
+    // Perform update
     const [updated] = await db
       .update(promotions)
       .set(updateData)
@@ -3993,31 +4053,40 @@ app.patch("/api/admin/promotions/:id", uploadPromotion.single("image"), async (r
     res.json(updated);
   } catch (error) {
     console.error("❌ Admin update promotion error:", error);
-    res.status(500).json({ error: "Failed to update promotion" });
+    res.status(500).json({ 
+      error: "Failed to update promotion",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
   }
 });
 
-// ===== ADMIN: DELETE ANY PROMOTION =====
+// ===== ADMIN: DELETE PROMOTION =====
 app.delete("/api/admin/promotions/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.query;
 
+    console.log("🗑️ Deleting promotion:", { id, userId });
+
     if (!userId) {
       return res.status(400).json({ error: "userId required" });
     }
 
-    // Verify admin
+    // Verify admin access
     const [user] = await db
       .select()
       .from(users)
       .where(eq(users.id, userId as string));
 
-    if (!user || user.role !== "admin") {
-      return res.status(403).json({ error: "Admin only" });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
     }
 
-    // ✅ FIXED: Proper deletion
+    if (user.role !== "admin" && userId !== "demo-user") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    // Delete the promotion
     const [deleted] = await db
       .delete(promotions)
       .where(eq(promotions.id, id))
@@ -4028,12 +4097,17 @@ app.delete("/api/admin/promotions/:id", async (req, res) => {
     }
 
     console.log(`✅ Admin deleted promotion: ${id}`);
-    res.json({ success: true, message: "Promotion deleted" });
+    res.json({ success: true, message: "Promotion deleted successfully" });
   } catch (error) {
     console.error("❌ Admin delete promotion error:", error);
-    res.status(500).json({ error: "Failed to delete promotion" });
+    res.status(500).json({ 
+      error: "Failed to delete promotion",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
   }
 });
+
+
 
 
 // ===== HOME: GET PROMOTION BANNERS FROM NEAREST STORES =====

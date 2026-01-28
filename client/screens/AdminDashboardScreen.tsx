@@ -1215,35 +1215,42 @@ export default function AdminDashboardScreen() {
     refetchInterval: 30000,
   });
 
-  const { data: promotions = [], isLoading: promotionsLoading, refetch: refetchPromotions } = useQuery<Promotion[]>({
-    queryKey: ["/api/admin/promotions"],
-    queryFn: async () => {
-      try {
-        // First check if user is admin
-        const userResponse = await apiRequest("GET", "/api/users/demo-user");
-        if (!userResponse.ok) {
-          console.error("Failed to fetch user");
-          return [];
-        }
+const { data: promotions = [], isLoading: promotionsLoading, refetch: refetchPromotions } = useQuery({
+  queryKey: ["/api/admin/promotions"],
+  queryFn: async () => {
+    try {
+      console.log("🔍 Fetching promotions for demo-user...");
+      
+      const response = await apiRequest("GET", `/api/admin/promotions?userId=demo-user`);
+      
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("❌ Failed to fetch promotions:", response.status, text);
         
-        const userData = await userResponse.json();
-        console.log("✅ Current user:", userData);
-        
-        const response = await apiRequest("GET", `/api/admin/promotions?userId=demo-user`);
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error("Failed to fetch promotions:", response.status, errorData);
-          return [];
+        // Try to parse error
+        try {
+          const errorData = JSON.parse(text);
+          throw new Error(errorData.error || "Failed to fetch promotions");
+        } catch (e) {
+          throw new Error(`HTTP ${response.status}: ${text || "Failed to fetch promotions"}`);
         }
-        const data = await response.json();
-        console.log("✅ Promotions fetched:", data);
-        return data;
-      } catch (error) {
-        console.error("Error fetching promotions:", error);
-        return [];
       }
-    },
-  });
+      
+      // Read response ONCE
+      const text = await response.text();
+      const data = JSON.parse(text);
+      
+      console.log("✅ Promotions fetched:", data.length);
+      return data;
+    } catch (error) {
+      console.error("❌ Fetch promotions error:", error);
+      // Return empty array instead of throwing
+      return [];
+    }
+  },
+  retry: 1,
+  retryDelay: 1000,
+});
 
   // ---------------------- MUTATIONS ----------------------
   const createStoreMutation = useMutation({
@@ -1344,32 +1351,55 @@ export default function AdminDashboardScreen() {
     },
   });
 
-  const createPromotionMutation = useMutation({
-    mutationFn: async (formData: FormData) => {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/admin/promotions`, {
-        method: 'POST',
-        body: formData,
-      });
+const createPromotionMutation = useMutation({
+  mutationFn: async (formData: FormData) => {
+    try {
+      console.log("🚀 Creating promotion...");
+      
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/admin/promotions`, 
+        {
+          method: 'POST',
+          body: formData,
+          // DON'T set Content-Type header - let browser set it with boundary
+        }
+      );
+      
+      console.log("📡 Response status:", response.status);
+      
+      // Read response ONCE
+      const text = await response.text();
+      console.log("📄 Response text:", text);
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create promotion');
+        let errorMsg = "Failed to create promotion";
+        try {
+          const errorData = JSON.parse(text);
+          errorMsg = errorData.error || errorData.details || errorMsg;
+        } catch (e) {
+          errorMsg = text || errorMsg;
+        }
+        throw new Error(errorMsg);
       }
       
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
-      refetchPromotions();
-      setShowPromotionModal(false);
-      setSelectedPromotion(null);
-      Alert.alert("Success", "Promotion created successfully!");
-    },
-    onError: (error: Error) => {
-      console.error("Create promotion error:", error);
-      Alert.alert("Error", error.message);
-    },
-  });
+      return JSON.parse(text);
+    } catch (error) {
+      console.error("❌ Mutation error:", error);
+      throw error;
+    }
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
+    refetchPromotions();
+    setShowPromotionModal(false);
+    setSelectedPromotion(null);
+    Alert.alert("Success", "Promotion created successfully!");
+  },
+  onError: (error: Error) => {
+    console.error("❌ Create promotion error:", error);
+    Alert.alert("Error", error.message || "Failed to create promotion");
+  },
+});
 
   const updatePromotionMutation = useMutation({
     mutationFn: async ({ id, formData }: { id: string; formData: FormData }) => {
@@ -1478,13 +1508,16 @@ export default function AdminDashboardScreen() {
     toggleStaffStatusMutation.mutate({ userId, status: nextStatus });
   };
 
-  const handlePromotionSubmit = (formData: FormData) => {
-    if (selectedPromotion) {
-      updatePromotionMutation.mutate({ id: selectedPromotion.id, formData });
-    } else {
-      createPromotionMutation.mutate(formData);
-    }
-  };
+const handlePromotionSubmit = (formData: FormData) => {
+  // Don't log FormData entries - React Native FormData doesn't support it
+  console.log("📤 Submitting promotion...");
+  
+  if (selectedPromotion) {
+    updatePromotionMutation.mutate({ id: selectedPromotion.id, formData });
+  } else {
+    createPromotionMutation.mutate(formData);
+  }
+};
 
   const handlePromotionDelete = (promo: Promotion) => {
     confirmAction(
