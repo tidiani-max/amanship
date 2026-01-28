@@ -2919,8 +2919,6 @@ app.get("/api/promotions/featured", async (req, res) => {
 });
 
 // ===== GET ACTIVE VOUCHERS =====
-// ===== CRITICAL FIXES FOR VOUCHERS AND PROMOTIONS - WITH TYPESCRIPT TYPES =====
-
 
 app.get("/api/vouchers/active", async (req, res) => {
   try {
@@ -3840,6 +3838,10 @@ app.delete("/api/admin/promotions/:id", async (req, res) => {
 });
 
 // ===== HOME: GET PROMOTION BANNERS FROM NEAREST STORES =====
+// ==================== PROMOTIONS & VOUCHERS ROUTES ====================
+console.log("🌙 Registering promotions and vouchers routes...");
+
+// ===== GET PROMOTION BANNERS (FOR HOME SCREEN) =====
 app.get("/api/promotions/banners", async (req, res) => {
   try {
     const lat = Number(req.query.lat);
@@ -3855,7 +3857,6 @@ app.get("/api/promotions/banners", async (req, res) => {
     const now = new Date();
 
     try {
-      // Get active promotions with banner from nearby stores + app-wide promotions
       const result = await db.execute(sql`
         SELECT
           p.id,
@@ -3863,11 +3864,14 @@ app.get("/api/promotions/banners", async (req, res) => {
           p.description,
           p.type,
           p.discount_value AS "discountValue",
+          p.min_order AS "minOrder",
           p.banner_image AS "bannerImage",
           p.icon,
           p.color,
           p.scope,
           p.store_id AS "storeId",
+          p.valid_from AS "validFrom",
+          p.valid_until AS "validUntil",
           s.name AS "storeName",
           s.address AS "storeAddress",
           COALESCE(
@@ -3882,7 +3886,7 @@ app.get("/api/promotions/banners", async (req, res) => {
                 ))
               )
             ),
-            999999 -- Large number for app-wide promotions without stores
+            999999
           ) AS distance,
           p.priority
         FROM promotions p
@@ -3893,7 +3897,7 @@ app.get("/api/promotions/banners", async (req, res) => {
           AND p.valid_from <= ${now}
           AND p.valid_until >= ${now}
           AND (
-            p.scope = 'app' -- Include app-wide promotions
+            p.scope = 'app'
             OR (
               p.scope = 'store'
               AND s.is_active = true
@@ -3907,42 +3911,40 @@ app.get("/api/promotions/banners", async (req, res) => {
                     * sin(radians(s.latitude::numeric))
                   ))
                 )
-              ) <= 5 -- Within 5km
+              ) <= 5
             )
           )
         ORDER BY 
-          CASE WHEN p.scope = 'app' THEN 0 ELSE 1 END, -- App-wide first
+          CASE WHEN p.scope = 'app' THEN 0 ELSE 1 END,
           p.priority DESC, 
           distance ASC
         LIMIT 10;
       `);
 
       console.log(`✅ Found ${result.rows.length} promotion banners`);
-      
       res.json(result.rows);
     } catch (dbError) {
       console.error("❌ Database error fetching promotions:", dbError);
-      // Return empty array instead of crashing
       res.json([]);
     }
   } catch (error) {
     console.error("❌ Get promotion banners error:", error);
-    // Return empty array instead of 500 error
     res.json([]);
   }
 });
 
+// ===== CLAIM A PROMOTION =====
 app.post("/api/promotions/claim", async (req, res) => {
   try {
     const { userId, promotionId } = req.body;
+
+    console.log("🎁 Claim request:", { userId, promotionId });
 
     if (!userId || !promotionId) {
       return res.status(400).json({ error: "userId and promotionId required" });
     }
 
-    console.log(`🎁 User ${userId} claiming promotion ${promotionId}`);
-
-    // Verify user
+    // Verify user exists
     const [user] = await db.select().from(users).where(eq(users.id, userId));
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -3980,7 +3982,7 @@ app.post("/api/promotions/claim", async (req, res) => {
       .limit(1);
 
     if (existing.length > 0) {
-      console.log(`⚠️ User ${userId} already claimed promotion ${promotionId}`);
+      console.log(`⚠️ Already claimed by user ${userId}`);
       return res.json({
         success: true,
         message: "Promotion already claimed",
@@ -3997,7 +3999,7 @@ app.post("/api/promotions/claim", async (req, res) => {
       })
       .returning();
 
-    console.log(`✅ User ${userId} successfully claimed promotion ${promotionId}`);
+    console.log(`✅ Successfully claimed promotion ${promotionId}`);
 
     res.json({
       success: true,
@@ -4024,7 +4026,6 @@ app.get("/api/promotions/claimed", async (req, res) => {
 
     const now = new Date();
 
-    // Get all claimed promotions that are still valid
     const claimedPromotions = await db
       .select({
         claimedPromotion: userClaimedPromotions,
@@ -4060,36 +4061,235 @@ app.get("/api/promotions/claimed", async (req, res) => {
   }
 });
 
-// ===== CHECK IF PROMOTION IS CLAIMED =====
-app.get("/api/promotions/:promotionId/claimed", async (req, res) => {
+// ===== GET ACTIVE VOUCHERS =====
+app.get("/api/vouchers/active", async (req, res) => {
   try {
-    const { promotionId } = req.params;
     const { userId } = req.query;
+    const now = new Date();
 
-    if (!userId) {
-      return res.json({ claimed: false });
+    console.log("📋 Fetching active vouchers for user:", userId);
+
+    let activeVouchers;
+    try {
+      activeVouchers = await db
+        .select()
+        .from(vouchers)
+        .where(
+          and(
+            eq(vouchers.isActive, true),
+            lte(vouchers.validFrom, now),
+            gte(vouchers.validUntil, now)
+          )
+        )
+        .orderBy(sql`${vouchers.priority} DESC, ${vouchers.createdAt} DESC`);
+    } catch (dbError) {
+      console.error("❌ Database error fetching vouchers:", dbError);
+      return res.json([]);
     }
 
-    const claimed = await db
-      .select()
-      .from(userClaimedPromotions)
-      .where(
-        and(
-          eq(userClaimedPromotions.userId, userId as string),
-          eq(userClaimedPromotions.promotionId, promotionId),
-          eq(userClaimedPromotions.isActive, true)
-        )
-      )
-      .limit(1);
+    console.log(`✅ Found ${activeVouchers.length} active vouchers`);
 
-    res.json({ claimed: claimed.length > 0 });
+    if (!userId) {
+      console.log("⚠️ No userId provided, returning all vouchers");
+      return res.json(activeVouchers);
+    }
+
+    let user;
+    try {
+      const userResult = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId as string))
+        .limit(1);
+      
+      user = userResult[0];
+    } catch (userError) {
+      console.error("❌ Error fetching user:", userError);
+      return res.json(activeVouchers);
+    }
+
+    if (!user) {
+      console.log("⚠️ User not found, returning all vouchers");
+      return res.json(activeVouchers);
+    }
+
+    let userUsage: Array<{ voucherId: string; count: number }> = [];
+    try {
+      userUsage = await db
+        .select({
+          voucherId: userVoucherUsage.voucherId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(userVoucherUsage)
+        .where(eq(userVoucherUsage.userId, userId as string))
+        .groupBy(userVoucherUsage.voucherId);
+    } catch (usageError) {
+      console.error("❌ Error fetching usage:", usageError);
+    }
+
+    const usageMap = new Map(userUsage.map(u => [u.voucherId, u.count]));
+
+    const eligibleVouchers = activeVouchers.filter(voucher => {
+      const userUsageCount = usageMap.get(voucher.id) || 0;
+      if (userUsageCount >= voucher.userLimit) return false;
+
+      if (voucher.usageLimit && voucher.usedCount >= voucher.usageLimit) return false;
+
+      if (voucher.targetUsers === "new_users" && !user?.isNewUser) return false;
+      if (voucher.targetUsers === "returning_users" && user?.isNewUser) return false;
+
+      return true;
+    });
+
+    console.log(`✅ Returning ${eligibleVouchers.length} eligible vouchers for user`);
+    res.json(eligibleVouchers);
   } catch (error) {
-    console.error("❌ Check claimed error:", error);
-    res.status(500).json({ error: "Failed to check claimed status" });
+    console.error("❌ Get vouchers error:", error);
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack");
+    res.json([]);
   }
 });
 
-// ===== UPDATE: Find Best Promotion (Only Claimed Ones) =====
+// ===== VALIDATE VOUCHER CODE =====
+app.post("/api/vouchers/validate", async (req, res) => {
+  try {
+    const { code, userId, orderTotal } = req.body;
+
+    console.log("🔍 Validating voucher:", { code, userId, orderTotal });
+
+    if (!code || !userId || orderTotal === undefined) {
+      return res.status(400).json({ 
+        valid: false,
+        error: "Missing required fields" 
+      });
+    }
+
+    const now = new Date();
+
+    let voucher;
+    try {
+      const voucherResult = await db
+        .select()
+        .from(vouchers)
+        .where(
+          and(
+            eq(vouchers.code, code.toUpperCase()),
+            eq(vouchers.isActive, true),
+            lte(vouchers.validFrom, now),
+            gte(vouchers.validUntil, now)
+          )
+        )
+        .limit(1);
+      
+      voucher = voucherResult[0];
+    } catch (dbError) {
+      console.error("❌ Database error finding voucher:", dbError);
+      return res.status(500).json({ 
+        valid: false,
+        error: "Database error, please try again" 
+      });
+    }
+
+    if (!voucher) {
+      console.log("❌ Voucher not found or expired");
+      return res.status(404).json({ 
+        valid: false, 
+        error: "Voucher not found or expired" 
+      });
+    }
+
+    if (voucher.usageLimit && voucher.usedCount >= voucher.usageLimit) {
+      return res.status(400).json({ 
+        valid: false, 
+        error: "Voucher usage limit reached" 
+      });
+    }
+
+    let userUsageCount = 0;
+    try {
+      const userUsageResult: Array<{ count: number }> = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(userVoucherUsage)
+        .where(
+          and(
+            eq(userVoucherUsage.userId, userId),
+            eq(userVoucherUsage.voucherId, voucher.id)
+          )
+        );
+      
+      userUsageCount = userUsageResult[0]?.count || 0;
+    } catch (usageError) {
+      console.error("❌ Error checking user usage:", usageError);
+    }
+
+    if (userUsageCount >= voucher.userLimit) {
+      return res.status(400).json({ 
+        valid: false, 
+        error: "You've already used this voucher" 
+      });
+    }
+
+    if (orderTotal < voucher.minOrder) {
+      return res.status(400).json({ 
+        valid: false, 
+        error: `Minimum order is Rp ${voucher.minOrder.toLocaleString("id-ID")}` 
+      });
+    }
+
+    let user;
+    try {
+      const userResult = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      user = userResult[0];
+    } catch (userError) {
+      console.error("❌ Error fetching user:", userError);
+    }
+
+    if (user) {
+      if (voucher.targetUsers === "new_users" && !user.isNewUser) {
+        return res.status(400).json({ 
+          valid: false, 
+          error: "This voucher is for new users only" 
+        });
+      }
+      if (voucher.targetUsers === "returning_users" && user.isNewUser) {
+        return res.status(400).json({ 
+          valid: false, 
+          error: "This voucher is for returning users only" 
+        });
+      }
+    }
+
+    let discount = 0;
+    if (voucher.discountType === "percentage") {
+      discount = Math.floor((orderTotal * voucher.discount) / 100);
+      if (voucher.maxDiscount && discount > voucher.maxDiscount) {
+        discount = voucher.maxDiscount;
+      }
+    } else {
+      discount = voucher.discount;
+    }
+
+    console.log(`✅ Voucher valid - discount: ${discount}`);
+
+    res.json({
+      valid: true,
+      voucher: {
+        id: voucher.id,
+        code: voucher.code,
+        discount,
+        description: voucher.description,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Validate voucher error:", error);
+    res.status(500).json({ 
+      valid: false,
+      error: "Failed to validate voucher. Please try again." 
+    });
+  }
+});
+
+// ===== HELPER FUNCTION: FIND BEST CLAIMED PROMOTION =====
 async function findBestClaimedPromotion(
   userId: string,
   subtotal: number,
@@ -4098,7 +4298,6 @@ async function findBestClaimedPromotion(
   const now = new Date();
 
   try {
-    // Get user's claimed promotions
     const claimedPromotions = await db
       .select({
         promotion: promotions,
@@ -4121,16 +4320,15 @@ async function findBestClaimedPromotion(
       return null;
     }
 
-    // Filter by store if provided
     for (const { promotion } of claimedPromotions) {
       if (!promotion) continue;
 
       if (promotion.scope === 'app') {
-        return promotion; // App-wide always applies
+        return promotion;
       }
 
       if (promotion.scope === 'store' && promotion.storeId === storeId) {
-        return promotion; // Store matches
+        return promotion;
       }
     }
 
@@ -4140,20 +4338,6 @@ async function findBestClaimedPromotion(
     return null;
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
