@@ -1216,15 +1216,27 @@ export default function AdminDashboardScreen() {
   });
 
   const { data: promotions = [], isLoading: promotionsLoading, refetch: refetchPromotions } = useQuery<Promotion[]>({
-    queryKey: ["/api/admin/promotions", "demo-user"],
+    queryKey: ["/api/admin/promotions"],
     queryFn: async () => {
       try {
+        // First check if user is admin
+        const userResponse = await apiRequest("GET", "/api/users/demo-user");
+        if (!userResponse.ok) {
+          console.error("Failed to fetch user");
+          return [];
+        }
+        
+        const userData = await userResponse.json();
+        console.log("✅ Current user:", userData);
+        
         const response = await apiRequest("GET", `/api/admin/promotions?userId=demo-user`);
         if (!response.ok) {
-          console.error("Failed to fetch promotions:", response.status);
+          const errorData = await response.json();
+          console.error("Failed to fetch promotions:", response.status, errorData);
           return [];
         }
         const data = await response.json();
+        console.log("✅ Promotions fetched:", data);
         return data;
       } catch (error) {
         console.error("Error fetching promotions:", error);

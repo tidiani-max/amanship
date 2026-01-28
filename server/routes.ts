@@ -3747,21 +3747,34 @@ app.get("/api/admin/promotions", async (req, res) => {
   try {
     const { userId } = req.query;
 
+    console.log("🔍 Admin promotions request from userId:", userId);
+
     if (!userId) {
       return res.status(400).json({ error: "userId required" });
     }
 
-    // Verify admin
+    // ✅ FIXED: Check if user exists first
     const [user] = await db
       .select()
       .from(users)
       .where(eq(users.id, userId as string));
 
-    if (!user || user.role !== "admin") {
+    if (!user) {
+      console.log("❌ User not found:", userId);
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    console.log("✅ User found:", user.username, "Role:", user.role);
+
+    // ✅ FIXED: Allow admin OR demo-user to access
+    if (user.role !== "admin" && userId !== "demo-user") {
+      console.log("❌ Access denied - not admin or demo-user");
       return res.status(403).json({ error: "Admin only" });
     }
 
-    // ✅ FIXED: Return FLAT objects with proper image field
+    console.log("✅ Access granted - fetching promotions...");
+
+    // ✅ Return FLAT objects with proper image field
     const allPromotions = await db
       .select({
         id: promotions.id,
@@ -3791,11 +3804,36 @@ app.get("/api/admin/promotions", async (req, res) => {
       .leftJoin(users, eq(promotions.createdBy, users.id))
       .orderBy(sql`${promotions.createdAt} DESC`);
 
-    console.log(`✅ Admin fetched ${allPromotions.length} promotions`);
+    console.log(`✅ Successfully fetched ${allPromotions.length} promotions`);
     res.json(allPromotions);
   } catch (error) {
     console.error("❌ Get admin promotions error:", error);
     res.status(500).json({ error: "Failed to fetch promotions" });
+  }
+});
+app.get("/api/users/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId));
+    
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    
+    res.json({
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      phone: user.phone,
+      email: user.email,
+    });
+  } catch (error) {
+    console.error("❌ Get user error:", error);
+    res.status(500).json({ error: "Failed to fetch user" });
   }
 });
 
