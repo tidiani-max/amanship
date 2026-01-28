@@ -86,16 +86,36 @@ export default function CheckoutScreen() {
   const [isValidatingVoucher, setIsValidatingVoucher] = useState(false);
 
   // Promotion state
-  const [selectedPromotion, setSelectedPromotion] = useState<any>(null);
+  const [autoAppliedPromotion, setAutoAppliedPromotion] = useState<any>(null);
   const [promotionDiscount, setPromotionDiscount] = useState(0);
   const [freeDelivery, setFreeDelivery] = useState(false);
 
+  // Fetch addresses
   const { data: addresses = [] } = useQuery<Address[]>({
     queryKey: ["/api/addresses", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/addresses?userId=${user!.id}`);
       return res.json();
+    },
+  });
+
+  // Fetch claimed promotions
+  const { data: userClaimedPromotions = [] } = useQuery({
+    queryKey: ["/api/promotions/claimed", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      if (!user?.id) return [];
+      try {
+        const res = await fetch(
+          `${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/claimed?userId=${user.id}`
+        );
+        if (!res.ok) return [];
+        return res.json();
+      } catch (error) {
+        console.error("Failed to fetch claimed promotions:", error);
+        return [];
+      }
     },
   });
 
@@ -175,12 +195,12 @@ export default function CheckoutScreen() {
 
   console.log("📦 Items grouped by store:", Object.keys(itemsByStore).length, "stores");
 
-  // Calculate totals per store
+  // ✅ CRITICAL: Calculate storeTotals BEFORE using it in useEffect
   const storeTotals = Object.entries(itemsByStore).map(
     ([storeId, storeItems]: any) => {
       const storeName = storeItems[0]?.storeName || `Store ${storeId.slice(0, 8)}`;
       
-      const subtotal = storeItems.reduce(
+      const storeSubtotal = storeItems.reduce(
         (sum: number, i: any) => sum + i.product.price * i.quantity,
         0
       );
@@ -189,13 +209,89 @@ export default function CheckoutScreen() {
         storeId,
         storeName,
         items: storeItems,
-        subtotal,
+        subtotal: storeSubtotal,
         deliveryFee: DELIVERY_FEE_PER_STORE,
-        total: subtotal + DELIVERY_FEE_PER_STORE,
+        total: storeSubtotal + DELIVERY_FEE_PER_STORE,
         estimatedDelivery: estimatedDeliveryMinutes || 15,
       };
     }
   );
+
+  // ✅ AUTO-APPLY BEST PROMOTION (now storeTotals is defined)
+  useEffect(() => {
+    console.log("🔍 Checking claimed promotions:", userClaimedPromotions.length);
+    
+    if (userClaimedPromotions.length === 0) {
+      setAutoAppliedPromotion(null);
+      setPromotionDiscount(0);
+      setFreeDelivery(false);
+      return;
+    }
+
+    // Find applicable promotions
+    const applicablePromotions = userClaimedPromotions.filter((promo: any) => {
+      // Check minimum order
+      if (subtotal < promo.minOrder) {
+        console.log(`❌ ${promo.title}: Below minimum (${subtotal} < ${promo.minOrder})`);
+        return false;
+      }
+      
+      // Check store-specific promotions
+      if (promo.scope === 'store') {
+        const hasItemFromStore = storeTotals.some(
+          (st: any) => st.storeId === promo.storeId
+        );
+        if (!hasItemFromStore) {
+          console.log(`❌ ${promo.title}: No items from required store`);
+          return false;
+        }
+      }
+      
+      console.log(`✅ ${promo.title}: Applicable`);
+      return true;
+    });
+
+    if (applicablePromotions.length === 0) {
+      console.log("⚠️ No applicable promotions");
+      setAutoAppliedPromotion(null);
+      setPromotionDiscount(0);
+      setFreeDelivery(false);
+      return;
+    }
+
+    // Sort by best discount
+    const sorted = applicablePromotions.sort((a: any, b: any) => {
+      const discountA = a.type === 'percentage' 
+        ? Math.floor((subtotal * (a.discountValue || 0)) / 100)
+        : a.discountValue || 0;
+      const discountB = b.type === 'percentage'
+        ? Math.floor((subtotal * (b.discountValue || 0)) / 100)
+        : b.discountValue || 0;
+      return discountB - discountA;
+    });
+
+    const bestPromo = sorted[0];
+    setAutoAppliedPromotion(bestPromo);
+
+    // Calculate discount
+    if (bestPromo.type === 'percentage') {
+      const discount = Math.floor((subtotal * (bestPromo.discountValue || 0)) / 100);
+      const finalDiscount = bestPromo.maxDiscount && discount > bestPromo.maxDiscount
+        ? bestPromo.maxDiscount
+        : discount;
+      setPromotionDiscount(finalDiscount);
+      setFreeDelivery(false);
+      console.log(`✅ Applied ${bestPromo.title}: -${finalDiscount}`);
+    } else if (bestPromo.type === 'fixed_amount') {
+      setPromotionDiscount(bestPromo.discountValue || 0);
+      setFreeDelivery(false);
+      console.log(`✅ Applied ${bestPromo.title}: -${bestPromo.discountValue}`);
+    } else if (bestPromo.type === 'free_delivery') {
+      setPromotionDiscount(0);
+      setFreeDelivery(true);
+      console.log(`✅ Applied ${bestPromo.title}: FREE DELIVERY`);
+    }
+  }, [userClaimedPromotions, subtotal, storeTotals]);
 
   // Final totals with promotions
   const totalDeliveryFee = freeDelivery ? 0 : (storeTotals.length * DELIVERY_FEE_PER_STORE);
@@ -300,7 +396,7 @@ export default function CheckoutScreen() {
         total: finalTotal,
         voucherCode: appliedVoucher?.code,
         voucherDiscount,
-        promotionId: selectedPromotion?.id,
+        promotionId: autoAppliedPromotion?.id, // ✅ Include promotion
         promotionDiscount,
         freeDelivery,
         addressId,
@@ -490,6 +586,93 @@ export default function CheckoutScreen() {
           )}
         </View>
 
+        {/* ===== AUTO-APPLIED PROMOTION SECTION ===== */}
+        {autoAppliedPromotion && (
+          <View style={styles.section}>
+            <ThemedText type="h3" style={{ marginBottom: Spacing.md }}>
+              Applied Promotion
+            </ThemedText>
+            
+            <Card style={{
+              backgroundColor: autoAppliedPromotion.color + '15',
+              borderColor: autoAppliedPromotion.color,
+              borderWidth: 2,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.sm }}>
+                <Feather 
+                  name={autoAppliedPromotion.icon || "gift"} 
+                  size={20} 
+                  color={autoAppliedPromotion.color} 
+                />
+                <ThemedText type="body" style={{ 
+                  fontWeight: '600', 
+                  marginLeft: Spacing.sm,
+                  flex: 1 
+                }}>
+                  {autoAppliedPromotion.title}
+                </ThemedText>
+                <Pressable 
+                  onPress={() => {
+                    setAutoAppliedPromotion(null);
+                    setPromotionDiscount(0);
+                    setFreeDelivery(false);
+                  }}
+                >
+                  <Feather name="x" size={20} color={theme.error} />
+                </Pressable>
+              </View>
+              
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                {autoAppliedPromotion.description}
+              </ThemedText>
+              
+              <View style={{ 
+                marginTop: Spacing.md, 
+                paddingTop: Spacing.md, 
+                borderTopWidth: 1, 
+                borderTopColor: theme.border || '#e0e0e0',
+              }}>
+                <ThemedText type="small" style={{ color: autoAppliedPromotion.color, fontWeight: '600' }}>
+                  {freeDelivery 
+                    ? "✓ FREE DELIVERY" 
+                    : `You save ${formatPrice(promotionDiscount)}`
+                  }
+                </ThemedText>
+              </View>
+            </Card>
+          </View>
+        )}
+
+        {/* Show info if promotions available but not applied */}
+        {!autoAppliedPromotion && userClaimedPromotions.length > 0 && (
+          <View style={styles.section}>
+            <ThemedText type="h3" style={{ marginBottom: Spacing.md }}>
+              Available Promotions
+            </ThemedText>
+            
+            <Card style={{ backgroundColor: theme.backgroundDefault }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+                <Feather name="info" size={16} color={theme.textSecondary} />
+                <ThemedText type="small" style={{ color: theme.textSecondary, flex: 1 }}>
+                  You have {userClaimedPromotions.length} claimed promotion{userClaimedPromotions.length !== 1 ? 's' : ''}.
+                  {userClaimedPromotions.length > 0 && subtotal < Math.min(...userClaimedPromotions.map((p: any) => p.minOrder)) && (
+                    ` Add ${formatPrice(Math.min(...userClaimedPromotions.map((p: any) => p.minOrder)) - subtotal)} more to qualify.`
+                  )}
+                </ThemedText>
+              </View>
+              
+              <Pressable 
+                onPress={() => navigation.navigate("Vouchers")}
+                style={{ marginTop: Spacing.sm }}
+              >
+                <ThemedText style={{ color: theme.primary, fontWeight: '600' }}>
+                  View all promotions →
+                </ThemedText>
+              </Pressable>
+            </Card>
+          </View>
+        )}
+
         {/* Voucher Section */}
         <View style={styles.section}>
           <ThemedText type="h3" style={{ marginBottom: Spacing.md }}>
@@ -498,9 +681,10 @@ export default function CheckoutScreen() {
           
           {appliedVoucher ? (
             <Card style={{
-              ...styles.appliedVoucherCard,
               backgroundColor: theme.success + '10',
-              borderColor: theme.success
+              borderColor: theme.success,
+              borderWidth: 2,
+              padding: Spacing.md,
             }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                 <Feather name="check-circle" size={20} color={theme.success} />
@@ -524,7 +708,7 @@ export default function CheckoutScreen() {
                   style={[styles.voucherInput, { 
                     color: theme.text, 
                     backgroundColor: theme.backgroundDefault,
-                    borderColor: theme.border 
+                    borderColor: theme.border || '#e0e0e0'
                   }]}
                   placeholder="Enter voucher code (e.g., RAMADAN50)"
                   placeholderTextColor={theme.textSecondary}
@@ -627,6 +811,7 @@ export default function CheckoutScreen() {
               {formatPrice(subtotal)}
             </ThemedText>
           </View>
+          
           <View style={styles.summaryRow}>
             <ThemedText type="caption" style={{ color: theme.textSecondary }}>
               Total Delivery ({storeTotals.length} {storeTotals.length === 1 ? 'store' : 'stores'})
@@ -641,12 +826,12 @@ export default function CheckoutScreen() {
           </View>
           
           {/* Show promotion discount if applied */}
-          {promotionDiscount > 0 && (
+          {autoAppliedPromotion && promotionDiscount > 0 && (
             <View style={styles.summaryRow}>
-              <ThemedText type="caption" style={{ color: theme.secondary }}>
-                Promotion Discount
+              <ThemedText type="caption" style={{ color: autoAppliedPromotion.color }}>
+                {autoAppliedPromotion.title}
               </ThemedText>
-              <ThemedText type="caption" style={{ color: theme.secondary }}>
+              <ThemedText type="caption" style={{ color: autoAppliedPromotion.color }}>
                 -{formatPrice(promotionDiscount)}
               </ThemedText>
             </View>
@@ -804,11 +989,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 80,
-  },
-
-  appliedVoucherCard: {
-    borderWidth: 2,
-    padding: Spacing.md,
   },
 
   paymentMethods: {

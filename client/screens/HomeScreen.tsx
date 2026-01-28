@@ -49,6 +49,8 @@ const getBannerHeight = (screenWidth: number) => {
   return 200;
 };
 
+
+
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 type UIProduct = Product & {
@@ -321,6 +323,18 @@ export default function HomeScreen() {
     return `Rp ${safePrice.toLocaleString("id-ID")}`;
   };
 
+  const formatDate = (date: string | Date) => {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  return dateObj.toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+
+
+
   const handleAddToCart = (product: UIProduct) => {
     if (!product.inStock) return;
     addToCart(product, 1);
@@ -333,78 +347,82 @@ export default function HomeScreen() {
   };
 
   // ✅ NEW: Handle promotion claim
-  const handleClaimPromotion = async (promo: APIPromotion) => {
-    if (!user?.id) {
-      Alert.alert("Login Required", "Please login to claim this promotion");
+const handleClaimPromotion = async (promo: APIPromotion) => {
+  if (!user?.id) {
+    Alert.alert("Login Required", "Please login to claim this promotion");
+    return;
+  }
+
+  try {
+    console.log("🎁 Claiming promotion:", promo.title);
+    
+    const response = await fetch(
+      `${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/claim`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          promotionId: promo.id,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      Alert.alert("Error", data.error || "Failed to claim promotion");
       return;
     }
 
-    try {
-      console.log("🎁 Claiming promotion:", promo.title);
-      
-      // Call backend to claim
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/claim`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: user.id,
-            promotionId: promo.id,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert("Error", data.error || "Failed to claim promotion");
-        return;
-      }
-
-      if (data.alreadyClaimed) {
-        Alert.alert(
-          "Already Claimed",
-          "You've already claimed this promotion! It will be applied at checkout.",
-          [{ text: "OK" }]
-        );
-        return;
-      }
-
-      // Show success message
+    if (data.alreadyClaimed) {
+      // ✅ Show clear message about already claimed promotion
       Alert.alert(
-        "✅ Promotion Claimed!",
-        `${promo.title} has been added to your account. It will automatically apply at checkout when your order meets the minimum of ${formatPrice(promo.minOrder)}`,
+        "Already Claimed! ✓",
+        `You've already claimed this promotion!\n\n📦 It will automatically apply at checkout when you spend ${formatPrice(promo.minOrder)} or more.`,
         [
           {
             text: "View My Promotions",
-            onPress: () => {
-              navigation.navigate("Vouchers" as any);
-            },
+            onPress: () => navigation.navigate("Vouchers" as any),
           },
-          {
-            text: "Shop Now",
-            onPress: () => {
-              // Filter by store if store-specific
-              if (promo.storeId) {
-                const store = storesData.find(s => s.id === promo.storeId);
-                if (store) {
-                  setSelectedStore(store);
-                }
-              }
-            },
-          },
-          { text: "OK" },
+          { text: "Got it!" }
         ]
       );
-
-      // Refresh promotions list
-      refetchPromotions();
-    } catch (error) {
-      console.error("❌ Claim promotion error:", error);
-      Alert.alert("Error", "Failed to claim promotion. Please try again.");
+      return;
     }
-  };
+
+    // ✅ INSTANT SUCCESS FEEDBACK
+    Alert.alert(
+      "🎉 Promotion Claimed!",
+      `${promo.title} has been added to your account!\n\n✓ Will auto-apply at checkout\n✓ Minimum order: ${formatPrice(promo.minOrder)}\n✓ Valid until ${formatDate(promo.validUntil)}`,
+      [
+        {
+          text: "Shop Now",
+          onPress: () => {
+            if (promo.storeId) {
+              const store = storesData.find(s => s.id === promo.storeId);
+              if (store) {
+                setSelectedStore(store);
+              }
+            }
+          },
+        },
+        {
+          text: "View All Promotions",
+          onPress: () => navigation.navigate("Vouchers" as any),
+        },
+      ]
+    );
+
+    // ✅ REFRESH UI IMMEDIATELY
+    refetchPromotions();
+    
+  } catch (error) {
+    console.error("❌ Claim promotion error:", error);
+    Alert.alert("Network Error", "Failed to claim promotion. Please check your connection and try again.");
+  }
+};
+
 
   const renderProductCard = (product: UIProduct) => {
     const hasDiscount = product.originalPrice && product.originalPrice > product.price;
@@ -668,69 +686,72 @@ export default function HomeScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ gap: Spacing.md, paddingVertical: Spacing.sm }}
             >
-              {promotionsData.map((promo) => (
-                <Pressable
-                  key={promo.id}
-                  style={[
-                    styles.promoCard,
-                    {
-                      backgroundColor: promo.color + "15",
-                      borderColor: promo.color,
-                      opacity: claimedPromotionsMap[promo.id] ? 0.7 : 1,
-                    },
-                  ]}
-                  onPress={() => handleClaimPromotion(promo)}
-                  disabled={claimedPromotionsMap[promo.id] || false}
-                >
-                  {promo.bannerImage ? (
-                    <Image 
-                      source={{ uri: promo.bannerImage }} 
-                      style={{ width: '100%', height: 100, borderRadius: 12, marginBottom: 8 }}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Feather name={promo.icon as any} size={32} color={promo.color} />
-                  )}
-                  
-                  <ThemedText style={styles.promoTitle} numberOfLines={2}>
-                    {promo.title}
-                  </ThemedText>
-                  
-                  <ThemedText style={styles.promoDesc} numberOfLines={2}>
-                    {promo.description}
-                  </ThemedText>
-                  
-                  {promo.scope === 'store' && promo.storeName && (
-                    <View style={styles.storeTag}>
-                      <Feather name="map-pin" size={10} color="#059669" />
-                      <ThemedText style={styles.storeTagText}>
-                        {promo.storeName}
-                      </ThemedText>
-                    </View>
-                  )}
-                  
-                  {promo.minOrder > 0 && (
-                    <ThemedText style={styles.minOrderText}>
-                      Min. order: {formatPrice(promo.minOrder)}
-                    </ThemedText>
-                  )}
-                  
-                  <View
-                    style={[
-                      styles.promoButton,
-                      {
-                        backgroundColor: claimedPromotionsMap[promo.id]
-                          ? "#9ca3af"
-                          : promo.color,
-                      },
-                    ]}
-                  >
-                    <ThemedText style={{ color: "white", fontWeight: "700" }}>
-                      {claimedPromotionsMap[promo.id] ? "✓ CLAIMED" : "CLAIM NOW"}
-                    </ThemedText>
-                  </View>
-                </Pressable>
-              ))}
+              {promotionsData.map((promo) => {
+  const isClaimed = claimedPromotionsMap[promo.id] || false;
+  
+  return (
+    <Pressable
+      key={promo.id}
+      style={[
+        styles.promoCard,
+        {
+          backgroundColor: promo.color + "15",
+          borderColor: promo.color,
+          opacity: isClaimed ? 0.85 : 1, // ✅ Visual feedback for claimed
+        },
+      ]}
+      onPress={() => handleClaimPromotion(promo)}
+      disabled={isClaimed}
+    >
+      {promo.bannerImage ? (
+        <Image 
+          source={{ uri: promo.bannerImage }} 
+          style={{ width: '100%', height: 100, borderRadius: 12, marginBottom: 8 }}
+          resizeMode="cover"
+        />
+      ) : (
+        <Feather name={promo.icon as any} size={32} color={promo.color} />
+      )}
+      
+      <ThemedText style={styles.promoTitle} numberOfLines={2}>
+        {promo.title}
+      </ThemedText>
+      
+      <ThemedText style={styles.promoDesc} numberOfLines={2}>
+        {promo.description}
+      </ThemedText>
+      
+      {promo.scope === 'store' && promo.storeName && (
+        <View style={styles.storeTag}>
+          <Feather name="map-pin" size={10} color="#059669" />
+          <ThemedText style={styles.storeTagText}>
+            {promo.storeName}
+          </ThemedText>
+        </View>
+      )}
+      
+      {promo.minOrder > 0 && (
+        <ThemedText style={styles.minOrderText}>
+          Min. order: {formatPrice(promo.minOrder)}
+        </ThemedText>
+      )}
+      
+      {/* ✅ IMPROVED BUTTON with clear states */}
+      <View
+        style={[
+          styles.promoButton,
+          {
+            backgroundColor: isClaimed ? "#10b981" : promo.color,
+          },
+        ]}
+      >
+        <ThemedText style={{ color: "white", fontWeight: "700" }}>
+          {isClaimed ? "✓ CLAIMED - AUTO-APPLIES" : "CLAIM NOW"}
+        </ThemedText>
+      </View>
+    </Pressable>
+  );
+})}
             </ScrollView>
           </View>
         )}
