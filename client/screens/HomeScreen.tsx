@@ -729,15 +729,16 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
             }}
             disabled={isClaimed && !isNotStarted && !isExpired}
           >
-            {promo.bannerImage ? (
-              <Image 
-                source={{ uri: promo.bannerImage }} 
-                style={{ width: '100%', height: 100, borderRadius: 12, marginBottom: 8 }}
-                resizeMode="cover"
-              />
-            ) : (
-              <Feather name={promo.icon as any} size={32} color={promo.color} />
-            )}
+          {promo.bannerImage ? (
+  <Image
+    source={{ uri: promo.bannerImage }}
+    style={{ width: '100%', height: 100, borderRadius: 12, marginBottom: 8 }}
+    resizeMode="cover"
+  />
+) : (
+  <Feather name={promo.icon as any} size={32} color={promo.color} />
+)}
+
             
             <ThemedText style={styles.promoTitle} numberOfLines={2}>
               {promo.title}
