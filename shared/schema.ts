@@ -292,6 +292,15 @@ export const userVoucherUsage = pgTable("user_voucher_usage", {
   usedAt: timestamp("used_at").defaultNow().notNull(),
 });
 
+export const userClaimedPromotions = pgTable("user_claimed_promotions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  promotionId: varchar("promotion_id").notNull().references(() => promotions.id),
+  claimedAt: timestamp("claimed_at").defaultNow().notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+});
+
+
 // --- Relations ---
 
 export const messagesRelations = relations(messages, ({ one }) => ({
@@ -399,6 +408,17 @@ export const userVoucherUsageRelations = relations(userVoucherUsage, ({ one }) =
   order: one(orders, {
     fields: [userVoucherUsage.orderId],
     references: [orders.id],
+  }),
+}));
+
+export const userClaimedPromotionsRelations = relations(userClaimedPromotions, ({ one }) => ({
+  user: one(users, {
+    fields: [userClaimedPromotions.userId],
+    references: [users.id],
+  }),
+  promotion: one(promotions, {
+    fields: [userClaimedPromotions.promotionId],
+    references: [promotions.id],
   }),
 }));
 
@@ -542,6 +562,8 @@ export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 
 export type Voucher = typeof vouchers.$inferSelect;
 export type InsertVoucher = z.infer<typeof insertVoucherSchema>;
+
+export type UserClaimedPromotion = typeof userClaimedPromotions.$inferSelect;
 
 export type Promotion = typeof promotions.$inferSelect;
 export type InsertPromotion = z.infer<typeof insertPromotionSchema>;
