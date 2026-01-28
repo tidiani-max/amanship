@@ -2833,9 +2833,34 @@ app.get("/api/promotions/active", async (req, res) => {
     const { userId } = req.query;
     const now = new Date();
 
-    // Get all active promotions
+    // ✅ Get all active promotions with normalized image fields
     const activePromotions = await db
-      .select()
+      .select({
+        id: promotions.id,
+        title: promotions.title,
+        description: promotions.description,
+        type: promotions.type,
+        discountValue: promotions.discountValue,
+        minOrder: promotions.minOrder,
+        icon: promotions.icon,
+        color: promotions.color,
+
+        // 🔥 IMPORTANT FIX
+        image: sql<string>`COALESCE(${promotions.bannerImage}, ${promotions.image})`,
+        bannerImage: promotions.bannerImage,
+
+        validFrom: promotions.validFrom,
+        validUntil: promotions.validUntil,
+        scope: promotions.scope,
+        storeId: promotions.storeId,
+        userLimit: promotions.userLimit,
+        usageLimit: promotions.usageLimit,
+        usedCount: promotions.usedCount,
+        targetUsers: promotions.targetUsers,
+        specificUserIds: promotions.specificUserIds,
+        priority: promotions.priority,
+        createdAt: promotions.createdAt,
+      })
       .from(promotions)
       .where(
         and(
@@ -2846,13 +2871,17 @@ app.get("/api/promotions/active", async (req, res) => {
       )
       .orderBy(sql`${promotions.priority} DESC, ${promotions.createdAt} DESC`);
 
+    // 🔹 If no userId, return directly
     if (!userId) {
       return res.json(activePromotions);
     }
 
-    // Get user info for targeting
-    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
-    
+    // Get user info
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId as string));
+
     // Get user's promotion usage
     const userUsage = await db
       .select({
@@ -2865,21 +2894,18 @@ app.get("/api/promotions/active", async (req, res) => {
 
     const usageMap = new Map(userUsage.map(u => [u.promotionId, u.count]));
 
-    // Filter promotions based on user eligibility
+    // Filter eligible promotions
     const eligiblePromotions = activePromotions.filter(promo => {
-      // Check usage limit per user
       const userUsageCount = usageMap.get(promo.id) || 0;
       if (userUsageCount >= promo.userLimit) return false;
-
-      // Check total usage limit
       if (promo.usageLimit && promo.usedCount >= promo.usageLimit) return false;
 
-      // Check targeting
       if (promo.targetUsers === "new_users" && !user?.isNewUser) return false;
       if (promo.targetUsers === "returning_users" && user?.isNewUser) return false;
+
       if (promo.targetUsers === "specific_users") {
-        const specificIds = promo.specificUserIds as string[] || [];
-        if (!specificIds.includes(userId as string)) return false;
+        const ids = (promo.specificUserIds as string[]) || [];
+        if (!ids.includes(userId as string)) return false;
       }
 
       return true;
@@ -2891,6 +2917,7 @@ app.get("/api/promotions/active", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch promotions" });
   }
 });
+
 
 // ===== GET FEATURED RAMADAN PROMOTIONS (FOR BANNER) =====
 app.get("/api/promotions/featured", async (req, res) => {

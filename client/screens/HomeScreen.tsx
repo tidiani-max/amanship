@@ -687,6 +687,7 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
       contentContainerStyle={{ gap: Spacing.md, paddingVertical: Spacing.sm }}
     >
       {promotionsData.map((promo) => {
+        console.log("PROMO RAW:", promo);
         const isClaimed = claimedPromotionsMap[promo.id] || false;
         
         // ✅ CHECK PROMOTION TIMING
