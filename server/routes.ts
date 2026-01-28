@@ -3496,6 +3496,9 @@ app.get("/api/products/ramadan-specials", async (req, res) => {
   }
 });
 
+
+
+
 // ===== PICKER: CREATE PROMOTION FOR THEIR STORE =====
 app.post("/api/picker/promotions", async (req, res) => {
   try {
@@ -3564,13 +3567,14 @@ app.get("/api/picker/promotions", async (req, res) => {
       return res.status(403).json({ error: "Not assigned to any store" });
     }
 
-    // Get all promotions for this store
+    // ✅ FIXED: Get all promotions for this store
     const storePromotions = await db
       .select()
       .from(promotions)
       .where(eq(promotions.storeId, staff.storeId))
       .orderBy(sql`${promotions.createdAt} DESC`);
 
+    console.log(`✅ Picker fetched ${storePromotions.length} promotions for store ${staff.storeId}`);
     res.json(storePromotions);
   } catch (error) {
     console.error("❌ Get picker promotions error:", error);
@@ -3608,13 +3612,13 @@ app.patch("/api/picker/promotions/:id", async (req, res) => {
       return res.status(403).json({ error: "Promotion not found or not yours" });
     }
 
-    // Update promotion
+    // ✅ FIXED: Update promotion
     const updateData: any = {};
-    if (title) updateData.title = title;
-    if (description) updateData.description = description;
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
     if (discountValue !== undefined) updateData.discountValue = parseInt(discountValue);
     if (minOrder !== undefined) updateData.minOrder = parseInt(minOrder);
-    if (validUntil) updateData.validUntil = new Date(validUntil);
+    if (validUntil !== undefined) updateData.validUntil = new Date(validUntil);
     if (isActive !== undefined) updateData.isActive = isActive;
     if (showInBanner !== undefined) updateData.showInBanner = showInBanner;
 
@@ -3624,7 +3628,7 @@ app.patch("/api/picker/promotions/:id", async (req, res) => {
       .where(eq(promotions.id, id))
       .returning();
 
-    console.log(`✅ Updated promotion: ${id}`);
+    console.log(`✅ Picker updated promotion: ${id}`);
     res.json(updated);
   } catch (error) {
     console.error("❌ Update promotion error:", error);
@@ -3662,10 +3666,10 @@ app.delete("/api/picker/promotions/:id", async (req, res) => {
       return res.status(403).json({ error: "Promotion not found or not yours" });
     }
 
-    // Delete promotion
+    // ✅ FIXED: Delete promotion
     await db.delete(promotions).where(eq(promotions.id, id));
 
-    console.log(`✅ Deleted promotion: ${id}`);
+    console.log(`✅ Picker deleted promotion: ${id}`);
     res.json({ success: true, message: "Promotion deleted" });
   } catch (error) {
     console.error("❌ Delete promotion error:", error);
@@ -3673,57 +3677,7 @@ app.delete("/api/picker/promotions/:id", async (req, res) => {
   }
 });
 
-// ===== ADMIN: CREATE APP-WIDE PROMOTION =====
-app.post("/api/admin/promotions", async (req, res) => {
-  try {
-    const { userId, title, description, type, discountValue, minOrder, validUntil, showInBanner, applicableStoreIds } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: "userId required" });
-    }
-
-    // Verify admin
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId));
-
-    if (!user || user.role !== "admin") {
-      return res.status(403).json({ error: "Admin only" });
-    }
-
-    // Create app-wide promotion
-    const [newPromotion] = await db
-      .insert(promotions)
-      .values({
-        title,
-        description,
-        type,
-        discountValue: discountValue ? parseInt(discountValue) : null,
-        minOrder: minOrder ? parseInt(minOrder) : 0,
-        validFrom: new Date(),
-        validUntil: new Date(validUntil),
-        storeId: null, // ✅ null = app-wide
-        createdBy: userId,
-        scope: "app", // ✅ App-level promotion
-        applicableStoreIds: applicableStoreIds || null, // Which stores can use it
-        showInBanner: showInBanner || false,
-        isActive: true,
-        usedCount: 0,
-        userLimit: 1,
-      })
-      .returning();
-
-    console.log(`✅ Admin created app-wide promotion: ${newPromotion.title}`);
-
-    res.json(newPromotion);
-  } catch (error) {
-    console.error("❌ Admin create promotion error:", error);
-    res.status(500).json({ error: "Failed to create promotion" });
-  }
-});
-
-// ===== ADMIN: GET ALL PROMOTIONS =====
+// ===== ADMIN: GET ALL PROMOTIONS ===== 
 app.get("/api/admin/promotions", async (req, res) => {
   try {
     const { userId } = req.query;
@@ -3742,10 +3696,26 @@ app.get("/api/admin/promotions", async (req, res) => {
       return res.status(403).json({ error: "Admin only" });
     }
 
-    // Get all promotions with store info
+    // ✅ FIXED: Return FLAT objects, not nested
     const allPromotions = await db
       .select({
-        promotion: promotions,
+        id: promotions.id,
+        title: promotions.title,
+        description: promotions.description,
+        type: promotions.type,
+        discountValue: promotions.discountValue,
+        minOrder: promotions.minOrder,
+        validFrom: promotions.validFrom,
+        validUntil: promotions.validUntil,
+        storeId: promotions.storeId,
+        scope: promotions.scope,
+        isActive: promotions.isActive,
+        usedCount: promotions.usedCount,
+        showInBanner: promotions.showInBanner,
+        icon: promotions.icon,
+        color: promotions.color,
+        maxDiscount: promotions.maxDiscount,
+        createdAt: promotions.createdAt,
         storeName: stores.name,
         creatorName: users.username,
       })
@@ -3754,6 +3724,7 @@ app.get("/api/admin/promotions", async (req, res) => {
       .leftJoin(users, eq(promotions.createdBy, users.id))
       .orderBy(sql`${promotions.createdAt} DESC`);
 
+    console.log(`✅ Admin fetched ${allPromotions.length} promotions`);
     res.json(allPromotions);
   } catch (error) {
     console.error("❌ Get admin promotions error:", error);
@@ -3761,11 +3732,10 @@ app.get("/api/admin/promotions", async (req, res) => {
   }
 });
 
-// ===== ADMIN: UPDATE ANY PROMOTION =====
-app.patch("/api/admin/promotions/:id", async (req, res) => {
+// ===== ADMIN: CREATE APP-WIDE PROMOTION =====
+app.post("/api/admin/promotions", async (req, res) => {
   try {
-    const { id } = req.params;
-    const { userId, title, description, discountValue, minOrder, validUntil, isActive, showInBanner, applicableStoreIds } = req.body;
+    const { userId, title, description, type, discountValue, minOrder, validUntil, showInBanner, scope, applicableStoreIds } = req.body;
 
     if (!userId) {
       return res.status(400).json({ error: "userId required" });
@@ -3781,22 +3751,91 @@ app.patch("/api/admin/promotions/:id", async (req, res) => {
       return res.status(403).json({ error: "Admin only" });
     }
 
-    // Update promotion
+    // ✅ FIXED: Create promotion with proper defaults
+    const [newPromotion] = await db
+      .insert(promotions)
+      .values({
+        title,
+        description,
+        type,
+        discountValue: discountValue ? parseInt(discountValue) : null,
+        minOrder: minOrder ? parseInt(minOrder) : 0,
+        validFrom: new Date(), // Starts now by default
+        validUntil: new Date(validUntil),
+        storeId: scope === "store" && applicableStoreIds?.length === 1 ? applicableStoreIds[0] : null,
+        createdBy: userId,
+        scope: scope || "app",
+        applicableStoreIds: scope === "store" && applicableStoreIds?.length > 1 ? applicableStoreIds : null,
+        showInBanner: showInBanner || false,
+        isActive: true,
+        usedCount: 0,
+        userLimit: 1,
+        icon: "gift", // Default icon
+        color: "#10b981", // Default color
+        priority: 0,
+      })
+      .returning();
+
+    console.log(`✅ Admin created promotion: ${newPromotion.title}`);
+    res.json(newPromotion);
+  } catch (error) {
+    console.error("❌ Admin create promotion error:", error);
+    res.status(500).json({ error: "Failed to create promotion" });
+  }
+});
+
+// ===== ADMIN: UPDATE ANY PROMOTION =====
+app.patch("/api/admin/promotions/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, title, description, discountValue, minOrder, validUntil, isActive, showInBanner, scope, applicableStoreIds } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Verify admin
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId));
+
+    if (!user || user.role !== "admin") {
+      return res.status(403).json({ error: "Admin only" });
+    }
+
+    // ✅ FIXED: Update promotion with proper type handling
     const updateData: any = {};
-    if (title) updateData.title = title;
-    if (description) updateData.description = description;
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
     if (discountValue !== undefined) updateData.discountValue = parseInt(discountValue);
     if (minOrder !== undefined) updateData.minOrder = parseInt(minOrder);
-    if (validUntil) updateData.validUntil = new Date(validUntil);
+    if (validUntil !== undefined) updateData.validUntil = new Date(validUntil);
     if (isActive !== undefined) updateData.isActive = isActive;
     if (showInBanner !== undefined) updateData.showInBanner = showInBanner;
-    if (applicableStoreIds !== undefined) updateData.applicableStoreIds = applicableStoreIds;
+    if (scope !== undefined) updateData.scope = scope;
+    if (applicableStoreIds !== undefined) {
+      if (scope === "store" && applicableStoreIds?.length === 1) {
+        updateData.storeId = applicableStoreIds[0];
+        updateData.applicableStoreIds = null;
+      } else if (scope === "store" && applicableStoreIds?.length > 1) {
+        updateData.storeId = null;
+        updateData.applicableStoreIds = applicableStoreIds;
+      } else {
+        updateData.storeId = null;
+        updateData.applicableStoreIds = null;
+      }
+    }
 
     const [updated] = await db
       .update(promotions)
       .set(updateData)
       .where(eq(promotions.id, id))
       .returning();
+
+    if (!updated) {
+      return res.status(404).json({ error: "Promotion not found" });
+    }
 
     console.log(`✅ Admin updated promotion: ${id}`);
     res.json(updated);
@@ -3826,8 +3865,15 @@ app.delete("/api/admin/promotions/:id", async (req, res) => {
       return res.status(403).json({ error: "Admin only" });
     }
 
-    // Delete promotion
-    await db.delete(promotions).where(eq(promotions.id, id));
+    // ✅ FIXED: Proper deletion
+    const [deleted] = await db
+      .delete(promotions)
+      .where(eq(promotions.id, id))
+      .returning();
+
+    if (!deleted) {
+      return res.status(404).json({ error: "Promotion not found" });
+    }
 
     console.log(`✅ Admin deleted promotion: ${id}`);
     res.json({ success: true, message: "Promotion deleted" });
@@ -3836,6 +3882,7 @@ app.delete("/api/admin/promotions/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to delete promotion" });
   }
 });
+
 
 // ===== HOME: GET PROMOTION BANNERS FROM NEAREST STORES =====
 // ==================== PROMOTIONS & VOUCHERS ROUTES ====================

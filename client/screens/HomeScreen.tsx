@@ -668,93 +668,150 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
         )}
 
         {/* ===== RAMADAN PROMOTIONS - FIXED ===== */}
-        {promotionsData && promotionsData.length > 0 && (
-          <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
-            <View style={styles.ramadanHeader}>
-              <ThemedText type="h3" style={styles.sectionTitle}>
-                🌙 Ramadan Specials
-              </ThemedText>
-              <Pressable onPress={() => refetchPromotions()}>
-                <ThemedText style={{ color: theme.primary, fontWeight: '600' }}>
-                  Refresh
-                </ThemedText>
-              </Pressable>
-            </View>
-            
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: Spacing.md, paddingVertical: Spacing.sm }}
-            >
-              {promotionsData.map((promo) => {
-  const isClaimed = claimedPromotionsMap[promo.id] || false;
-  
-  return (
-    <Pressable
-      key={promo.id}
-      style={[
-        styles.promoCard,
-        {
-          backgroundColor: promo.color + "15",
-          borderColor: promo.color,
-          opacity: isClaimed ? 0.85 : 1, // ✅ Visual feedback for claimed
-        },
-      ]}
-      onPress={() => handleClaimPromotion(promo)}
-      disabled={isClaimed}
+          {promotionsData && promotionsData.length > 0 && (
+  <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
+    <View style={styles.ramadanHeader}>
+      <ThemedText type="h3" style={styles.sectionTitle}>
+        🌙 Ramadan Specials
+      </ThemedText>
+      <Pressable onPress={() => refetchPromotions()}>
+        <ThemedText style={{ color: theme.primary, fontWeight: '600' }}>
+          Refresh
+        </ThemedText>
+      </Pressable>
+    </View>
+    
+    <ScrollView 
+      horizontal 
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ gap: Spacing.md, paddingVertical: Spacing.sm }}
     >
-      {promo.bannerImage ? (
-        <Image 
-          source={{ uri: promo.bannerImage }} 
-          style={{ width: '100%', height: 100, borderRadius: 12, marginBottom: 8 }}
-          resizeMode="cover"
-        />
-      ) : (
-        <Feather name={promo.icon as any} size={32} color={promo.color} />
-      )}
-      
-      <ThemedText style={styles.promoTitle} numberOfLines={2}>
-        {promo.title}
-      </ThemedText>
-      
-      <ThemedText style={styles.promoDesc} numberOfLines={2}>
-        {promo.description}
-      </ThemedText>
-      
-      {promo.scope === 'store' && promo.storeName && (
-        <View style={styles.storeTag}>
-          <Feather name="map-pin" size={10} color="#059669" />
-          <ThemedText style={styles.storeTagText}>
-            {promo.storeName}
-          </ThemedText>
-        </View>
-      )}
-      
-      {promo.minOrder > 0 && (
-        <ThemedText style={styles.minOrderText}>
-          Min. order: {formatPrice(promo.minOrder)}
-        </ThemedText>
-      )}
-      
-      {/* ✅ IMPROVED BUTTON with clear states */}
-      <View
-        style={[
-          styles.promoButton,
-          {
-            backgroundColor: isClaimed ? "#10b981" : promo.color,
-          },
-        ]}
-      >
-        <ThemedText style={{ color: "white", fontWeight: "700" }}>
-          {isClaimed ? "✓ CLAIMED - AUTO-APPLIES" : "CLAIM NOW"}
-        </ThemedText>
-      </View>
-    </Pressable>
-  );
-})}
-            </ScrollView>
-          </View>
-        )}
+      {promotionsData.map((promo) => {
+        const isClaimed = claimedPromotionsMap[promo.id] || false;
+        
+        // ✅ CHECK PROMOTION TIMING
+        const now = new Date();
+        const validFrom = new Date(promo.validFrom);
+        const validUntil = new Date(promo.validUntil);
+        const isNotStarted = now < validFrom;
+        const isExpired = now > validUntil;
+        
+        return (
+          <Pressable
+            key={promo.id}
+            style={[
+              styles.promoCard,
+              {
+                backgroundColor: promo.color + "15",
+                borderColor: promo.color,
+                opacity: isClaimed ? 0.85 : isNotStarted || isExpired ? 0.6 : 1,
+              },
+            ]}
+            onPress={() => {
+              // ✅ HANDLE DIFFERENT STATES
+              if (isNotStarted) {
+                Alert.alert(
+                  "🔒 Not Started Yet",
+                  `This promotion will open on ${formatDate(promo.validFrom)}.\n\nCheck back then to claim it!`,
+                  [{ text: "Got it!" }]
+                );
+                return;
+              }
+              if (isExpired) {
+                Alert.alert(
+                  "❌ Expired",
+                  `This promotion ended on ${formatDate(promo.validUntil)}.`,
+                  [{ text: "OK" }]
+                );
+                return;
+              }
+              handleClaimPromotion(promo);
+            }}
+            disabled={isClaimed && !isNotStarted && !isExpired}
+          >
+            {promo.bannerImage ? (
+              <Image 
+                source={{ uri: promo.bannerImage }} 
+                style={{ width: '100%', height: 100, borderRadius: 12, marginBottom: 8 }}
+                resizeMode="cover"
+              />
+            ) : (
+              <Feather name={promo.icon as any} size={32} color={promo.color} />
+            )}
+            
+            <ThemedText style={styles.promoTitle} numberOfLines={2}>
+              {promo.title}
+            </ThemedText>
+            
+            <ThemedText style={styles.promoDesc} numberOfLines={2}>
+              {promo.description}
+            </ThemedText>
+            
+            {promo.scope === 'store' && promo.storeName && (
+              <View style={styles.storeTag}>
+                <Feather name="map-pin" size={10} color="#059669" />
+                <ThemedText style={styles.storeTagText}>
+                  {promo.storeName}
+                </ThemedText>
+              </View>
+            )}
+            
+            {promo.minOrder > 0 && (
+              <ThemedText style={styles.minOrderText}>
+                Min. order: {formatPrice(promo.minOrder)}
+              </ThemedText>
+            )}
+            
+            {/* ✅ SHOW DATE INFO FOR NOT-STARTED PROMOTIONS */}
+            {isNotStarted && (
+              <View style={[styles.dateInfo, { backgroundColor: theme.warning + '20', marginTop: 8 }]}>
+                <Feather name="calendar" size={12} color={theme.warning} />
+                <ThemedText style={{ fontSize: 11, color: theme.warning, marginLeft: 4, fontWeight: '600' }}>
+                  Opens {formatDate(promo.validFrom)}
+                </ThemedText>
+              </View>
+            )}
+            
+            {isExpired && (
+              <View style={[styles.dateInfo, { backgroundColor: theme.error + '20', marginTop: 8 }]}>
+                <Feather name="x-circle" size={12} color={theme.error} />
+                <ThemedText style={{ fontSize: 11, color: theme.error, marginLeft: 4, fontWeight: '600' }}>
+                  Expired {formatDate(promo.validUntil)}
+                </ThemedText>
+              </View>
+            )}
+            
+            {/* ✅ BUTTON WITH TIME-BASED TEXT */}
+            <View
+              style={[
+                styles.promoButton,
+                {
+                  backgroundColor: isNotStarted 
+                    ? theme.textSecondary 
+                    : isExpired 
+                    ? theme.error 
+                    : isClaimed 
+                    ? "#10b981" 
+                    : promo.color,
+                },
+              ]}
+            >
+              <ThemedText style={{ color: "white", fontWeight: "700" }}>
+                {isNotStarted 
+                  ? "🔒 NOT OPEN YET" 
+                  : isExpired 
+                  ? "❌ EXPIRED" 
+                  : isClaimed 
+                  ? "✓ CLAIMED - AUTO-APPLIES" 
+                  : "CLAIM NOW"}
+              </ThemedText>
+            </View>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  </View>
+)}
 
         {/* ===== VOUCHERS SECTION ===== */}
         {vouchersData && vouchersData.length > 0 && (
@@ -1251,4 +1308,13 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
   },
+ dateInfo: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+  borderRadius: 6,
+  alignSelf: 'flex-start',
+},
+
 });

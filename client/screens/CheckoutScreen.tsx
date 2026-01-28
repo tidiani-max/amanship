@@ -455,11 +455,6 @@ export default function CheckoutScreen() {
             <ThemedText type="h3">
               {t.checkout.deliveryAddress}
             </ThemedText>
-            <Pressable onPress={() => navigation.navigate("EditAddress")}>
-              <ThemedText type="caption" style={{ color: theme.primary, fontWeight: "600" }}>
-                Change
-              </ThemedText>
-            </Pressable>
           </View>
           
           <Card>

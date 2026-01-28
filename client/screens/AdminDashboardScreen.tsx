@@ -1082,13 +1082,24 @@ export default function AdminDashboardScreen() {
     refetchInterval: 30000,
   });
 
-  const { data: promotions = [], isLoading: promotionsLoading } = useQuery<any[]>({
-    queryKey: ["/api/admin/promotions"],
-    queryFn: async () => {
+const { data: promotions = [], isLoading: promotionsLoading, refetch: refetchPromotions } = useQuery<Promotion[]>({
+  queryKey: ["/api/admin/promotions", "demo-user"],
+  queryFn: async () => {
+    try {
       const response = await apiRequest("GET", `/api/admin/promotions?userId=demo-user`);
-      return response.json();
-    },
-  });
+      if (!response.ok) {
+        console.error("Failed to fetch promotions:", response.status);
+        return [];
+      }
+      const data = await response.json();
+      console.log("✅ Promotions fetched:", data);
+      return data;
+    } catch (error) {
+      console.error("Error fetching promotions:", error);
+      return [];
+    }
+  },
+});
 
   // ---------------------- MUTATIONS ----------------------
   const createStoreMutation = useMutation({
@@ -1190,48 +1201,57 @@ export default function AdminDashboardScreen() {
   });
 
   // ✅ NEW: Promotion Mutations
-  const createPromotionMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const response = await apiRequest("POST", "/api/admin/promotions", { ...data, userId: "demo-user" });
-      if (!response.ok) throw new Error((await response.json()).error);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
-      setShowPromotionModal(false);
-      setSelectedPromotion(null);
-      Alert.alert("Success", "Promotion created");
-    },
-    onError: (error: Error) => Alert.alert("Error", error.message),
-  });
+const createPromotionMutation = useMutation({
+  mutationFn: async (data: any) => {
+    const response = await apiRequest("POST", "/api/admin/promotions", { 
+      ...data, 
+      userId: "demo-user" 
+    });
+    if (!response.ok) throw new Error((await response.json()).error);
+    return response.json();
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
+    refetchPromotions(); // ✅ ADD THIS LINE
+    setShowPromotionModal(false);
+    setSelectedPromotion(null);
+    Alert.alert("Success", "Promotion created");
+  },
+  onError: (error: Error) => Alert.alert("Error", error.message),
+});
 
-  const updatePromotionMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const response = await apiRequest("PATCH", `/api/admin/promotions/${id}`, { ...data, userId: "demo-user" });
-      if (!response.ok) throw new Error((await response.json()).error);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
-      setShowPromotionModal(false);
-      setSelectedPromotion(null);
-      Alert.alert("Success", "Promotion updated");
-    },
-    onError: (error: Error) => Alert.alert("Error", error.message),
-  });
+const updatePromotionMutation = useMutation({
+  mutationFn: async ({ id, data }: { id: string; data: any }) => {
+    const response = await apiRequest("PATCH", `/api/admin/promotions/${id}`, { 
+      ...data, 
+      userId: "demo-user" 
+    });
+    if (!response.ok) throw new Error((await response.json()).error);
+    return response.json();
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
+    refetchPromotions(); // ✅ ADD THIS LINE
+    setShowPromotionModal(false);
+    setSelectedPromotion(null);
+    Alert.alert("Success", "Promotion updated");
+  },
+  onError: (error: Error) => Alert.alert("Error", error.message),
+});
 
-  const deletePromotionMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await apiRequest("DELETE", `/api/admin/promotions/${id}?userId=demo-user`);
-      if (!response.ok) throw new Error((await response.json()).error);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
-      Alert.alert("Success", "Promotion deleted");
-    },
-    onError: (error: Error) => Alert.alert("Error", error.message),
-  });
+const deletePromotionMutation = useMutation({
+  mutationFn: async (id: string) => {
+    const response = await apiRequest("DELETE", `/api/admin/promotions/${id}?userId=demo-user`);
+    if (!response.ok) throw new Error((await response.json()).error);
+    return response.json();
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
+    refetchPromotions(); // ✅ ADD THIS LINE
+    Alert.alert("Success", "Promotion deleted");
+  },
+  onError: (error: Error) => Alert.alert("Error", error.message),
+});
 
   const togglePromotionActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
@@ -1287,26 +1307,25 @@ export default function AdminDashboardScreen() {
     toggleStaffStatusMutation.mutate({ userId, status: nextStatus });
   };
 
-  const handlePromotionSubmit = (data: any) => {
-    if (selectedPromotion) {
-      updatePromotionMutation.mutate({ id: selectedPromotion.id, data });
-    } else {
-      createPromotionMutation.mutate(data);
-    }
-  };
+const handlePromotionSubmit = (data: any) => {
+  if (selectedPromotion) {
+    updatePromotionMutation.mutate({ id: selectedPromotion.id, data });
+  } else {
+    createPromotionMutation.mutate(data);
+  }
+};
 
-  const handlePromotionDelete = (promo: Promotion) => {
-    confirmAction(
-      "Delete Promotion",
-      `Delete "${promo.title}"?`,
-      () => deletePromotionMutation.mutate(promo.id)
-    );
-  };
+const handlePromotionDelete = (promo: Promotion) => {
+  confirmAction(
+    "Delete Promotion",
+    `Delete "${promo.title}"?`,
+    () => deletePromotionMutation.mutate(promo.id)
+  );
+};
 
-  const handleTogglePromotionActive = (id: string, isActive: boolean) => {
-    togglePromotionActiveMutation.mutate({ id, isActive });
-  };
-
+const handleTogglePromotionActive = (id: string, isActive: boolean) => {
+  togglePromotionActiveMutation.mutate({ id, isActive });
+};
   if (isLoading) {
     return (
       <ThemedView style={styles.loadingContainer}>
@@ -1447,90 +1466,46 @@ export default function AdminDashboardScreen() {
 
         {/* ✅ NEW: Promotions Section */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <ThemedText type="h3">Promotions ({promotions.length})</ThemedText>
-            <Pressable 
-              style={[styles.addButton, { backgroundColor: theme.warning }]} 
-              onPress={() => {
-                setSelectedPromotion(null);
-                setShowPromotionModal(true);
-              }}
-            >
-              <Feather name="gift" size={18} color={theme.buttonText} />
-              <ThemedText type="button" style={{ color: theme.buttonText }}>Add Promotion</ThemedText>
-            </Pressable>
-          </View>
+  <View style={styles.sectionHeader}>
+    <ThemedText type="h3">Promotions ({promotions.length})</ThemedText>
+    <Pressable 
+      style={[styles.addButton, { backgroundColor: theme.warning }]} 
+      onPress={() => {
+        setSelectedPromotion(null);
+        setShowPromotionModal(true);
+      }}
+    >
+      <Feather name="gift" size={18} color={theme.buttonText} />
+      <ThemedText type="button" style={{ color: theme.buttonText }}>Add Promotion</ThemedText>
+    </Pressable>
+  </View>
 
-          {promotions.map((promo: any) => (
-            <PromotionCard
-              key={promo.promotion?.id || promo.id}
-              promotion={{
-                id: promo.promotion?.id || promo.id,
-                title: promo.promotion?.title || promo.title,
-                description: promo.promotion?.description || promo.description,
-                type: promo.promotion?.type || promo.type,
-                discountValue: promo.promotion?.discountValue || promo.discountValue,
-                minOrder: promo.promotion?.minOrder || promo.minOrder,
-                validFrom: promo.promotion?.validFrom || promo.validFrom,
-                validUntil: promo.promotion?.validUntil || promo.validUntil,
-                storeId: promo.promotion?.storeId || promo.storeId,
-                scope: promo.promotion?.scope || promo.scope,
-                isActive: promo.promotion?.isActive ?? promo.isActive ?? true,
-                usedCount: promo.promotion?.usedCount || promo.usedCount || 0,
-                showInBanner: promo.promotion?.showInBanner || promo.showInBanner || false,
-                storeName: promo.storeName,
-                creatorName: promo.creatorName,
-              }}
-              onEdit={() => {
-                setSelectedPromotion({
-                  id: promo.promotion?.id || promo.id,
-                  title: promo.promotion?.title || promo.title,
-                  description: promo.promotion?.description || promo.description,
-                  type: promo.promotion?.type || promo.type,
-                  discountValue: promo.promotion?.discountValue || promo.discountValue,
-                  minOrder: promo.promotion?.minOrder || promo.minOrder,
-                  validFrom: promo.promotion?.validFrom || promo.validFrom,
-                  validUntil: promo.promotion?.validUntil || promo.validUntil,
-                  storeId: promo.promotion?.storeId || promo.storeId,
-                  scope: promo.promotion?.scope || promo.scope,
-                  isActive: promo.promotion?.isActive ?? promo.isActive ?? true,
-                  usedCount: promo.promotion?.usedCount || promo.usedCount || 0,
-                  showInBanner: promo.promotion?.showInBanner || promo.showInBanner || false,
-                });
-                setShowPromotionModal(true);
-              }}
-              onDelete={() => handlePromotionDelete({
-                id: promo.promotion?.id || promo.id,
-                title: promo.promotion?.title || promo.title,
-                description: promo.promotion?.description || promo.description,
-                type: promo.promotion?.type || promo.type,
-                discountValue: promo.promotion?.discountValue || promo.discountValue,
-                minOrder: promo.promotion?.minOrder || promo.minOrder,
-                validFrom: promo.promotion?.validFrom || promo.validFrom,
-                validUntil: promo.promotion?.validUntil || promo.validUntil,
-                storeId: promo.promotion?.storeId || promo.storeId,
-                scope: promo.promotion?.scope || promo.scope,
-                isActive: promo.promotion?.isActive ?? promo.isActive ?? true,
-                usedCount: promo.promotion?.usedCount || promo.usedCount || 0,
-                showInBanner: promo.promotion?.showInBanner || promo.showInBanner || false,
-              })}
-              onToggleActive={() => handleTogglePromotionActive(
-                promo.promotion?.id || promo.id,
-                !(promo.promotion?.isActive ?? promo.isActive ?? true)
-              )}
-            />
-          ))}
+  {promotions.map((promo: Promotion) => (
+    <PromotionCard
+      key={promo.id}
+      promotion={promo}
+      onEdit={() => {
+        setSelectedPromotion(promo);
+        setShowPromotionModal(true);
+      }}
+      onDelete={() => handlePromotionDelete(promo)}
+      onToggleActive={() => handleTogglePromotionActive(
+        promo.id,
+        !promo.isActive
+      )}
+    />
+  ))}
 
-          {promotions.length === 0 && !promotionsLoading && (
-            <Card style={styles.emptyCard}>
-              <Feather name="gift" size={48} color={theme.textSecondary} />
-              <ThemedText type="h3" style={{ marginTop: Spacing.md }}>No Promotions Yet</ThemedText>
-              <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}>
-                Create your first promotion to attract customers
-              </ThemedText>
-            </Card>
-          )}
-        </View>
+  {promotions.length === 0 && !promotionsLoading && (
+    <Card style={styles.emptyCard}>
+      <Feather name="gift" size={48} color={theme.textSecondary} />
+      <ThemedText type="h3" style={{ marginTop: Spacing.md }}>No Promotions Yet</ThemedText>
+      <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}>
+        Create your first promotion to attract customers
+      </ThemedText>
+    </Card>
+  )}
+</View>
 
         {/* Stores Section */}
         <View style={styles.section}>
