@@ -83,6 +83,24 @@ interface APICategory {
   image: string | null;
 }
 
+// ✅ ADD: Promotion interface
+interface APIPromotion {
+  id: string;
+  title: string;
+  description: string;
+  type: string;
+  discountValue: number | null;
+  minOrder: number;
+  icon: string;
+  color: string;
+  bannerImage: string | null;
+  validFrom: string;
+  validUntil: string;
+  scope: string;
+  storeId: string | null;
+  storeName?: string;
+}
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -98,7 +116,7 @@ export default function HomeScreen() {
   const [screenWidth, setScreenWidth] = useState(width);
   const [selectedStore, setSelectedStore] = useState<APIStore | null>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
-  const [activePromotions, setActivePromotions] = useState<any[]>([]);
+  // ✅ REMOVED: activePromotions state (using React Query instead)
   
   const bannerScrollRef = useRef<ScrollView>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -186,12 +204,17 @@ export default function HomeScreen() {
     },
   });
 
-  // Fetch active promotions
-  const { data: promotionsData } = useQuery({
-    queryKey: ["/api/promotions/featured"],
+  // ✅ FIXED: Fetch ALL ACTIVE promotions (not just featured)
+  const { data: promotionsData, refetch: refetchPromotions } = useQuery<APIPromotion[]>({
+    queryKey: ["/api/promotions/active", user?.id, latitude, longitude],
+    enabled: !!user?.id && !!latitude && !!longitude,
     queryFn: async () => {
-      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/featured`);
-      return res.json();
+      const url = `${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/banners?lat=${latitude}&lng=${longitude}`;
+      console.log("🎯 Fetching promotions from:", url);
+      const res = await fetch(url);
+      const data = await res.json();
+      console.log("✅ Promotions received:", data);
+      return data || [];
     },
   });
 
@@ -287,6 +310,46 @@ export default function HomeScreen() {
 
   const handleCategoryPress = (category: Category) => {
     navigation.navigate("Category", { category });
+  };
+
+  // ✅ NEW: Handle promotion claim
+  const handleClaimPromotion = async (promo: APIPromotion) => {
+    if (!user?.id) {
+      Alert.alert("Login Required", "Please login to claim this promotion");
+      return;
+    }
+
+    try {
+      console.log("🎁 Claiming promotion:", promo.title);
+      
+      // Show success message
+      Alert.alert(
+        "✅ Promotion Claimed!",
+        `${promo.title} will be applied at checkout when your order meets the minimum of ${formatPrice(promo.minOrder)}`,
+        [
+          {
+            text: "View Products",
+            onPress: () => {
+              // Navigate to products
+              if (promo.storeId) {
+                const store = storesData.find(s => s.id === promo.storeId);
+                if (store) {
+                  setSelectedStore(store);
+                }
+              }
+            }
+          },
+          { text: "OK" }
+        ]
+      );
+
+      // Optional: Save claimed promotion to AsyncStorage for checkout
+      // await AsyncStorage.setItem('claimedPromotion', JSON.stringify(promo));
+
+    } catch (error) {
+      console.error("❌ Claim promotion error:", error);
+      Alert.alert("Error", "Failed to claim promotion. Please try again.");
+    }
   };
 
   const renderProductCard = (product: UIProduct) => {
@@ -532,20 +595,16 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ===== RAMADAN PROMOTIONS ===== */}
+        {/* ===== RAMADAN PROMOTIONS - FIXED ===== */}
         {promotionsData && promotionsData.length > 0 && (
           <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
             <View style={styles.ramadanHeader}>
               <ThemedText type="h3" style={styles.sectionTitle}>
                 🌙 Ramadan Specials
               </ThemedText>
-              {/* Note: You need to add "Promotions" to RootStackParamList to make this navigation work */}
-              <Pressable onPress={() => {
-                // Temporary workaround - navigate to a screen that exists
-                console.log('Navigate to promotions page');
-              }}>
+              <Pressable onPress={() => refetchPromotions()}>
                 <ThemedText style={{ color: theme.primary, fontWeight: '600' }}>
-                  View All
+                  Refresh
                 </ThemedText>
               </Pressable>
             </View>
@@ -555,24 +614,48 @@ export default function HomeScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ gap: Spacing.md, paddingVertical: Spacing.sm }}
             >
-              {promotionsData.map((promo: any) => (
+              {promotionsData.map((promo) => (
                 <Pressable
                   key={promo.id}
                   style={[styles.promoCard, { 
                     backgroundColor: promo.color + '15',
                     borderColor: promo.color 
                   }]}
-                  onPress={() => {
-                    // Apply promotion logic
-                  }}
+                  onPress={() => handleClaimPromotion(promo)}
                 >
-                  <Feather name={promo.icon} size={32} color={promo.color} />
+                  {promo.bannerImage ? (
+                    <Image 
+                      source={{ uri: promo.bannerImage }} 
+                      style={{ width: '100%', height: 100, borderRadius: 12, marginBottom: 8 }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Feather name={promo.icon as any} size={32} color={promo.color} />
+                  )}
+                  
                   <ThemedText style={styles.promoTitle} numberOfLines={2}>
                     {promo.title}
                   </ThemedText>
+                  
                   <ThemedText style={styles.promoDesc} numberOfLines={2}>
                     {promo.description}
                   </ThemedText>
+                  
+                  {promo.scope === 'store' && promo.storeName && (
+                    <View style={styles.storeTag}>
+                      <Feather name="map-pin" size={10} color="#059669" />
+                      <ThemedText style={styles.storeTagText}>
+                        {promo.storeName}
+                      </ThemedText>
+                    </View>
+                  )}
+                  
+                  {promo.minOrder > 0 && (
+                    <ThemedText style={styles.minOrderText}>
+                      Min. order: {formatPrice(promo.minOrder)}
+                    </ThemedText>
+                  )}
+                  
                   <View style={[styles.promoButton, { backgroundColor: promo.color }]}>
                     <ThemedText style={{ color: 'white', fontWeight: '700' }}>
                       CLAIM NOW
@@ -1012,7 +1095,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   promoCard: {
-    width: 200,
+    width: 220,
     padding: Spacing.lg,
     borderRadius: 16,
     borderWidth: 2,
@@ -1031,6 +1114,29 @@ const styles = StyleSheet.create({
   promoDesc: {
     fontSize: 12,
     color: '#666',
+  },
+  // ✅ NEW: Additional styles for promotions
+  storeTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  storeTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#065f46',
+  },
+  minOrderText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 4,
   },
   promoButton: {
     paddingVertical: 8,
