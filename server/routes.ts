@@ -53,6 +53,20 @@ const fileStorage = multer.diskStorage({
 });
 const uploadMiddleware = multer({ storage: fileStorage });
 
+const promotionStorage = multer.diskStorage({
+  destination: "./uploads/promotions",
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `promo-${uniqueSuffix}${path.extname(file.originalname)}`);
+  },
+});
+const uploadPromotion = multer({ storage: promotionStorage });
+
+const promotionsDir = path.join(process.cwd(), "uploads", "promotions");
+if (!fs.existsSync(promotionsDir)) {
+  fs.mkdirSync(promotionsDir, { recursive: true });
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
 
 
@@ -3527,9 +3541,11 @@ app.get("/api/products/ramadan-specials", async (req, res) => {
 
 
 // ===== PICKER: CREATE PROMOTION FOR THEIR STORE =====
-app.post("/api/picker/promotions", async (req, res) => {
+app.post("/api/picker/promotions", uploadPromotion.single("image"), async (req, res) => {
   try {
     const { userId, title, description, type, discountValue, minOrder, validUntil, showInBanner } = req.body;
+
+    console.log("📝 Picker creating promotion:", { userId, title, hasImage: !!req.file });
 
     if (!userId) {
       return res.status(400).json({ error: "userId required" });
@@ -3545,35 +3561,49 @@ app.post("/api/picker/promotions", async (req, res) => {
       return res.status(403).json({ error: "Not assigned to any store" });
     }
 
-    // Create store-specific promotion
+    // Prepare promotion data
+    const promoData: any = {
+      title,
+      description,
+      type,
+      discountValue: discountValue ? parseInt(discountValue) : null,
+      minOrder: minOrder ? parseInt(minOrder) : 0,
+      validFrom: new Date(),
+      validUntil: new Date(validUntil),
+      storeId: staff.storeId,
+      createdBy: userId,
+      scope: "store",
+      showInBanner: showInBanner === "true" || showInBanner === true,
+      isActive: true,
+      usedCount: 0,
+      userLimit: 1,
+      icon: "gift",
+      color: "#10b981",
+      priority: 0,
+    };
+
+    // Add image if uploaded
+    if (req.file) {
+      const imageUrl = `/uploads/promotions/${req.file.filename}`;
+      promoData.bannerImage = imageUrl;
+      promoData.image = imageUrl;
+      console.log("✅ Image uploaded:", imageUrl);
+    }
+
     const [newPromotion] = await db
       .insert(promotions)
-      .values({
-        title,
-        description,
-        type,
-        discountValue: discountValue ? parseInt(discountValue) : null,
-        minOrder: minOrder ? parseInt(minOrder) : 0,
-        validFrom: new Date(),
-        validUntil: new Date(validUntil),
-        storeId: staff.storeId, // ✅ Link to store
-        createdBy: userId,
-        scope: "store", // ✅ Store-level promotion
-        showInBanner: showInBanner || false,
-        isActive: true,
-        usedCount: 0,
-        userLimit: 1,
-      })
+      .values(promoData)
       .returning();
 
     console.log(`✅ Picker created promotion: ${newPromotion.title} for store ${staff.storeId}`);
-
     res.json(newPromotion);
   } catch (error) {
     console.error("❌ Picker create promotion error:", error);
     res.status(500).json({ error: "Failed to create promotion" });
   }
 });
+
+
 
 // ===== PICKER: GET THEIR STORE'S PROMOTIONS =====
 app.get("/api/picker/promotions", async (req, res) => {
@@ -3609,11 +3639,13 @@ app.get("/api/picker/promotions", async (req, res) => {
   }
 });
 
-// ===== PICKER: UPDATE PROMOTION =====
-app.patch("/api/picker/promotions/:id", async (req, res) => {
+// ===== PICKER: UPDATE PROMOTION WITH IMAGE =====
+app.patch("/api/picker/promotions/:id", uploadPromotion.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
     const { userId, title, description, discountValue, minOrder, validUntil, isActive, showInBanner } = req.body;
+
+    console.log("📝 Picker updating promotion:", { id, userId, hasNewImage: !!req.file });
 
     if (!userId) {
       return res.status(400).json({ error: "userId required" });
@@ -3639,15 +3671,22 @@ app.patch("/api/picker/promotions/:id", async (req, res) => {
       return res.status(403).json({ error: "Promotion not found or not yours" });
     }
 
-    // ✅ FIXED: Update promotion
     const updateData: any = {};
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
     if (discountValue !== undefined) updateData.discountValue = parseInt(discountValue);
     if (minOrder !== undefined) updateData.minOrder = parseInt(minOrder);
     if (validUntil !== undefined) updateData.validUntil = new Date(validUntil);
-    if (isActive !== undefined) updateData.isActive = isActive;
-    if (showInBanner !== undefined) updateData.showInBanner = showInBanner;
+    if (isActive !== undefined) updateData.isActive = isActive === "true" || isActive === true;
+    if (showInBanner !== undefined) updateData.showInBanner = showInBanner === "true" || showInBanner === true;
+
+    // Update image if new one uploaded
+    if (req.file) {
+      const imageUrl = `/uploads/promotions/${req.file.filename}`;
+      updateData.bannerImage = imageUrl;
+      updateData.image = imageUrl;
+      console.log("✅ New image uploaded:", imageUrl);
+    }
 
     const [updated] = await db
       .update(promotions)
@@ -3704,7 +3743,6 @@ app.delete("/api/picker/promotions/:id", async (req, res) => {
   }
 });
 
-// ===== ADMIN: GET ALL PROMOTIONS ===== 
 app.get("/api/admin/promotions", async (req, res) => {
   try {
     const { userId } = req.query;
@@ -3723,7 +3761,7 @@ app.get("/api/admin/promotions", async (req, res) => {
       return res.status(403).json({ error: "Admin only" });
     }
 
-    // ✅ FIXED: Return FLAT objects, not nested
+    // ✅ FIXED: Return FLAT objects with proper image field
     const allPromotions = await db
       .select({
         id: promotions.id,
@@ -3742,6 +3780,8 @@ app.get("/api/admin/promotions", async (req, res) => {
         icon: promotions.icon,
         color: promotions.color,
         maxDiscount: promotions.maxDiscount,
+        image: sql<string>`COALESCE(${promotions.bannerImage}, ${promotions.image})`,
+        bannerImage: promotions.bannerImage,
         createdAt: promotions.createdAt,
         storeName: stores.name,
         creatorName: users.username,
@@ -3759,10 +3799,13 @@ app.get("/api/admin/promotions", async (req, res) => {
   }
 });
 
-// ===== ADMIN: CREATE APP-WIDE PROMOTION =====
-app.post("/api/admin/promotions", async (req, res) => {
+// ===== ADMIN: CREATE APP-WIDE PROMOTION WITH IMAGE =====
+
+app.post("/api/admin/promotions", uploadPromotion.single("image"), async (req, res) => {
   try {
     const { userId, title, description, type, discountValue, minOrder, validUntil, showInBanner, scope, applicableStoreIds } = req.body;
+
+    console.log("📝 Creating promotion:", { userId, title, type, hasImage: !!req.file });
 
     if (!userId) {
       return res.status(400).json({ error: "userId required" });
@@ -3778,29 +3821,51 @@ app.post("/api/admin/promotions", async (req, res) => {
       return res.status(403).json({ error: "Admin only" });
     }
 
-    // ✅ FIXED: Create promotion with proper defaults
+    // Parse applicableStoreIds if it's a string
+    let storeIds = null;
+    if (applicableStoreIds) {
+      try {
+        storeIds = typeof applicableStoreIds === 'string' 
+          ? JSON.parse(applicableStoreIds) 
+          : applicableStoreIds;
+      } catch (e) {
+        console.error("Failed to parse applicableStoreIds:", e);
+      }
+    }
+
+    // Prepare promotion data
+    const promoData: any = {
+      title,
+      description,
+      type,
+      discountValue: discountValue ? parseInt(discountValue) : null,
+      minOrder: minOrder ? parseInt(minOrder) : 0,
+      validFrom: new Date(),
+      validUntil: new Date(validUntil),
+      storeId: scope === "store" && storeIds?.length === 1 ? storeIds[0] : null,
+      createdBy: userId,
+      scope: scope || "app",
+      applicableStoreIds: scope === "store" && storeIds?.length > 1 ? storeIds : null,
+      showInBanner: showInBanner === "true" || showInBanner === true,
+      isActive: true,
+      usedCount: 0,
+      userLimit: 1,
+      icon: "gift",
+      color: "#10b981",
+      priority: 0,
+    };
+
+    // Add image if uploaded
+    if (req.file) {
+      const imageUrl = `/uploads/promotions/${req.file.filename}`;
+      promoData.bannerImage = imageUrl;
+      promoData.image = imageUrl;
+      console.log("✅ Image uploaded:", imageUrl);
+    }
+
     const [newPromotion] = await db
       .insert(promotions)
-      .values({
-        title,
-        description,
-        type,
-        discountValue: discountValue ? parseInt(discountValue) : null,
-        minOrder: minOrder ? parseInt(minOrder) : 0,
-        validFrom: new Date(), // Starts now by default
-        validUntil: new Date(validUntil),
-        storeId: scope === "store" && applicableStoreIds?.length === 1 ? applicableStoreIds[0] : null,
-        createdBy: userId,
-        scope: scope || "app",
-        applicableStoreIds: scope === "store" && applicableStoreIds?.length > 1 ? applicableStoreIds : null,
-        showInBanner: showInBanner || false,
-        isActive: true,
-        usedCount: 0,
-        userLimit: 1,
-        icon: "gift", // Default icon
-        color: "#10b981", // Default color
-        priority: 0,
-      })
+      .values(promoData)
       .returning();
 
     console.log(`✅ Admin created promotion: ${newPromotion.title}`);
@@ -3811,11 +3876,13 @@ app.post("/api/admin/promotions", async (req, res) => {
   }
 });
 
-// ===== ADMIN: UPDATE ANY PROMOTION =====
-app.patch("/api/admin/promotions/:id", async (req, res) => {
+// ===== ADMIN: UPDATE ANY PROMOTION WITH IMAGE =====
+app.patch("/api/admin/promotions/:id", uploadPromotion.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
     const { userId, title, description, discountValue, minOrder, validUntil, isActive, showInBanner, scope, applicableStoreIds } = req.body;
+
+    console.log("📝 Updating promotion:", { id, userId, hasNewImage: !!req.file });
 
     if (!userId) {
       return res.status(400).json({ error: "userId required" });
@@ -3831,27 +3898,47 @@ app.patch("/api/admin/promotions/:id", async (req, res) => {
       return res.status(403).json({ error: "Admin only" });
     }
 
-    // ✅ FIXED: Update promotion with proper type handling
+    // Parse applicableStoreIds if it's a string
+    let storeIds = null;
+    if (applicableStoreIds) {
+      try {
+        storeIds = typeof applicableStoreIds === 'string' 
+          ? JSON.parse(applicableStoreIds) 
+          : applicableStoreIds;
+      } catch (e) {
+        console.error("Failed to parse applicableStoreIds:", e);
+      }
+    }
+
     const updateData: any = {};
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
     if (discountValue !== undefined) updateData.discountValue = parseInt(discountValue);
     if (minOrder !== undefined) updateData.minOrder = parseInt(minOrder);
     if (validUntil !== undefined) updateData.validUntil = new Date(validUntil);
-    if (isActive !== undefined) updateData.isActive = isActive;
-    if (showInBanner !== undefined) updateData.showInBanner = showInBanner;
+    if (isActive !== undefined) updateData.isActive = isActive === "true" || isActive === true;
+    if (showInBanner !== undefined) updateData.showInBanner = showInBanner === "true" || showInBanner === true;
     if (scope !== undefined) updateData.scope = scope;
+    
     if (applicableStoreIds !== undefined) {
-      if (scope === "store" && applicableStoreIds?.length === 1) {
-        updateData.storeId = applicableStoreIds[0];
+      if (scope === "store" && storeIds?.length === 1) {
+        updateData.storeId = storeIds[0];
         updateData.applicableStoreIds = null;
-      } else if (scope === "store" && applicableStoreIds?.length > 1) {
+      } else if (scope === "store" && storeIds?.length > 1) {
         updateData.storeId = null;
-        updateData.applicableStoreIds = applicableStoreIds;
+        updateData.applicableStoreIds = storeIds;
       } else {
         updateData.storeId = null;
         updateData.applicableStoreIds = null;
       }
+    }
+
+    // Update image if new one uploaded
+    if (req.file) {
+      const imageUrl = `/uploads/promotions/${req.file.filename}`;
+      updateData.bannerImage = imageUrl;
+      updateData.image = imageUrl;
+      console.log("✅ New image uploaded:", imageUrl);
     }
 
     const [updated] = await db

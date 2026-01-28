@@ -22,6 +22,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useLanguage } from "@/context/LanguageContext";
 import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
+import * as ImagePicker from 'expo-image-picker';
 
 // ---------------------- HELPERS ----------------------
 const formatCurrency = (amount: number) => {

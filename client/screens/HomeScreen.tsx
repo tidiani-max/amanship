@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image, TextInput, ActivityIndicator, Dimensions, Animated, Platform, Clipboard, Alert } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Image, TextInput, ActivityIndicator, Dimensions, Animated, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -7,6 +7,7 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { ThemedText } from "@/components/ThemedText";
 import { CartToast } from "@/components/CartToast";
@@ -27,7 +28,7 @@ const getResponsiveColumns = (screenWidth: number) => {
   if (screenWidth >= 1200) return 5;
   if (screenWidth >= 900) return 4;
   if (screenWidth >= 600) return 3;
-  return 2;
+  return 2; // Always 2 columns on mobile screens
 };
 
 const getResponsivePadding = (screenWidth: number) => {
@@ -38,18 +39,16 @@ const getResponsivePadding = (screenWidth: number) => {
 
 const getProductCardWidth = (screenWidth: number, columns: number, padding: number) => {
   const totalPadding = padding * 2;
-  const gapSpace = Spacing.md * (columns - 1);
+  const gapSpace = (Spacing.md + 2) * (columns - 1); // Account for gap in productsGrid
   return (screenWidth - totalPadding - gapSpace) / columns;
 };
 
 const getBannerHeight = (screenWidth: number) => {
-  if (screenWidth >= 1200) return 300;
-  if (screenWidth >= 900) return 250;
-  if (screenWidth >= 600) return 220;
+  if (screenWidth >= 1200) return 320;
+  if (screenWidth >= 900) return 280;
+  if (screenWidth >= 600) return 240;
   return 200;
 };
-
-
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -85,7 +84,6 @@ interface APICategory {
   image: string | null;
 }
 
-// ✅ ADD: Promotion interface
 interface APIPromotion {
   id: string;
   title: string;
@@ -103,7 +101,7 @@ interface APIPromotion {
   storeName?: string;
 }
 
-export default function HomeScreen() {
+export default function ImprovedHomeScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
@@ -120,7 +118,9 @@ export default function HomeScreen() {
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   
   const bannerScrollRef = useRef<ScrollView>(null);
-  const scrollX = useRef(new Animated.Value(0)).current;
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const headerOpacity = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const {
     location,
@@ -134,7 +134,7 @@ export default function HomeScreen() {
   const latitude = location?.latitude;
   const longitude = location?.longitude;
 
-  // Track screen width changes for responsiveness
+  // Track screen width changes
   React.useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       setScreenWidth(window.width);
@@ -150,7 +150,40 @@ export default function HomeScreen() {
   const maxWidth = screenWidth > 1600 ? 1600 : screenWidth;
   const containerPadding = screenWidth > maxWidth ? (screenWidth - maxWidth) / 2 : 0;
 
-  // Get location display name
+  // Debug log for responsive behavior
+  useEffect(() => {
+    console.log(`📱 Screen: ${screenWidth}px | Columns: ${responsiveColumns} | Mobile: ${isMobile}`);
+  }, [screenWidth, responsiveColumns, isMobile]);
+
+  // Parallax header effect
+  useEffect(() => {
+    const listenerId = scrollY.addListener(({ value }) => {
+      const opacity = Math.max(0, Math.min(1, 1 - value / 100));
+      headerOpacity.setValue(opacity);
+    });
+    return () => scrollY.removeListener(listenerId);
+  }, []);
+
+  // Pulse animation for promotions
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.05,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, []);
+
   const getLocationDisplayName = (): string => {
     if (isManualLocation && addressLabel) return String(addressLabel);
     if (gpsLocationName) return String(gpsLocationName);
@@ -212,7 +245,7 @@ export default function HomeScreen() {
     },
   });
 
-  // Fetch products (all or by store)
+  // Fetch products
   const { data: apiProducts = [], isLoading: productsLoading } = useQuery<any[]>({
     queryKey: ["/api/home/products", latitude, longitude, selectedStore?.id],
     enabled: !!latitude && !!longitude,
@@ -226,21 +259,19 @@ export default function HomeScreen() {
     },
   });
 
-  // ✅ FIXED: Fetch ALL ACTIVE promotions (not just featured)
+  // Fetch promotions
   const { data: promotionsData, refetch: refetchPromotions } = useQuery<APIPromotion[]>({
     queryKey: ["/api/promotions/active", user?.id, latitude, longitude],
     enabled: !!user?.id && !!latitude && !!longitude,
     queryFn: async () => {
       const url = `${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/banners?lat=${latitude}&lng=${longitude}`;
-      console.log("🎯 Fetching promotions from:", url);
       const res = await fetch(url);
       const data = await res.json();
-      console.log("✅ Promotions received:", data);
       return data || [];
     },
   });
 
-  // ✅ FIXED: Fetch active vouchers with proper null check
+  // Fetch vouchers
   const { data: vouchersData } = useQuery({
     queryKey: ["/api/vouchers/active", user?.id],
     enabled: !!user?.id,
@@ -268,12 +299,12 @@ export default function HomeScreen() {
         });
         return next;
       });
-    }, 4000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [bannersData, screenWidth, maxWidth, responsivePadding]);
 
-  // Map products with store info
+  // Map products
   const products: UIProduct[] = (apiProducts || []).map((p) => ({
     id: String(p.id || ''),
     name: String(p.name || 'Product'),
@@ -301,7 +332,7 @@ export default function HomeScreen() {
     image: c.image ? String(c.image) : undefined,
   }));
 
-  // Filter categories that have products in stock
+  // Filter categories with products
   const availableCategories = useMemo(() => {
     const categoryIdsWithProducts = new Set(
       products.filter(p => p.inStock).map(p => p.category)
@@ -324,16 +355,13 @@ export default function HomeScreen() {
   };
 
   const formatDate = (date: string | Date) => {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  return dateObj.toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-};
-
-
-
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return dateObj.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
 
   const handleAddToCart = (product: UIProduct) => {
     if (!product.inStock) return;
@@ -346,83 +374,45 @@ export default function HomeScreen() {
     navigation.navigate("Category", { category });
   };
 
-  // ✅ NEW: Handle promotion claim
-const handleClaimPromotion = async (promo: APIPromotion) => {
-  if (!user?.id) {
-    Alert.alert("Login Required", "Please login to claim this promotion");
-    return;
-  }
-
-  try {
-    console.log("🎁 Claiming promotion:", promo.title);
-    
-    const response = await fetch(
-      `${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/claim`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          promotionId: promo.id,
-        }),
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      Alert.alert("Error", data.error || "Failed to claim promotion");
+  const handleClaimPromotion = async (promo: APIPromotion) => {
+    if (!user?.id) {
+      alert("Please login to claim this promotion");
       return;
     }
 
-    if (data.alreadyClaimed) {
-      // ✅ Show clear message about already claimed promotion
-      Alert.alert(
-        "Already Claimed! ✓",
-        `You've already claimed this promotion!\n\n📦 It will automatically apply at checkout when you spend ${formatPrice(promo.minOrder)} or more.`,
-        [
-          {
-            text: "View My Promotions",
-            onPress: () => navigation.navigate("Vouchers" as any),
-          },
-          { text: "Got it!" }
-        ]
+    try {
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/claim`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            promotionId: promo.id,
+          }),
+        }
       );
-      return;
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Failed to claim promotion");
+        return;
+      }
+
+      if (data.alreadyClaimed) {
+        alert(`Already Claimed! ✓\n\nYou've already claimed this promotion!\n\n📦 It will automatically apply at checkout when you spend ${formatPrice(promo.minOrder)} or more.`);
+        return;
+      }
+
+      alert(`🎉 Promotion Claimed!\n\n${promo.title} has been added to your account!\n\n✓ Will auto-apply at checkout\n✓ Minimum order: ${formatPrice(promo.minOrder)}\n✓ Valid until ${formatDate(promo.validUntil)}`);
+      refetchPromotions();
+      
+    } catch (error) {
+      console.error("❌ Claim promotion error:", error);
+      alert("Network Error. Failed to claim promotion. Please check your connection and try again.");
     }
-
-    // ✅ INSTANT SUCCESS FEEDBACK
-    Alert.alert(
-      "🎉 Promotion Claimed!",
-      `${promo.title} has been added to your account!\n\n✓ Will auto-apply at checkout\n✓ Minimum order: ${formatPrice(promo.minOrder)}\n✓ Valid until ${formatDate(promo.validUntil)}`,
-      [
-        {
-          text: "Shop Now",
-          onPress: () => {
-            if (promo.storeId) {
-              const store = storesData.find(s => s.id === promo.storeId);
-              if (store) {
-                setSelectedStore(store);
-              }
-            }
-          },
-        },
-        {
-          text: "View All Promotions",
-          onPress: () => navigation.navigate("Vouchers" as any),
-        },
-      ]
-    );
-
-    // ✅ REFRESH UI IMMEDIATELY
-    refetchPromotions();
-    
-  } catch (error) {
-    console.error("❌ Claim promotion error:", error);
-    Alert.alert("Network Error", "Failed to claim promotion. Please check your connection and try again.");
-  }
-};
-
+  };
 
   const renderProductCard = (product: UIProduct) => {
     const hasDiscount = product.originalPrice && product.originalPrice > product.price;
@@ -430,29 +420,60 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
       ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
       : 0;
 
+    // Use actual screenWidth for mobile, maxWidth for larger screens
+    const effectiveWidth = screenWidth < 600 ? screenWidth : (screenWidth > maxWidth ? maxWidth : screenWidth);
+    
     const cardWidth = getProductCardWidth(
-      screenWidth > maxWidth ? maxWidth : screenWidth, 
+      effectiveWidth, 
       responsiveColumns, 
       responsivePadding
     );
 
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+
+    const handlePressIn = () => {
+      Animated.spring(scaleAnim, {
+        toValue: 0.95,
+        useNativeDriver: true,
+      }).start();
+    };
+
+    const handlePressOut = () => {
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 3,
+        tension: 40,
+        useNativeDriver: true,
+      }).start();
+    };
+
     return (
-      <Pressable
+      <Animated.View
         key={product.id}
-        style={[
-          styles.productCard,
-          { 
-            backgroundColor: theme.cardBackground,
-            width: cardWidth,
-          },
-          !product.inStock && { opacity: 0.5 }
-        ]}
-        onPress={() => navigation.navigate("ProductDetail", { product })}
+        style={{ transform: [{ scale: scaleAnim }] }}
       >
+        <Pressable
+          style={[
+            styles.productCard,
+            { 
+              backgroundColor: theme.cardBackground,
+              width: cardWidth,
+            },
+            !product.inStock && { opacity: 0.5 }
+          ]}
+          onPress={() => navigation.navigate("ProductDetail", { product })}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+        >
         {hasDiscount && product.inStock && (
-          <View style={styles.discountBadge}>
+          <LinearGradient
+            colors={['#ef4444', '#dc2626']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.discountBadge}
+          >
             <ThemedText style={styles.discountText}>{String(discountPercent)}% OFF</ThemedText>
-          </View>
+          </LinearGradient>
         )}
         
         <View style={styles.productImageContainer}>
@@ -517,17 +538,19 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
           </View>
         </View>
       </Pressable>
+      </Animated.View>
     );
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-      {/* ===== FIXED HEADER ===== */}
-      <View style={[
+      {/* ===== ANIMATED HEADER ===== */}
+      <Animated.View style={[
         styles.compactHeader, 
         { 
           backgroundColor: theme.cardBackground,
           paddingTop: insets.top + 8,
+          opacity: headerOpacity,
         }
       ]}>
         <View style={styles.headerRow}>
@@ -550,9 +573,9 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
             <ThemedText style={styles.logoText}>KilatGo</ThemedText>
           </View>
         </View>
-      </View>
+      </Animated.View>
 
-      <ScrollView
+      <Animated.ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{
           paddingTop: Spacing.lg,
@@ -560,6 +583,11 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
           paddingHorizontal: containerPadding,
         }}
         showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
       >
         {/* ===== LOCATION SELECTOR ===== */}
         <View style={{ paddingHorizontal: responsivePadding, marginBottom: Spacing.lg }}>
@@ -567,13 +595,16 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
             style={[styles.locationSelector, { backgroundColor: theme.cardBackground }]}
             onPress={() => navigation.navigate("EditAddress")}
           >
-            <View style={[styles.locationIcon, { backgroundColor: theme.primary + "15" }]}>
+            <LinearGradient
+              colors={[theme.primary + "15", theme.primary + "25"]}
+              style={styles.locationIcon}
+            >
               <Feather 
                 name={isManualLocation ? "home" : "navigation"}
                 size={18} 
                 color={theme.primary} 
               />
-            </View>
+            </LinearGradient>
             <View style={{ flex: 1 }}>
               <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 12 }}>
                 Delivering to
@@ -618,13 +649,11 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
-              onScroll={Animated.event(
-                [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                { useNativeDriver: false }
-              )}
               scrollEventThrottle={16}
+              decelerationRate="fast"
+              snapToInterval={screenWidth > maxWidth ? maxWidth - (responsivePadding * 2) : screenWidth - (responsivePadding * 2)}
             >
-              {bannersData.map((banner) => (
+              {bannersData.map((banner, index) => (
                 <Pressable 
                   key={banner.id} 
                   style={[
@@ -642,234 +671,234 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
                     style={styles.bannerImage}
                     resizeMode="cover"
                   />
-                  <View style={styles.bannerOverlay}>
-                    <ThemedText style={[styles.bannerTitle, { fontSize: isMobile ? 20 : 26 }]}>
-                      {banner.title}
-                    </ThemedText>
-                    <ThemedText style={[styles.bannerSubtitle, { fontSize: isMobile ? 14 : 17 }]}>
-                      {banner.subtitle}
-                    </ThemedText>
-                  </View>
+                  <LinearGradient
+                    colors={[
+                      'transparent',
+                      'rgba(0,0,0,0.3)',
+                      'rgba(0,0,0,0.6)',
+                      'rgba(0,0,0,0.85)'
+                    ]}
+                    locations={[0, 0.4, 0.7, 1]}
+                    style={styles.bannerOverlay}
+                  >
+                    <View style={styles.bannerContent}>
+                      <View style={styles.bannerBadge}>
+                        <Feather name="zap" size={14} color="#fbbf24" />
+                        <ThemedText style={styles.bannerBadgeText}>FEATURED</ThemedText>
+                      </View>
+                      <ThemedText style={[styles.bannerTitle, { fontSize: isMobile ? 22 : 28 }]}>
+                        {banner.title}
+                      </ThemedText>
+                      <ThemedText style={[styles.bannerSubtitle, { fontSize: isMobile ? 14 : 17 }]}>
+                        {banner.subtitle}
+                      </ThemedText>
+                      <View style={styles.bannerCTA}>
+                        <ThemedText style={styles.bannerCTAText}>Shop Now</ThemedText>
+                        <Feather name="arrow-right" size={16} color="white" />
+                      </View>
+                    </View>
+                  </LinearGradient>
                 </Pressable>
               ))}
             </ScrollView>
-            <View style={styles.bannerDots}>
-              {bannersData.map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.dot,
-                    { backgroundColor: index === currentBannerIndex ? '#10b981' : '#d1d5db' }
-                  ]}
-                />
-              ))}
+            <View style={styles.bannerDotsContainer}>
+              <View style={styles.bannerDots}>
+                {bannersData.map((_, index) => (
+                  <Animated.View
+                    key={index}
+                    style={[
+                      styles.dot,
+                      { 
+                        backgroundColor: index === currentBannerIndex ? '#10b981' : '#d1d5db',
+                        width: index === currentBannerIndex ? 24 : 8,
+                      }
+                    ]}
+                  />
+                ))}
+              </View>
+              <ThemedText style={styles.bannerCounter}>
+                {currentBannerIndex + 1} / {bannersData.length}
+              </ThemedText>
             </View>
           </View>
         )}
 
-        {/* ===== RAMADAN PROMOTIONS - FIXED ===== */}
-          {promotionsData && promotionsData.length > 0 && (
-  <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
-    <View style={styles.ramadanHeader}>
-      <ThemedText type="h3" style={styles.sectionTitle}>
-        🌙 Ramadan Specials
-      </ThemedText>
-      <Pressable onPress={() => refetchPromotions()}>
-        <ThemedText style={{ color: theme.primary, fontWeight: '600' }}>
-          Refresh
-        </ThemedText>
-      </Pressable>
-    </View>
-    
-    <ScrollView 
-      horizontal 
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ gap: Spacing.md, paddingVertical: Spacing.sm }}
-    >
-      {promotionsData.map((promo) => {
-        console.log("PROMO RAW:", promo);
-        const isClaimed = claimedPromotionsMap[promo.id] || false;
-        
-        // ✅ CHECK PROMOTION TIMING
-        const now = new Date();
-        const validFrom = new Date(promo.validFrom);
-        const validUntil = new Date(promo.validUntil);
-        const isNotStarted = now < validFrom;
-        const isExpired = now > validUntil;
-        
-        return (
-          <Pressable
-            key={promo.id}
-            style={[
-              styles.promoCard,
-              {
-                backgroundColor: promo.color + "15",
-                borderColor: promo.color,
-                opacity: isClaimed ? 0.85 : isNotStarted || isExpired ? 0.6 : 1,
-              },
-            ]}
-            onPress={() => {
-              // ✅ HANDLE DIFFERENT STATES
-              if (isNotStarted) {
-                Alert.alert(
-                  "🔒 Not Started Yet",
-                  `This promotion will open on ${formatDate(promo.validFrom)}.\n\nCheck back then to claim it!`,
-                  [{ text: "Got it!" }]
-                );
-                return;
-              }
-              if (isExpired) {
-                Alert.alert(
-                  "❌ Expired",
-                  `This promotion ended on ${formatDate(promo.validUntil)}.`,
-                  [{ text: "OK" }]
-                );
-                return;
-              }
-              handleClaimPromotion(promo);
-            }}
-            disabled={isClaimed && !isNotStarted && !isExpired}
-          >
-          {promo.bannerImage ? (
-  <Image
-    source={{ uri: promo.bannerImage }}
-    style={{ width: '100%', height: 100, borderRadius: 12, marginBottom: 8 }}
-    resizeMode="cover"
-  />
-) : (
-  <Feather name={promo.icon as any} size={32} color={promo.color} />
-)}
-
-            
-            <ThemedText style={styles.promoTitle} numberOfLines={2}>
-              {promo.title}
-            </ThemedText>
-            
-            <ThemedText style={styles.promoDesc} numberOfLines={2}>
-              {promo.description}
-            </ThemedText>
-            
-            {promo.scope === 'store' && promo.storeName && (
-              <View style={styles.storeTag}>
-                <Feather name="map-pin" size={10} color="#059669" />
-                <ThemedText style={styles.storeTagText}>
-                  {promo.storeName}
-                </ThemedText>
-              </View>
-            )}
-            
-            {promo.minOrder > 0 && (
-              <ThemedText style={styles.minOrderText}>
-                Min. order: {formatPrice(promo.minOrder)}
-              </ThemedText>
-            )}
-            
-            {/* ✅ SHOW DATE INFO FOR NOT-STARTED PROMOTIONS */}
-            {isNotStarted && (
-              <View style={[styles.dateInfo, { backgroundColor: theme.warning + '20', marginTop: 8 }]}>
-                <Feather name="calendar" size={12} color={theme.warning} />
-                <ThemedText style={{ fontSize: 11, color: theme.warning, marginLeft: 4, fontWeight: '600' }}>
-                  Opens {formatDate(promo.validFrom)}
-                </ThemedText>
-              </View>
-            )}
-            
-            {isExpired && (
-              <View style={[styles.dateInfo, { backgroundColor: theme.error + '20', marginTop: 8 }]}>
-                <Feather name="x-circle" size={12} color={theme.error} />
-                <ThemedText style={{ fontSize: 11, color: theme.error, marginLeft: 4, fontWeight: '600' }}>
-                  Expired {formatDate(promo.validUntil)}
-                </ThemedText>
-              </View>
-            )}
-            
-            {/* ✅ BUTTON WITH TIME-BASED TEXT */}
-            <View
-              style={[
-                styles.promoButton,
-                {
-                  backgroundColor: isNotStarted 
-                    ? theme.textSecondary 
-                    : isExpired 
-                    ? theme.error 
-                    : isClaimed 
-                    ? "#10b981" 
-                    : promo.color,
-                },
-              ]}
-            >
-              <ThemedText style={{ color: "white", fontWeight: "700" }}>
-                {isNotStarted 
-                  ? "🔒 NOT OPEN YET" 
-                  : isExpired 
-                  ? "❌ EXPIRED" 
-                  : isClaimed 
-                  ? "✓ CLAIMED - AUTO-APPLIES" 
-                  : "CLAIM NOW"}
-              </ThemedText>
-            </View>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
-  </View>
-)}
-
-        {/* ===== VOUCHERS SECTION ===== */}
-        {vouchersData && vouchersData.length > 0 && (
+        {/* ===== PROMOTIONS SECTION ===== */}
+        {promotionsData && promotionsData.length > 0 && (
           <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
-            <ThemedText type="h3" style={styles.sectionTitle}>
-              🎫 Available Vouchers
-            </ThemedText>
-            
-            <View style={{ gap: Spacing.sm }}>
-              {vouchersData.slice(0, 3).map((voucher: any) => (
-                <Pressable
-                  key={voucher.id}
-                  style={[styles.voucherCard, { 
-                    backgroundColor: theme.cardBackground,
-                    borderLeftColor: voucher.color,
-                    borderLeftWidth: 4
-                  }]}
-                  onPress={() => {
-                    // Copy voucher code
-                    Clipboard.setString(voucher.code);
-                    Alert.alert('Copied!', `Voucher code "${voucher.code}" copied to clipboard`);
-                  }}
+            <View style={styles.sectionHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <LinearGradient
+                  colors={['#f59e0b', '#d97706']}
+                  style={styles.sectionIconBadge}
                 >
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Feather name={voucher.icon} size={16} color={voucher.color} />
-                      <ThemedText style={{ fontWeight: '800', fontSize: 16 }}>
-                        {voucher.code}
+                  <Feather name="gift" size={18} color="white" />
+                </LinearGradient>
+                <ThemedText type="h3" style={styles.sectionTitle}>
+                  Special Offers
+                </ThemedText>
+              </View>
+              <Pressable 
+                onPress={() => refetchPromotions()}
+                style={styles.refreshButton}
+              >
+                <Feather name="refresh-cw" size={18} color={theme.primary} />
+              </Pressable>
+            </View>
+            
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: Spacing.md + 2, paddingVertical: Spacing.sm }}
+              decelerationRate="fast"
+              snapToInterval={isMobile ? 260 : 280}
+            >
+              {promotionsData.map((promo) => {
+                const isClaimed = claimedPromotionsMap[promo.id] || false;
+                const now = new Date();
+                const validFrom = new Date(promo.validFrom);
+                const validUntil = new Date(promo.validUntil);
+                const isNotStarted = now < validFrom;
+                const isExpired = now > validUntil;
+                
+                return (
+                  <Pressable
+                    key={promo.id}
+                    style={[
+                      styles.promoCard,
+                      {
+                        backgroundColor: theme.cardBackground,
+                        borderColor: promo.color,
+                        opacity: isClaimed ? 0.85 : isNotStarted || isExpired ? 0.6 : 1,
+                      },
+                    ]}
+                    onPress={() => handleClaimPromotion(promo)}
+                    disabled={isClaimed && !isNotStarted && !isExpired}
+                  >
+                    {promo.bannerImage ? (
+                      <View style={styles.promoImageContainer}>
+                        <Image
+                          source={{ uri: promo.bannerImage }}
+                          style={styles.promoImageFull}
+                          resizeMode="cover"
+                        />
+                        <LinearGradient
+                          colors={['transparent', 'rgba(0,0,0,0.4)']}
+                          style={styles.promoImageOverlay}
+                        >
+                          <View style={[styles.promoIconBadge, { backgroundColor: promo.color }]}>
+                            <Feather name={promo.icon as any} size={20} color="white" />
+                          </View>
+                        </LinearGradient>
+                      </View>
+                    ) : (
+                      <LinearGradient
+                        colors={[promo.color + "20", promo.color + "40"]}
+                        style={styles.promoIconContainer}
+                      >
+                        <Feather name={promo.icon as any} size={36} color={promo.color} />
+                      </LinearGradient>
+                    )}
+                    
+                    <View style={styles.promoContent}>
+                      <ThemedText style={styles.promoTitle} numberOfLines={2}>
+                        {promo.title}
                       </ThemedText>
-                      {voucher.isRamadanSpecial && (
-                        <View style={styles.ramadanBadge}>
-                          <ThemedText style={{ fontSize: 10, color: '#f59e0b' }}>
-                            🌙 RAMADAN
+                      
+                      <ThemedText style={styles.promoDesc} numberOfLines={2}>
+                        {promo.description}
+                      </ThemedText>
+                      
+                      <View style={styles.promoDetailsRow}>
+                        {promo.scope === 'store' && promo.storeName && (
+                          <View style={styles.storeTag}>
+                            <Feather name="map-pin" size={10} color="#059669" />
+                            <ThemedText style={styles.storeTagText}>
+                              {promo.storeName}
+                            </ThemedText>
+                          </View>
+                        )}
+                        
+                        {promo.minOrder > 0 && (
+                          <View style={[styles.minOrderTag, { backgroundColor: promo.color + '15' }]}>
+                            <Feather name="shopping-bag" size={10} color={promo.color} />
+                            <ThemedText style={[styles.minOrderText, { color: promo.color }]}>
+                              Min {formatPrice(promo.minOrder)}
+                            </ThemedText>
+                          </View>
+                        )}
+                      </View>
+                      
+                      {isNotStarted && (
+                        <View style={[styles.statusBadge, { backgroundColor: '#fbbf24' + '20' }]}>
+                          <Feather name="clock" size={11} color="#f59e0b" />
+                          <ThemedText style={{ fontSize: 10, color: '#f59e0b', marginLeft: 4, fontWeight: '700' }}>
+                            Opens {formatDate(promo.validFrom)}
                           </ThemedText>
                         </View>
                       )}
+                      
+                      {isExpired && (
+                        <View style={[styles.statusBadge, { backgroundColor: '#ef4444' + '20' }]}>
+                          <Feather name="x-circle" size={11} color="#ef4444" />
+                          <ThemedText style={{ fontSize: 10, color: '#ef4444', marginLeft: 4, fontWeight: '700' }}>
+                            Expired
+                          </ThemedText>
+                        </View>
+                      )}
+                      
+                      <LinearGradient
+                        colors={
+                          isNotStarted 
+                            ? ['#6b7280', '#4b5563']
+                            : isExpired 
+                            ? ['#ef4444', '#dc2626'] 
+                            : isClaimed 
+                            ? ['#10b981', '#059669'] 
+                            : [promo.color, promo.color]
+                        }
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.promoButton}
+                      >
+                        <ThemedText style={styles.promoButtonText}>
+                          {isNotStarted 
+                            ? "🔒 COMING SOON" 
+                            : isExpired 
+                            ? "❌ EXPIRED" 
+                            : isClaimed 
+                            ? "✓ CLAIMED" 
+                            : "CLAIM NOW"}
+                        </ThemedText>
+                        {!isNotStarted && !isExpired && !isClaimed && (
+                          <Feather name="arrow-right" size={14} color="white" />
+                        )}
+                      </LinearGradient>
                     </View>
-                    <ThemedText style={{ color: theme.textSecondary, marginTop: 4 }}>
-                      {voucher.description}
-                    </ThemedText>
-                  </View>
-                  <Feather name="copy" size={20} color={theme.primary} />
-                </Pressable>
-              ))}
-            </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </View>
         )}
 
         {/* ===== CATEGORIES SECTION ===== */}
         {!searchQuery && availableCategories.length > 0 && (
           <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
-            <ThemedText type="h3" style={styles.sectionTitle}>Shop by Category</ThemedText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: Spacing.md }}>
+              <LinearGradient
+                colors={['#10b981', '#059669']}
+                style={styles.sectionIconBadge}
+              >
+                <Feather name="grid" size={18} color="white" />
+              </LinearGradient>
+              <ThemedText type="h3" style={styles.sectionTitle}>Shop by Category</ThemedText>
+            </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.categoriesScroll}
+              decelerationRate="fast"
             >
               {availableCategories.map((category) => (
                 <Pressable
@@ -877,7 +906,10 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
                   style={styles.categoryItem}
                   onPress={() => handleCategoryPress(category)}
                 >
-                  <View style={[styles.categoryIcon, { backgroundColor: category.color + "15" }]}>
+                  <LinearGradient
+                    colors={[category.color + "15", category.color + "25"]}
+                    style={styles.categoryIcon}
+                  >
                     {category.image ? (
                       <Image
                         source={{ uri: getImageUrl(category.image) }}
@@ -887,7 +919,7 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
                     ) : (
                       <Feather name={category.icon as any} size={32} color={category.color} />
                     )}
-                  </View>
+                  </LinearGradient>
                   <ThemedText type="small" style={styles.categoryLabel} numberOfLines={1}>
                     {category.name}
                   </ThemedText>
@@ -900,23 +932,35 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
         {/* ===== STORE SELECTOR ===== */}
         {storesData.length > 0 && (
           <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
-            <ThemedText type="h3" style={styles.sectionTitle}>Nearby Stores</ThemedText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: Spacing.md }}>
+              <LinearGradient
+                colors={['#3b82f6', '#2563eb']}
+                style={styles.sectionIconBadge}
+              >
+                <Feather name="map-pin" size={18} color="white" />
+              </LinearGradient>
+              <ThemedText type="h3" style={styles.sectionTitle}>Nearby Stores</ThemedText>
+            </View>
             <ScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false} 
               contentContainerStyle={styles.storeChipsContainer}
+              decelerationRate="fast"
             >
               <Pressable
                 style={[
                   styles.storeChip,
-                  { backgroundColor: !selectedStore ? '#d1fae5' : theme.cardBackground }
+                  { 
+                    backgroundColor: !selectedStore ? theme.primary + '20' : theme.cardBackground,
+                    borderColor: !selectedStore ? theme.primary : '#e5e7eb',
+                  }
                 ]}
                 onPress={() => setSelectedStore(null)}
               >
-                <Feather name="grid" size={14} color={!selectedStore ? "#10b981" : "#6b7280"} />
+                <Feather name="grid" size={14} color={!selectedStore ? theme.primary : "#6b7280"} />
                 <ThemedText style={[
                   styles.storeChipText,
-                  { color: !selectedStore ? "#10b981" : "#6b7280" }
+                  { color: !selectedStore ? theme.primary : "#6b7280" }
                 ]}>
                   All Stores
                 </ThemedText>
@@ -927,24 +971,27 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
                   key={store.id}
                   style={[
                     styles.storeChip,
-                    { backgroundColor: selectedStore?.id === store.id ? '#d1fae5' : theme.cardBackground }
+                    { 
+                      backgroundColor: selectedStore?.id === store.id ? theme.primary + '20' : theme.cardBackground,
+                      borderColor: selectedStore?.id === store.id ? theme.primary : '#e5e7eb',
+                    }
                   ]}
                   onPress={() => setSelectedStore(store)}
                 >
                   <Feather 
                     name="map-pin" 
                     size={14} 
-                    color={selectedStore?.id === store.id ? "#10b981" : "#6b7280"} 
+                    color={selectedStore?.id === store.id ? theme.primary : "#6b7280"} 
                   />
                   <ThemedText style={[
                     styles.storeChipText,
-                    { color: selectedStore?.id === store.id ? "#10b981" : "#6b7280" }
+                    { color: selectedStore?.id === store.id ? theme.primary : "#6b7280" }
                   ]}>
                     {String(store.name || 'Store')}
                   </ThemedText>
                   <ThemedText style={[
                     styles.storeChipDistance,
-                    { color: selectedStore?.id === store.id ? "#10b981" : "#9ca3af" }
+                    { color: selectedStore?.id === store.id ? theme.primary : "#9ca3af" }
                   ]}>
                     {String((store.distance || 0).toFixed(1))}km
                   </ThemedText>
@@ -957,13 +1004,23 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
         {/* ===== PRODUCTS GRID ===== */}
         <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
           <View style={styles.sectionHeader}>
-            <ThemedText type="h3" style={styles.sectionTitle}>
-              {selectedStore ? `${selectedStore.name} Products` : "All Products"}
-            </ThemedText>
-            {filteredProducts.length > 0 && (
-              <ThemedText style={styles.productCount}>
-                {String(filteredProducts.length)} items
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <LinearGradient
+                colors={['#8b5cf6', '#7c3aed']}
+                style={styles.sectionIconBadge}
+              >
+                <Feather name="package" size={18} color="white" />
+              </LinearGradient>
+              <ThemedText type="h3" style={styles.sectionTitle}>
+                {selectedStore ? `${selectedStore.name} Products` : "All Products"}
               </ThemedText>
+            </View>
+            {filteredProducts.length > 0 && (
+              <View style={styles.productCountBadge}>
+                <ThemedText style={styles.productCount}>
+                  {String(filteredProducts.length)}
+                </ThemedText>
+              </View>
             )}
           </View>
           
@@ -989,7 +1046,7 @@ const handleClaimPromotion = async (promo: APIPromotion) => {
             </View>
           )}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       <CartToast
         visible={toastVisible}
@@ -1005,10 +1062,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.06)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
     zIndex: 1000,
   },
   headerRow: {
@@ -1016,33 +1073,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.md,
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   headerLeft: { flex: 1 },
   headerCenter: { flex: 1, alignItems: 'center' },
-  headerRight: { flex: 1, alignItems: 'flex-end' },
   storeInfoCompact: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#d1fae5',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    gap: 6,
     maxWidth: '100%',
   },
   storeNameSmall: { fontSize: 11, fontWeight: '700', color: '#065f46', flex: 1 },
   storeDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#10b981' },
   storeMinutesSmall: { fontSize: 11, fontWeight: '800', color: '#059669' },
-  logoText: { fontSize: 22, fontWeight: '900', color: '#10b981', letterSpacing: 0.5 },
+  logoText: { 
+    fontSize: 24, 
+    fontWeight: '900', 
+    color: '#10b981', 
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(16, 185, 129, 0.2)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
   
   locationSelector: {
     flexDirection: "row",
     alignItems: "center",
-    padding: Spacing.md,
-    borderRadius: 14,
-    gap: Spacing.sm,
-    borderWidth: 1.5,
+    padding: Spacing.md + 2,
+    borderRadius: 16,
+    gap: Spacing.sm + 2,
+    borderWidth: 2,
+    borderColor: 'rgba(16, 185, 129, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  locationIcon: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
+    alignItems: "center", 
+    justifyContent: "center" 
+  },
+  
+  searchContainer: { flexDirection: "row", gap: Spacing.sm + 2 },
+  searchBar: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    height: 54,
+    borderRadius: 16,
+    paddingHorizontal: Spacing.md + 2,
+    gap: Spacing.sm + 2,
+    borderWidth: 2,
     borderColor: 'rgba(0,0,0,0.06)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1050,85 +1139,155 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  locationIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  
-  searchContainer: { flexDirection: "row", gap: Spacing.sm },
-  searchBar: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    height: 52,
-    borderRadius: 14,
-    paddingHorizontal: Spacing.md,
-    gap: Spacing.sm,
-    borderWidth: 2,
-    borderColor: 'rgba(0,0,0,0.08)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
-  },
   searchInput: { flex: 1, fontSize: 15, fontWeight: '500' },
   micButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
+    width: 54,
+    height: 54,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 4,
+    shadowRadius: 6,
+    elevation: 5,
   },
   
-  bannerSection: { marginBottom: Spacing.xl },
-  bannerSlide: { borderRadius: 18, overflow: 'hidden', marginRight: 0 },
+  bannerSection: { marginBottom: Spacing.xl + 4 },
+  bannerSlide: { borderRadius: 24, overflow: 'hidden', marginRight: 0 },
   bannerImage: { width: '100%', height: '100%' },
   bannerOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
-    padding: 24,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    padding: 28,
   },
-  bannerTitle: { color: 'white', fontWeight: '800', marginBottom: 6 },
-  bannerSubtitle: { color: '#d1fae5', fontWeight: '600' },
-  bannerDots: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 16 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
+  bannerContent: {
+    gap: 6,
+  },
+  bannerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(251, 191, 36, 0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.4)',
+    marginBottom: 8,
+  },
+  bannerBadgeText: {
+    color: '#fbbf24',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  bannerTitle: { 
+    color: 'white', 
+    fontWeight: '900', 
+    marginBottom: 6,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  bannerSubtitle: { 
+    color: '#d1fae5', 
+    fontWeight: '600',
+    lineHeight: 22,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  bannerCTA: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.9)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 12,
+  },
+  bannerCTAText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  bannerDotsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 20,
+    paddingHorizontal: 4,
+  },
+  bannerDots: { 
+    flexDirection: 'row', 
+    gap: 8,
+  },
+  dot: { 
+    height: 8, 
+    borderRadius: 4,
+  },
+  bannerCounter: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6b7280',
+  },
   
-  section: { marginBottom: Spacing.xl },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md },
-  sectionTitle: { fontWeight: '900', fontSize: 20, letterSpacing: 0.3, marginBottom: Spacing.md },
-  productCount: { fontSize: 14, color: '#6b7280', fontWeight: '700' },
+  section: { marginBottom: Spacing.xl + 4 },
+  sectionHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    marginBottom: Spacing.md + 2,
+  },
+  sectionTitle: { 
+    fontWeight: '900', 
+    fontSize: 21, 
+    letterSpacing: 0.3,
+  },
+  productCountBadge: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  productCount: { 
+    fontSize: 13, 
+    color: 'white', 
+    fontWeight: '800',
+  },
   
   categoriesScroll: { 
-    gap: Spacing.md, 
-    paddingVertical: 4,
+    gap: Spacing.md + 2, 
+    paddingVertical: 6,
   },
   categoryItem: {
     alignItems: "center",
-    width: 80,
+    width: 84,
   },
   categoryIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 18,
+    width: 76,
+    height: 76,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: Spacing.xs,
+    marginBottom: Spacing.xs + 2,
     overflow: "hidden",
-    borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderWidth: 2,
+    borderColor: 'rgba(0,0,0,0.04)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   categoryImage: {
-    width: 72,
-    height: 72,
+    width: 76,
+    height: 76,
   },
   categoryLabel: {
     textAlign: "center",
@@ -1137,93 +1296,99 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   
-  storeChipsContainer: { paddingTop: Spacing.sm, paddingBottom: Spacing.xs },
+  storeChipsContainer: { paddingTop: Spacing.sm, paddingBottom: Spacing.xs, gap: 10 },
   storeChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 22,
-    marginRight: 10,
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 24,
     borderWidth: 2,
-    borderColor: 'rgba(0,0,0,0.06)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
   },
   storeChipText: { fontSize: 14, fontWeight: '700' },
   storeChipDistance: { fontSize: 12, fontWeight: '600' },
   
-  productsGrid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.md },
+  productsGrid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.md + 2 },
   productCard: {
-    borderRadius: 16,
+    borderRadius: 18,
     overflow: "hidden",
     position: 'relative',
-    borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.06)',
+    borderWidth: 2,
+    borderColor: 'rgba(0,0,0,0.04)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
   },
   discountBadge: {
     position: 'absolute',
-    top: 10,
-    left: 10,
+    top: 12,
+    left: 12,
     zIndex: 10,
-    backgroundColor: '#ef4444',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
   },
   discountText: { color: 'white', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
   productImageContainer: {
-    height: 140,
+    height: 150,
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: '#fafafa',
-    padding: Spacing.md,
+    padding: Spacing.md + 2,
   },
   productImage: { width: "100%", height: "100%" },
-  productInfo: { padding: Spacing.sm, paddingTop: Spacing.xs },
-  deliveryInfoRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
+  productInfo: { padding: Spacing.sm + 2, paddingTop: Spacing.xs + 2 },
+  deliveryInfoRow: { flexDirection: 'row', gap: 7, marginBottom: 11 },
   storeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     backgroundColor: '#ecfdf5',
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
     flex: 1,
   },
   storeText: { fontSize: 9, fontWeight: '800', color: '#065f46', textTransform: 'uppercase', letterSpacing: 0.3 },
   timeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     backgroundColor: '#d1fae5',
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
   timeText: { fontSize: 9, fontWeight: '800', color: '#065f46' },
-  productName: { marginBottom: 4, fontWeight: '700', fontSize: 14, lineHeight: 17, minHeight: 34, color: '#111827' },
-  brandText: { color: '#6b7280', fontSize: 11, fontWeight: '500', marginBottom: 8 },
-  productFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
+  productName: { marginBottom: 5, fontWeight: '700', fontSize: 14, lineHeight: 18, minHeight: 36, color: '#111827' },
+  brandText: { color: '#6b7280', fontSize: 11, fontWeight: '500', marginBottom: 9 },
+  productFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 5 },
   priceText: { fontWeight: '900', fontSize: 17, color: '#111827' },
-  addButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
+  addButton: { 
+    paddingHorizontal: 18, 
+    paddingVertical: 9, 
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
   addButtonText: { color: 'white', fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
   originalPriceText: {
     textDecorationLine: 'line-through',
     color: '#9ca3af',
     fontSize: 12,
-    marginTop: 2,
+    marginTop: 3,
     fontWeight: '500',
   },
   loadingContainer: {
@@ -1234,89 +1399,141 @@ const styles = StyleSheet.create({
   noResults: {
     width: '100%',
     alignItems: 'center',
-    padding: 60,
-  },
-  ramadanHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
+    padding: 70,
   },
   promoCard: {
-    width: 220,
-    padding: Spacing.lg,
-    borderRadius: 16,
+    width: 260,
+    backgroundColor: 'white',
+    borderRadius: 20,
     borderWidth: 2,
-    gap: Spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+    overflow: 'hidden',
+  },
+  promoImageContainer: {
+    width: '100%',
+    height: 140,
+    position: 'relative',
+  },
+  promoImageFull: {
+    width: '100%',
+    height: '100%',
+  },
+  promoImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    padding: 12,
+  },
+  promoIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 3,
+  },
+  promoIconContainer: {
+    width: '100%',
+    height: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promoContent: {
+    padding: Spacing.md + 2,
+    gap: Spacing.sm,
   },
   promoTitle: {
     fontWeight: '800',
-    fontSize: 15,
-    marginTop: Spacing.xs,
+    fontSize: 16,
+    lineHeight: 20,
+    color: '#111827',
   },
   promoDesc: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 13,
+    color: '#6b7280',
+    lineHeight: 18,
+  },
+  promoDetailsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
   },
   storeTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     backgroundColor: '#ecfdf5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginTop: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
   storeTagText: {
     fontSize: 10,
     fontWeight: '700',
     color: '#065f46',
   },
-  minOrderText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#666',
-    marginTop: 4,
-  },
-  promoButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: Spacing.xs,
-  },
-  voucherCard: {
+  minOrderTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.md,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  minOrderText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  promoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 12,
-    gap: Spacing.md,
+    marginTop: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  ramadanBadge: {
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+  promoButtonText: {
+    color: 'white',
+    fontWeight: '800',
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
- dateInfo: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  paddingHorizontal: 8,
-  paddingVertical: 4,
-  borderRadius: 6,
-  alignSelf: 'flex-start',
-},
-
+  sectionIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+  },
 });
