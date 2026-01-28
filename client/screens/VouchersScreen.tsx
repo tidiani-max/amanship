@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, StyleSheet, FlatList, Pressable, Clipboard, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -11,14 +11,17 @@ import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 
+type Tab = "vouchers" | "promotions";
+
 export default function VouchersScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<Tab>("vouchers");
 
-  // ✅ FIXED: Fetch real vouchers from API instead of mock data
-  const { data: vouchersData = [], isLoading } = useQuery({
+  // ===== FETCH VOUCHERS =====
+  const { data: vouchersData = [], isLoading: vouchersLoading } = useQuery({
     queryKey: ["/api/vouchers/active", user?.id],
     queryFn: async () => {
       const url = user?.id 
@@ -26,6 +29,20 @@ export default function VouchersScreen() {
         : `${process.env.EXPO_PUBLIC_DOMAIN}/api/vouchers/active`;
       
       const res = await fetch(url);
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  // ===== FETCH CLAIMED PROMOTIONS =====
+  const { data: claimedPromotions = [], isLoading: promotionsLoading } = useQuery({
+    queryKey: ["/api/promotions/claimed", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/claimed?userId=${user.id}`
+      );
       if (!res.ok) return [];
       return res.json();
     },
@@ -40,14 +57,16 @@ export default function VouchersScreen() {
     });
   };
 
-  const formatDiscount = (voucher: any) => {
-    if (voucher.discountType === "percentage") {
-      return `${voucher.discount}% OFF`;
+  const formatDiscount = (item: any) => {
+    if (item.discountType === "percentage" || item.type === "percentage") {
+      const value = item.discount || item.discountValue;
+      return `${value}% OFF`;
     }
-    return `Rp ${voucher.discount.toLocaleString("id-ID")}`;
+    const value = item.discount || item.discountValue;
+    return `Rp ${value.toLocaleString("id-ID")}`;
   };
 
-  const handleCopyCode = (voucher: any) => {
+  const handleCopyVoucherCode = (voucher: any) => {
     Clipboard.setString(voucher.code);
     Alert.alert(
       'Copied! 🎉',
@@ -56,7 +75,7 @@ export default function VouchersScreen() {
   };
 
   const renderVoucher = ({ item }: { item: any }) => (
-    <Pressable onPress={() => handleCopyCode(item)}>
+    <Pressable onPress={() => handleCopyVoucherCode(item)}>
       <Card style={styles.voucherCard}>
         <View style={styles.voucherContent}>
           <View style={[styles.voucherBadge, { backgroundColor: item.color || theme.primary }]}>
@@ -92,7 +111,6 @@ export default function VouchersScreen() {
                 Valid until {formatDate(item.validUntil)}
               </ThemedText>
             </View>
-            {/* Usage info */}
             {item.usageLimit && (
               <View style={styles.usageInfo}>
                 <Feather name="users" size={12} color="#6b7280" />
@@ -107,50 +125,170 @@ export default function VouchersScreen() {
     </Pressable>
   );
 
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: theme.backgroundRoot, alignItems: 'center', justifyContent: 'center' }}>
-        <Feather name="tag" size={48} color={theme.textSecondary} style={{ opacity: 0.3 }} />
-        <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
-          Loading vouchers...
-        </ThemedText>
+  const renderPromotion = ({ item }: { item: any }) => (
+    <Card style={styles.voucherCard}>
+      <View style={styles.voucherContent}>
+        <View style={[styles.voucherBadge, { backgroundColor: item.color || theme.primary }]}>
+          <Feather name={item.icon || "gift"} size={24} color={theme.buttonText} />
+        </View>
+        <View style={styles.voucherDetails}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <ThemedText type="h3" style={{ color: item.color || theme.primary }}>
+              {item.title}
+            </ThemedText>
+            {item.isRamadanSpecial && (
+              <View style={styles.ramadanBadge}>
+                <ThemedText style={{ fontSize: 10, color: '#f59e0b', fontWeight: '700' }}>
+                  🌙 RAMADAN
+                </ThemedText>
+              </View>
+            )}
+          </View>
+          
+          <ThemedText type="body" style={{ marginVertical: Spacing.xs }}>
+            {item.description}
+          </ThemedText>
+          
+          {/* Discount info */}
+          {item.discountValue && (
+            <ThemedText type="small" style={{ color: theme.primary, fontWeight: '700' }}>
+              {formatDiscount(item)}
+            </ThemedText>
+          )}
+          
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>
+            Min. order Rp {item.minOrder.toLocaleString("id-ID")}
+          </ThemedText>
+
+          {/* Store tag for store-specific promotions */}
+          {item.storeName && (
+            <View style={styles.storeTag}>
+              <Feather name="map-pin" size={10} color="#059669" />
+              <ThemedText style={styles.storeTagText}>
+                {item.storeName}
+              </ThemedText>
+            </View>
+          )}
+
+          {/* Claimed date */}
+          <View style={styles.claimedBadge}>
+            <Feather name="check-circle" size={14} color="#065f46" />
+            <ThemedText style={styles.claimedText}>
+              Claimed on {formatDate(item.claimedAt)}
+            </ThemedText>
+          </View>
+
+          <View style={styles.voucherFooter}>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+              Valid until {formatDate(item.validUntil)}
+            </ThemedText>
+          </View>
+        </View>
       </View>
-    );
-  }
+    </Card>
+  );
+
+  const isLoading = activeTab === "vouchers" ? vouchersLoading : promotionsLoading;
+  const data = activeTab === "vouchers" ? vouchersData : claimedPromotions;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+      {/* Tab Switcher */}
+      <View style={[styles.tabContainer, { paddingTop: headerHeight + Spacing.md }]}>
+        <Pressable
+          style={[
+            styles.tab,
+            activeTab === "vouchers" && { backgroundColor: theme.primary }
+          ]}
+          onPress={() => setActiveTab("vouchers")}
+        >
+          <Feather 
+            name="tag" 
+            size={20} 
+            color={activeTab === "vouchers" ? "white" : theme.textSecondary} 
+          />
+          <ThemedText 
+            style={[
+              styles.tabText,
+              { color: activeTab === "vouchers" ? "white" : theme.textSecondary }
+            ]}
+          >
+            Vouchers
+          </ThemedText>
+        </Pressable>
+
+        <Pressable
+          style={[
+            styles.tab,
+            activeTab === "promotions" && { backgroundColor: theme.primary }
+          ]}
+          onPress={() => setActiveTab("promotions")}
+        >
+          <Feather 
+            name="gift" 
+            size={20} 
+            color={activeTab === "promotions" ? "white" : theme.textSecondary} 
+          />
+          <ThemedText 
+            style={[
+              styles.tabText,
+              { color: activeTab === "promotions" ? "white" : theme.textSecondary }
+            ]}
+          >
+            My Promotions
+          </ThemedText>
+        </Pressable>
+      </View>
+
+      {/* Content */}
       <FlatList
-        data={vouchersData}
-        renderItem={renderVoucher}
+        data={data}
+        renderItem={activeTab === "vouchers" ? renderVoucher : renderPromotion}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
           styles.listContent,
           {
-            paddingTop: headerHeight + Spacing.lg,
             paddingBottom: insets.bottom + Spacing.xl,
           },
         ]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Feather name="tag" size={48} color={theme.textSecondary} />
-            <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
-              No vouchers available
-            </ThemedText>
-            <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: Spacing.xs, textAlign: 'center', paddingHorizontal: Spacing.xl }}>
-              Check back later for special offers and discounts!
-            </ThemedText>
-          </View>
+          isLoading ? (
+            <View style={styles.emptyState}>
+              <ThemedText type="body" style={{ color: theme.textSecondary }}>
+                Loading...
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Feather 
+                name={activeTab === "vouchers" ? "tag" : "gift"} 
+                size={48} 
+                color={theme.textSecondary} 
+              />
+              <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
+                {activeTab === "vouchers" 
+                  ? "No vouchers available" 
+                  : "No claimed promotions yet"}
+              </ThemedText>
+              <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: Spacing.xs, textAlign: 'center', paddingHorizontal: Spacing.xl }}>
+                {activeTab === "vouchers"
+                  ? "Check back later for special offers and discounts!"
+                  : "Go to the home page and claim promotions to see them here!"}
+              </ThemedText>
+            </View>
+          )
         }
         ListHeaderComponent={
-          vouchersData.length > 0 ? (
+          data.length > 0 ? (
             <View style={styles.headerInfo}>
               <ThemedText type="h3" style={{ marginBottom: Spacing.xs }}>
-                Available Vouchers
+                {activeTab === "vouchers" ? "Available Vouchers" : "My Claimed Promotions"}
               </ThemedText>
               <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                Tap any voucher to copy the code, then paste it at checkout
+                {activeTab === "vouchers"
+                  ? "Tap any voucher to copy the code, then paste it at checkout"
+                  : "These promotions will automatically apply at checkout when conditions are met"}
               </ThemedText>
             </View>
           ) : null
@@ -161,6 +299,26 @@ export default function VouchersScreen() {
 }
 
 const styles = StyleSheet.create({
+  tabContainer: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    backgroundColor: '#f3f4f6',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
   listContent: {
     paddingHorizontal: Spacing.lg,
   },
@@ -208,6 +366,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
+  },
+  storeTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  storeTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#065f46',
+  },
+  claimedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#d1fae5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: Spacing.sm,
+  },
+  claimedText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#065f46',
   },
   emptyState: {
     alignItems: "center",

@@ -116,7 +116,6 @@ export default function HomeScreen() {
   const [screenWidth, setScreenWidth] = useState(width);
   const [selectedStore, setSelectedStore] = useState<APIStore | null>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
-  // ✅ REMOVED: activePromotions state (using React Query instead)
   
   const bannerScrollRef = useRef<ScrollView>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -156,6 +155,27 @@ export default function HomeScreen() {
     if (nearestStore?.name) return String(nearestStore.name);
     return "Detecting location...";
   };
+
+  const { data: claimedPromotionsMap = {} } = useQuery<Record<string, boolean>>({
+    queryKey: ["/api/promotions/claimed-map", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      try {
+        const res = await fetch(
+          `${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/claimed?userId=${user?.id}`
+        );
+        if (!res.ok) return {};
+        const claimed = await res.json();
+        return claimed.reduce((map: Record<string, boolean>, p: any) => {
+          map[p.id] = true;
+          return map;
+        }, {} as Record<string, boolean>);
+      } catch (error) {
+        console.error("Failed to fetch claimed promotions:", error);
+        return {};
+      }
+    },
+  });
 
   // Fetch categories
   const { data: categoriesData } = useQuery<{ data: APICategory[] }>({
@@ -322,30 +342,64 @@ export default function HomeScreen() {
     try {
       console.log("🎁 Claiming promotion:", promo.title);
       
+      // Call backend to claim
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/claim`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            promotionId: promo.id,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert("Error", data.error || "Failed to claim promotion");
+        return;
+      }
+
+      if (data.alreadyClaimed) {
+        Alert.alert(
+          "Already Claimed",
+          "You've already claimed this promotion! It will be applied at checkout.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+
       // Show success message
       Alert.alert(
         "✅ Promotion Claimed!",
-        `${promo.title} will be applied at checkout when your order meets the minimum of ${formatPrice(promo.minOrder)}`,
+        `${promo.title} has been added to your account. It will automatically apply at checkout when your order meets the minimum of ${formatPrice(promo.minOrder)}`,
         [
           {
-            text: "View Products",
+            text: "View My Promotions",
             onPress: () => {
-              // Navigate to products
+              navigation.navigate("Vouchers" as any);
+            },
+          },
+          {
+            text: "Shop Now",
+            onPress: () => {
+              // Filter by store if store-specific
               if (promo.storeId) {
                 const store = storesData.find(s => s.id === promo.storeId);
                 if (store) {
                   setSelectedStore(store);
                 }
               }
-            }
+            },
           },
-          { text: "OK" }
+          { text: "OK" },
         ]
       );
 
-      // Optional: Save claimed promotion to AsyncStorage for checkout
-      // await AsyncStorage.setItem('claimedPromotion', JSON.stringify(promo));
-
+      // Refresh promotions list
+      refetchPromotions();
     } catch (error) {
       console.error("❌ Claim promotion error:", error);
       Alert.alert("Error", "Failed to claim promotion. Please try again.");
@@ -617,11 +671,16 @@ export default function HomeScreen() {
               {promotionsData.map((promo) => (
                 <Pressable
                   key={promo.id}
-                  style={[styles.promoCard, { 
-                    backgroundColor: promo.color + '15',
-                    borderColor: promo.color 
-                  }]}
+                  style={[
+                    styles.promoCard,
+                    {
+                      backgroundColor: promo.color + "15",
+                      borderColor: promo.color,
+                      opacity: claimedPromotionsMap[promo.id] ? 0.7 : 1,
+                    },
+                  ]}
                   onPress={() => handleClaimPromotion(promo)}
+                  disabled={claimedPromotionsMap[promo.id] || false}
                 >
                   {promo.bannerImage ? (
                     <Image 
@@ -656,9 +715,18 @@ export default function HomeScreen() {
                     </ThemedText>
                   )}
                   
-                  <View style={[styles.promoButton, { backgroundColor: promo.color }]}>
-                    <ThemedText style={{ color: 'white', fontWeight: '700' }}>
-                      CLAIM NOW
+                  <View
+                    style={[
+                      styles.promoButton,
+                      {
+                        backgroundColor: claimedPromotionsMap[promo.id]
+                          ? "#9ca3af"
+                          : promo.color,
+                      },
+                    ]}
+                  >
+                    <ThemedText style={{ color: "white", fontWeight: "700" }}>
+                      {claimedPromotionsMap[promo.id] ? "✓ CLAIMED" : "CLAIM NOW"}
                     </ThemedText>
                   </View>
                 </Pressable>
@@ -806,7 +874,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ===== PRODUCTS GRID (RESPONSIVE) ===== */}
+        {/* ===== PRODUCTS GRID ===== */}
         <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
           <View style={styles.sectionHeader}>
             <ThemedText type="h3" style={styles.sectionTitle}>
@@ -1115,7 +1183,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
   },
-  // ✅ NEW: Additional styles for promotions
   storeTag: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -16,6 +16,7 @@ import fs from "fs";
 import path from 'path';
 import multer from "multer";
 import { driverLocations } from "../shared/schema";
+import { userClaimedPromotions } from "../shared/schema";
 
 
 // ✅ IMPORT NOTIFICATION FUNCTIONS (removed local duplicate)
@@ -3931,7 +3932,214 @@ app.get("/api/promotions/banners", async (req, res) => {
   }
 });
 
+app.post("/api/promotions/claim", async (req, res) => {
+  try {
+    const { userId, promotionId } = req.body;
 
+    if (!userId || !promotionId) {
+      return res.status(400).json({ error: "userId and promotionId required" });
+    }
+
+    console.log(`🎁 User ${userId} claiming promotion ${promotionId}`);
+
+    // Verify user
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Verify promotion exists and is active
+    const [promotion] = await db
+      .select()
+      .from(promotions)
+      .where(eq(promotions.id, promotionId));
+
+    if (!promotion) {
+      return res.status(404).json({ error: "Promotion not found" });
+    }
+
+    if (!promotion.isActive) {
+      return res.status(400).json({ error: "Promotion is no longer active" });
+    }
+
+    const now = new Date();
+    if (now < new Date(promotion.validFrom) || now > new Date(promotion.validUntil)) {
+      return res.status(400).json({ error: "Promotion is not valid at this time" });
+    }
+
+    // Check if already claimed
+    const existing = await db
+      .select()
+      .from(userClaimedPromotions)
+      .where(
+        and(
+          eq(userClaimedPromotions.userId, userId),
+          eq(userClaimedPromotions.promotionId, promotionId)
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      console.log(`⚠️ User ${userId} already claimed promotion ${promotionId}`);
+      return res.json({
+        success: true,
+        message: "Promotion already claimed",
+        alreadyClaimed: true,
+      });
+    }
+
+    // Create claimed record
+    const [claimed] = await db
+      .insert(userClaimedPromotions)
+      .values({
+        userId,
+        promotionId,
+      })
+      .returning();
+
+    console.log(`✅ User ${userId} successfully claimed promotion ${promotionId}`);
+
+    res.json({
+      success: true,
+      message: "Promotion claimed successfully",
+      claimed,
+      promotion,
+    });
+  } catch (error) {
+    console.error("❌ Claim promotion error:", error);
+    res.status(500).json({ error: "Failed to claim promotion" });
+  }
+});
+
+// ===== GET USER'S CLAIMED PROMOTIONS =====
+app.get("/api/promotions/claimed", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    console.log(`📋 Fetching claimed promotions for user: ${userId}`);
+
+    const now = new Date();
+
+    // Get all claimed promotions that are still valid
+    const claimedPromotions = await db
+      .select({
+        claimedPromotion: userClaimedPromotions,
+        promotion: promotions,
+        store: stores,
+      })
+      .from(userClaimedPromotions)
+      .leftJoin(promotions, eq(userClaimedPromotions.promotionId, promotions.id))
+      .leftJoin(stores, eq(promotions.storeId, stores.id))
+      .where(
+        and(
+          eq(userClaimedPromotions.userId, userId as string),
+          eq(userClaimedPromotions.isActive, true),
+          eq(promotions.isActive, true),
+          lte(promotions.validFrom, now),
+          gte(promotions.validUntil, now)
+        )
+      )
+      .orderBy(sql`${userClaimedPromotions.claimedAt} DESC`);
+
+    console.log(`✅ Found ${claimedPromotions.length} claimed promotions`);
+
+    const formatted = claimedPromotions.map((item) => ({
+      ...item.promotion,
+      claimedAt: item.claimedPromotion.claimedAt,
+      storeName: item.store?.name,
+    }));
+
+    res.json(formatted);
+  } catch (error) {
+    console.error("❌ Get claimed promotions error:", error);
+    res.status(500).json({ error: "Failed to fetch claimed promotions" });
+  }
+});
+
+// ===== CHECK IF PROMOTION IS CLAIMED =====
+app.get("/api/promotions/:promotionId/claimed", async (req, res) => {
+  try {
+    const { promotionId } = req.params;
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.json({ claimed: false });
+    }
+
+    const claimed = await db
+      .select()
+      .from(userClaimedPromotions)
+      .where(
+        and(
+          eq(userClaimedPromotions.userId, userId as string),
+          eq(userClaimedPromotions.promotionId, promotionId),
+          eq(userClaimedPromotions.isActive, true)
+        )
+      )
+      .limit(1);
+
+    res.json({ claimed: claimed.length > 0 });
+  } catch (error) {
+    console.error("❌ Check claimed error:", error);
+    res.status(500).json({ error: "Failed to check claimed status" });
+  }
+});
+
+// ===== UPDATE: Find Best Promotion (Only Claimed Ones) =====
+async function findBestClaimedPromotion(
+  userId: string,
+  subtotal: number,
+  storeId?: string
+): Promise<any | null> {
+  const now = new Date();
+
+  try {
+    // Get user's claimed promotions
+    const claimedPromotions = await db
+      .select({
+        promotion: promotions,
+      })
+      .from(userClaimedPromotions)
+      .leftJoin(promotions, eq(userClaimedPromotions.promotionId, promotions.id))
+      .where(
+        and(
+          eq(userClaimedPromotions.userId, userId),
+          eq(userClaimedPromotions.isActive, true),
+          eq(promotions.isActive, true),
+          lte(promotions.validFrom, now),
+          gte(promotions.validUntil, now),
+          lte(promotions.minOrder, subtotal)
+        )
+      )
+      .orderBy(sql`${promotions.priority} DESC`);
+
+    if (!claimedPromotions.length) {
+      return null;
+    }
+
+    // Filter by store if provided
+    for (const { promotion } of claimedPromotions) {
+      if (!promotion) continue;
+
+      if (promotion.scope === 'app') {
+        return promotion; // App-wide always applies
+      }
+
+      if (promotion.scope === 'store' && promotion.storeId === storeId) {
+        return promotion; // Store matches
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error("❌ Find claimed promotion error:", error);
+    return null;
+  }
+}
 
 
 
