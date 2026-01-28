@@ -16,12 +16,15 @@ export type OrderStatus = typeof orderStatuses[number];
 export const paymentMethodTypes = ["midtrans", "cod"] as const;
 export type PaymentMethodType = typeof paymentMethodTypes[number];
 
-// ===== NEW: Promotion Types =====
+// ===== Promotion Types =====
 export const promotionTypes = ["percentage", "fixed_amount", "buy_x_get_y", "free_delivery", "bundle"] as const;
 export type PromotionType = typeof promotionTypes[number];
 
 export const promotionTargets = ["all", "new_users", "returning_users", "specific_users"] as const;
 export type PromotionTarget = typeof promotionTargets[number];
+
+export const promotionScopes = ["store", "app"] as const;
+export type PromotionScope = typeof promotionScopes[number];
 
 // --- Tables ---
 
@@ -40,7 +43,6 @@ export const users = pgTable("users", {
   storeId: integer("store_id"),
   pushToken: text("push_token"),
   firstLogin: boolean("first_login").default(true).notNull(),
-  // ===== NEW: Track if user is new (for targeting new user promotions) =====
   isNewUser: boolean("is_new_user").default(true).notNull(),
   firstOrderAt: timestamp("first_order_at"),
   totalOrders: integer("total_orders").default(0).notNull(),
@@ -105,9 +107,8 @@ export const products = pgTable("products", {
   categoryId: varchar("category_id").notNull().references(() => categories.id),
   description: text("description"),
   nutrition: jsonb("nutrition"),
-  // ===== NEW: Special Ramadan flags =====
   isRamadanSpecial: boolean("is_ramadan_special").default(false).notNull(),
-  ramadanDiscount: integer("ramadan_discount"), // percentage
+  ramadanDiscount: integer("ramadan_discount"),
 });
 
 export const storeInventory = pgTable("store_inventory", {
@@ -147,10 +148,9 @@ export const orders = pgTable("orders", {
   items: jsonb("items").notNull(),
   status: text("status").notNull().default("pending"),
   total: integer("total").notNull(),
-  subtotal: integer("subtotal").notNull(), // Before discounts
+  subtotal: integer("subtotal").notNull(),
   deliveryFee: integer("delivery_fee").notNull().default(10000),
-  discount: integer("discount").default(0).notNull(), // Total discount applied
-  // ===== NEW: Promotion tracking =====
+  discount: integer("discount").default(0).notNull(),
   appliedPromotionId: varchar("applied_promotion_id").references(() => promotions.id),
   appliedVoucherId: varchar("applied_voucher_id").references(() => vouchers.id),
   promotionDiscount: integer("promotion_discount").default(0).notNull(),
@@ -179,7 +179,6 @@ export const orderItems = pgTable("order_items", {
   productId: varchar("product_id").references(() => products.id).notNull(),
   quantity: integer("quantity").notNull(),
   priceAtEntry: decimal("price_at_entry", { precision: 10, scale: 2 }).notNull(),
-  // ===== NEW: Track if item was part of promotion =====
   isFreeItem: boolean("is_free_item").default(false).notNull(),
   promotionApplied: text("promotion_applied"),
 });
@@ -201,50 +200,54 @@ export const vouchers = pgTable("vouchers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   code: text("code").notNull().unique(),
   discount: integer("discount").notNull(),
-  discountType: text("discount_type").notNull(), // "percentage" or "fixed_amount"
+  discountType: text("discount_type").notNull(),
   minOrder: integer("min_order").default(0).notNull(),
-  maxDiscount: integer("max_discount"), // Max discount for percentage types
+  maxDiscount: integer("max_discount"),
   validFrom: timestamp("valid_from").defaultNow().notNull(),
   validUntil: timestamp("valid_until").notNull(),
   description: text("description"),
-  // ===== NEW: Enhanced voucher features =====
   isActive: boolean("is_active").default(true).notNull(),
-  usageLimit: integer("usage_limit"), // null = unlimited
+  usageLimit: integer("usage_limit"),
   usedCount: integer("used_count").default(0).notNull(),
-  userLimit: integer("user_limit").default(1).notNull(), // Per user limit
-  targetUsers: text("target_users").default("all").notNull(), // "all", "new_users", "returning_users"
+  userLimit: integer("user_limit").default(1).notNull(),
+  targetUsers: text("target_users").default("all").notNull(),
   isRamadanSpecial: boolean("is_ramadan_special").default(false).notNull(),
-  icon: text("icon").default("tag"), // Icon name for display
-  color: text("color").default("#10b981"), // Theme color
-  priority: integer("priority").default(0).notNull(), // Higher = shown first
+  icon: text("icon").default("tag"),
+  color: text("color").default("#10b981"),
+  priority: integer("priority").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// ===== NEW: PROMOTIONS TABLE =====
+// ===== UPDATED: PROMOTIONS TABLE WITH STORE SUPPORT =====
 export const promotions = pgTable("promotions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   description: text("description").notNull(),
-  type: text("type").notNull(), // "percentage", "fixed_amount", "buy_x_get_y", "free_delivery", "bundle"
+  type: text("type").notNull(),
   
   // Discount details
-  discountValue: integer("discount_value"), // percentage or fixed amount
-  maxDiscount: integer("max_discount"), // For percentage discounts
+  discountValue: integer("discount_value"),
+  maxDiscount: integer("max_discount"),
   minOrder: integer("min_order").default(0).notNull(),
   
   // Buy X Get Y details
-  buyQuantity: integer("buy_quantity"), // Buy X items
-  getQuantity: integer("get_quantity"), // Get Y items free
-  applicableProductIds: jsonb("applicable_product_ids"), // Which products qualify
+  buyQuantity: integer("buy_quantity"),
+  getQuantity: integer("get_quantity"),
+  applicableProductIds: jsonb("applicable_product_ids"),
   
   // Bundle details
-  bundleItems: jsonb("bundle_items"), // Array of {productId, quantity}
-  bundlePrice: integer("bundle_price"), // Special bundle price
+  bundleItems: jsonb("bundle_items"),
+  bundlePrice: integer("bundle_price"),
   
   // Targeting
-  targetUsers: text("target_users").default("all").notNull(), // "all", "new_users", "returning_users", "specific_users"
-  specificUserIds: jsonb("specific_user_ids"), // Array of user IDs
-  applicableStoreIds: jsonb("applicable_store_ids"), // Which stores, null = all
+  targetUsers: text("target_users").default("all").notNull(),
+  specificUserIds: jsonb("specific_user_ids"),
+  applicableStoreIds: jsonb("applicable_store_ids"),
+  
+  // ✅ NEW: Store ownership and scope
+  storeId: varchar("store_id").references(() => stores.id), // null = app-wide promotion
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  scope: text("scope").default("store").notNull(), // "store" or "app"
   
   // Display
   image: text("image"),
@@ -255,7 +258,7 @@ export const promotions = pgTable("promotions", {
   
   // Limits
   isActive: boolean("is_active").default(true).notNull(),
-  usageLimit: integer("usage_limit"), // Total usage limit
+  usageLimit: integer("usage_limit"),
   usedCount: integer("used_count").default(0).notNull(),
   userLimit: integer("user_limit").default(1).notNull(),
   
@@ -271,7 +274,7 @@ export const promotions = pgTable("promotions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// ===== NEW: USER PROMOTION USAGE TRACKING =====
+// ===== USER PROMOTION USAGE TRACKING =====
 export const userPromotionUsage = pgTable("user_promotion_usage", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
@@ -280,7 +283,7 @@ export const userPromotionUsage = pgTable("user_promotion_usage", {
   usedAt: timestamp("used_at").defaultNow().notNull(),
 });
 
-// ===== NEW: USER VOUCHER USAGE TRACKING =====
+// ===== USER VOUCHER USAGE TRACKING =====
 export const userVoucherUsage = pgTable("user_voucher_usage", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
@@ -313,6 +316,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   driverLocations: many(driverLocations),
   promotionUsage: many(userPromotionUsage),
   voucherUsage: many(userVoucherUsage),
+  createdPromotions: many(promotions),
 }));
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
@@ -350,7 +354,15 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   driverLocations: many(driverLocations),
 }));
 
-export const promotionsRelations = relations(promotions, ({ many }) => ({
+export const promotionsRelations = relations(promotions, ({ one, many }) => ({
+  store: one(stores, {
+    fields: [promotions.storeId],
+    references: [stores.id],
+  }),
+  creator: one(users, {
+    fields: [promotions.createdBy],
+    references: [users.id],
+  }),
   orders: many(orders),
   usage: many(userPromotionUsage),
 }));
@@ -409,6 +421,7 @@ export const storesRelations = relations(stores, ({ one, many }) => ({
   staff: many(storeStaff),
   inventory: many(storeInventory),
   orders: many(orders),
+  promotions: many(promotions),
 }));
 
 export const storeStaffRelations = relations(storeStaff, ({ one }) => ({

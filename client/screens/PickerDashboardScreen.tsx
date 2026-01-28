@@ -1,12 +1,11 @@
-// Replace your entire picker dashboard file with this
-
+// Enhanced Picker Dashboard with Promotions Tab - FIXED TypeScript errors
 import React, { useState, useMemo } from "react";
 import { 
   View, StyleSheet, ScrollView, RefreshControl, 
   Pressable, TextInput, Modal, Image, TouchableOpacity, ActivityIndicator, Alert 
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from "@react-navigation/native";
@@ -43,6 +42,20 @@ interface InventoryItem {
     image?: string; 
     category?: { name: string };
   };
+}
+
+interface Promotion {
+  id: string;
+  title: string;
+  description: string;
+  type: string;
+  discountValue: number;
+  minOrder: number;
+  validUntil: string;
+  isActive: boolean;
+  showInBanner: boolean;
+  usedCount: number;
+  createdAt: string;
 }
 
 function OrderCard({ 
@@ -135,6 +148,92 @@ function OrderCard({
   );
 }
 
+// ✅ FIXED: Changed type="h4" to type="h3" and fixed style array issue
+function PromotionCard({ 
+  promotion, 
+  onEdit, 
+  onDelete, 
+  onToggleActive 
+}: { 
+  promotion: Promotion; 
+  onEdit: (promo: Promotion) => void;
+  onDelete: (id: string) => void;
+  onToggleActive: (id: string, isActive: boolean) => void;
+}) {
+  const { theme } = useTheme();
+  
+  return (
+    <Card style={{ ...styles.promotionCard, ...(!promotion.isActive && { opacity: 0.6 }) }}>
+      <View style={styles.promotionHeader}>
+        <View style={{ flex: 1 }}>
+          <ThemedText type="h3">{promotion.title}</ThemedText>
+          <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 4 }}>
+            {promotion.description}
+          </ThemedText>
+        </View>
+        <View style={[styles.statusBadge, { backgroundColor: promotion.isActive ? theme.success + '20' : theme.error + '20' }]}>
+          <ThemedText style={{ color: promotion.isActive ? theme.success : theme.error, fontSize: 12, fontWeight: '600' }}>
+            {promotion.isActive ? 'Active' : 'Inactive'}
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.promotionDetails}>
+        <View style={styles.detailRow}>
+          <Feather name="percent" size={16} color={theme.textSecondary} />
+          <ThemedText type="caption" style={{ marginLeft: 6 }}>
+            {promotion.type === 'percentage' ? `${promotion.discountValue}% off` : `Rp ${promotion.discountValue} off`}
+          </ThemedText>
+        </View>
+        
+        <View style={styles.detailRow}>
+          <Feather name="shopping-bag" size={16} color={theme.textSecondary} />
+          <ThemedText type="caption" style={{ marginLeft: 6 }}>
+            Min order: Rp {promotion.minOrder.toLocaleString()}
+          </ThemedText>
+        </View>
+        
+        <View style={styles.detailRow}>
+          <Feather name="calendar" size={16} color={theme.textSecondary} />
+          <ThemedText type="caption" style={{ marginLeft: 6 }}>
+            Until: {new Date(promotion.validUntil).toLocaleDateString()}
+          </ThemedText>
+        </View>
+
+        <View style={styles.detailRow}>
+          <Feather name="users" size={16} color={theme.textSecondary} />
+          <ThemedText type="caption" style={{ marginLeft: 6 }}>
+            Used: {promotion.usedCount} times
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.promotionActions}>
+        <TouchableOpacity 
+          style={[styles.iconActionBtn, { backgroundColor: theme.primary + '15' }]}
+          onPress={() => onEdit(promotion)}
+        >
+          <Feather name="edit-2" size={18} color={theme.primary} />
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.iconActionBtn, { backgroundColor: theme.warning + '15' }]}
+          onPress={() => onToggleActive(promotion.id, !promotion.isActive)}
+        >
+          <Feather name={promotion.isActive ? "eye-off" : "eye"} size={18} color={theme.warning} />
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.iconActionBtn, { backgroundColor: theme.error + '15' }]}
+          onPress={() => onDelete(promotion.id)}
+        >
+          <Feather name="trash-2" size={18} color={theme.error} />
+        </TouchableOpacity>
+      </View>
+    </Card>
+  );
+}
+
 function CustomAlertModal({ 
   visible, 
   title, 
@@ -170,11 +269,14 @@ export default function PickerDashboardScreen() {
   const queryClient = useQueryClient();
   const navigation = useNavigation<any>();
 
-  const [activeTab, setActiveTab] = useState<"orders" | "inventory">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "inventory" | "promotions">("orders");
   const [searchQuery, setSearchQuery] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
+  const [promotionModalVisible, setPromotionModalVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingPromotion, setIsEditingPromotion] = useState(false);
   
+  // Inventory states
   const [selectedInventoryId, setSelectedInventoryId] = useState<string | null>(null);
   const [formName, setFormName] = useState("");
   const [formBrand, setFormBrand] = useState("");
@@ -186,6 +288,16 @@ export default function PickerDashboardScreen() {
   const [formCategoryId, setFormCategoryId] = useState<string | null>(null);
   const [formImage, setFormImage] = useState<string | null>(null);
   const [imageChanged, setImageChanged] = useState(false);
+
+  // Promotion states
+  const [selectedPromotionId, setSelectedPromotionId] = useState<string | null>(null);
+  const [promoTitle, setPromoTitle] = useState("");
+  const [promoDescription, setPromoDescription] = useState("");
+  const [promoType, setPromoType] = useState<"percentage" | "fixed_amount">("percentage");
+  const [promoDiscountValue, setPromoDiscountValue] = useState("");
+  const [promoMinOrder, setPromoMinOrder] = useState("");
+  const [promoValidUntil, setPromoValidUntil] = useState(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [promoShowInBanner, setPromoShowInBanner] = useState(false);
 
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
@@ -217,6 +329,8 @@ export default function PickerDashboardScreen() {
     );
   };
 
+  // ===== QUERIES =====
+  
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
     queryFn: async () => {
@@ -247,6 +361,165 @@ export default function PickerDashboardScreen() {
     refetchInterval: 3000,
   });
 
+  const { data: promotions = [], isLoading: promotionsLoading, refetch: refetchPromotions } = useQuery<Promotion[]>({
+    queryKey: ["/api/picker/promotions", user?.id],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/picker/promotions?userId=${user?.id}`);
+      if (!res.ok) throw new Error("Failed to fetch promotions");
+      return res.json();
+    },
+    enabled: !!user?.id,
+  });
+
+  // ===== MUTATIONS =====
+
+  const createPromotionMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await fetch(`${BASE_URL}/api/picker/promotions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, userId: user?.id }),
+      });
+      if (!res.ok) throw new Error('Failed to create promotion');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/picker/promotions"] });
+      setPromotionModalVisible(false);
+      showAlert("Success", "Promotion created!");
+      resetPromotionForm();
+    },
+    onError: () => showAlert("Error", "Failed to create promotion"),
+  });
+
+  const updatePromotionMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await fetch(`${BASE_URL}/api/picker/promotions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, userId: user?.id }),
+      });
+      if (!res.ok) throw new Error('Failed to update promotion');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/picker/promotions"] });
+      setPromotionModalVisible(false);
+      showAlert("Success", "Promotion updated!");
+      resetPromotionForm();
+    },
+    onError: () => showAlert("Error", "Failed to update promotion"),
+  });
+
+  const deletePromotionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`${BASE_URL}/api/picker/promotions/${id}?userId=${user?.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete promotion');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/picker/promotions"] });
+      showAlert("Success", "Promotion deleted!");
+    },
+    onError: () => showAlert("Error", "Failed to delete promotion"),
+  });
+
+  const togglePromotionActiveMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const res = await fetch(`${BASE_URL}/api/picker/promotions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user?.id, isActive }),
+      });
+      if (!res.ok) throw new Error('Failed to toggle promotion');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/picker/promotions"] });
+    },
+    onError: () => showAlert("Error", "Failed to toggle promotion"),
+  });
+
+  // ===== HELPER FUNCTIONS =====
+
+  const resetPromotionForm = () => {
+    setPromoTitle("");
+    setPromoDescription("");
+    setPromoType("percentage");
+    setPromoDiscountValue("");
+    setPromoMinOrder("");
+    setPromoValidUntil(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+    setPromoShowInBanner(false);
+    setSelectedPromotionId(null);
+    setIsEditingPromotion(false);
+  };
+
+  const openPromotionModal = (promotion?: Promotion) => {
+    if (promotion) {
+      setIsEditingPromotion(true);
+      setSelectedPromotionId(promotion.id);
+      setPromoTitle(promotion.title);
+      setPromoDescription(promotion.description);
+      setPromoType(promotion.type as "percentage" | "fixed_amount");
+      setPromoDiscountValue(promotion.discountValue.toString());
+      setPromoMinOrder(promotion.minOrder.toString());
+      setPromoValidUntil(new Date(promotion.validUntil).toISOString().split('T')[0]);
+      setPromoShowInBanner(promotion.showInBanner);
+    } else {
+      resetPromotionForm();
+    }
+    setPromotionModalVisible(true);
+  };
+
+  const handleSavePromotion = () => {
+    if (!promoTitle.trim()) {
+      showAlert("Error", "Please enter a promotion title");
+      return;
+    }
+
+    if (!promoDiscountValue || isNaN(Number(promoDiscountValue)) || Number(promoDiscountValue) <= 0) {
+      showAlert("Error", "Please enter a valid discount value");
+      return;
+    }
+
+    const data = {
+      title: promoTitle,
+      description: promoDescription,
+      type: promoType,
+      discountValue: Number(promoDiscountValue),
+      minOrder: Number(promoMinOrder) || 0,
+      validUntil: new Date(promoValidUntil).toISOString(),
+      showInBanner: promoShowInBanner,
+    };
+
+    if (isEditingPromotion && selectedPromotionId) {
+      updatePromotionMutation.mutate({ id: selectedPromotionId, data });
+    } else {
+      createPromotionMutation.mutate(data);
+    }
+  };
+
+  const handleDeletePromotion = (id: string) => {
+    Alert.alert(
+      "Delete Promotion",
+      "Are you sure you want to delete this promotion?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive",
+          onPress: () => deletePromotionMutation.mutate(id)
+        }
+      ]
+    );
+  };
+
+  const handleTogglePromotionActive = (id: string, isActive: boolean) => {
+    togglePromotionActiveMutation.mutate({ id, isActive });
+  };
+
   const ordersToDisplay = useMemo(() => {
     if (!dashboard?.orders) return [];
     const allOrders = [
@@ -267,7 +540,7 @@ export default function PickerDashboardScreen() {
   }, [inventory, searchQuery]);
 
   const onRefresh = async () => {
-    await Promise.all([refetchInv(), refetchDash()]);
+    await Promise.all([refetchInv(), refetchDash(), refetchPromotions()]);
   };
 
   const pickImage = async () => {
@@ -490,9 +763,8 @@ export default function PickerDashboardScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* ✅ HEADER WITH BUTTONS AT TOP */}
+      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: theme.backgroundDefault }]}>
-        {/* Top row: Title + Buttons */}
         <View style={styles.titleRow}>
           <ThemedText type="h2">Store Ops</ThemedText>
           
@@ -513,7 +785,6 @@ export default function PickerDashboardScreen() {
           </View>
         </View>
 
-        {/* Store info */}
         <View style={[styles.storeInfo, { marginTop: 8, marginBottom: 16 }]}>
           <Feather name="map-pin" size={14} color={theme.textSecondary} />
           <ThemedText type="caption" style={{ color: theme.textSecondary, marginLeft: 4 }}>
@@ -521,7 +792,7 @@ export default function PickerDashboardScreen() {
           </ThemedText>
         </View>
 
-        {/* ✅ TABS */}
+        {/* Tabs */}
         <View style={[styles.tabs, { borderBottomColor: theme.border }]}>
           <Pressable 
             onPress={() => setActiveTab("orders")} 
@@ -542,14 +813,58 @@ export default function PickerDashboardScreen() {
               Inventory
             </ThemedText>
           </Pressable>
+          
+          <Pressable 
+            onPress={() => setActiveTab("promotions")} 
+            style={[styles.tab, activeTab === "promotions" && { borderBottomColor: theme.primary }]}
+          >
+            <Feather name="gift" size={18} color={activeTab === "promotions" ? theme.primary : theme.textSecondary} />
+            <ThemedText style={[styles.tabText, { color: activeTab === "promotions" ? theme.primary : theme.textSecondary }]}>
+              Promos
+            </ThemedText>
+          </Pressable>
         </View>
       </View>
 
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={invLoading || dashLoading} onRefresh={onRefresh} tintColor={theme.primary} />}
+        refreshControl={<RefreshControl refreshing={invLoading || dashLoading || promotionsLoading} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
-        {activeTab === "inventory" ? (
+        {activeTab === "promotions" ? (
+          <>
+            <TouchableOpacity 
+              style={[styles.addBtn, { backgroundColor: theme.primary }]} 
+              onPress={() => openPromotionModal()}
+            >
+              <Feather name="plus" size={18} color="white" />
+              <ThemedText style={styles.addBtnText}>Create Promotion</ThemedText>
+            </TouchableOpacity>
+
+            {promotionsLoading ? (
+              <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 40 }} />
+            ) : promotions.length > 0 ? (
+              <View>
+                {promotions.map(promo => (
+                  <PromotionCard
+                    key={promo.id}
+                    promotion={promo}
+                    onEdit={openPromotionModal}
+                    onDelete={handleDeletePromotion}
+                    onToggleActive={handleTogglePromotionActive}
+                  />
+                ))}
+              </View>
+            ) : (
+              <View style={styles.centeredContent}>
+                <Feather name="gift" size={50} color={theme.textSecondary} />
+                <ThemedText style={{ marginTop: 10, color: theme.textSecondary }}>No promotions yet</ThemedText>
+                <ThemedText type="caption" style={{ marginTop: 5, color: theme.textSecondary }}>
+                  Create your first promotion to attract customers!
+                </ThemedText>
+              </View>
+            )}
+          </>
+        ) : activeTab === "inventory" ? (
           <>
             <View style={[styles.searchContainer, { backgroundColor: theme.backgroundTertiary }]}>
               <Feather name="search" size={18} color={theme.textSecondary} />
@@ -606,7 +921,115 @@ export default function PickerDashboardScreen() {
         )}
       </ScrollView>
 
-      {/* Modals */}
+      {/* Promotion Modal */}
+      <Modal visible={promotionModalVisible} animationType="slide">
+        <ThemedView style={[styles.modalContent, { paddingTop: insets.top + 20 }]}>
+          <View style={styles.modalHeader}>
+            <ThemedText type="h2">{isEditingPromotion ? "Edit Promotion" : "New Promotion"}</ThemedText>
+            <TouchableOpacity onPress={() => setPromotionModalVisible(false)}>
+              <Feather name="x" size={24} color={theme.text} />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <ThemedText style={styles.label}>Title *</ThemedText>
+            <TextInput 
+              style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} 
+              value={promoTitle} 
+              onChangeText={setPromoTitle} 
+              placeholder="e.g., Weekend Special 20% Off" 
+              placeholderTextColor={theme.textSecondary} 
+            />
+
+            <ThemedText style={styles.label}>Description *</ThemedText>
+            <TextInput 
+              style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary, height: 60 }]} 
+              value={promoDescription} 
+              onChangeText={setPromoDescription}
+              multiline 
+              placeholder="Describe your promotion..." 
+              placeholderTextColor={theme.textSecondary} 
+            />
+
+            <ThemedText style={styles.label}>Type *</ThemedText>
+            <View style={styles.typeSelector}>
+              <TouchableOpacity 
+                style={[styles.typeButton, promoType === 'percentage' && { backgroundColor: theme.primary }]}
+                onPress={() => setPromoType('percentage')}
+              >
+                <ThemedText style={[styles.typeButtonText, promoType === 'percentage' && { color: 'white' }]}>
+                  Percentage
+                </ThemedText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.typeButton, promoType === 'fixed_amount' && { backgroundColor: theme.primary }]}
+                onPress={() => setPromoType('fixed_amount')}
+              >
+                <ThemedText style={[styles.typeButtonText, promoType === 'fixed_amount' && { color: 'white' }]}>
+                  Fixed Amount
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.label}>Discount {promoType === 'percentage' ? '(%)' : '(Rp)'} *</ThemedText>
+                <TextInput 
+                  style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} 
+                  value={promoDiscountValue} 
+                  onChangeText={setPromoDiscountValue}
+                  keyboardType="numeric" 
+                  placeholder={promoType === 'percentage' ? "20" : "50000"} 
+                  placeholderTextColor={theme.textSecondary} 
+                />
+              </View>
+              
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <ThemedText style={styles.label}>Min Order (Rp)</ThemedText>
+                <TextInput 
+                  style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} 
+                  value={promoMinOrder} 
+                  onChangeText={setPromoMinOrder}
+                  keyboardType="numeric" 
+                  placeholder="100000" 
+                  placeholderTextColor={theme.textSecondary} 
+                />
+              </View>
+            </View>
+
+            <ThemedText style={styles.label}>Valid Until *</ThemedText>
+            <TextInput 
+              style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} 
+              value={promoValidUntil} 
+              onChangeText={setPromoValidUntil}
+              placeholder="YYYY-MM-DD" 
+              placeholderTextColor={theme.textSecondary} 
+            />
+
+            <TouchableOpacity 
+              style={styles.checkboxContainer}
+              onPress={() => setPromoShowInBanner(!promoShowInBanner)}
+            >
+              <View style={[styles.checkbox, promoShowInBanner && { backgroundColor: theme.primary }]}>
+                {promoShowInBanner && <Feather name="check" size={16} color="white" />}
+              </View>
+              <ThemedText style={{ marginLeft: 10 }}>Show in home page banner</ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.saveBtn, { backgroundColor: theme.primary }]} 
+              onPress={handleSavePromotion}
+            >
+              <ThemedText style={styles.saveBtnText}>
+                {isEditingPromotion ? "Update Promotion" : "Create Promotion"}
+              </ThemedText>
+            </TouchableOpacity>
+          </ScrollView>
+        </ThemedView>
+      </Modal>
+
+      {/* Inventory Modal */}
       <Modal visible={modalVisible} animationType="slide">
         <ThemedView style={[styles.modalContent, { paddingTop: insets.top + 20 }]}>
           <View style={styles.modalHeader}>
@@ -680,6 +1103,7 @@ export default function PickerDashboardScreen() {
         </ThemedView>
       </Modal>
 
+      {/* Alert Modal */}
       <CustomAlertModal
         visible={alertVisible}
         title={alertTitle}
@@ -687,6 +1111,7 @@ export default function PickerDashboardScreen() {
         onClose={() => setAlertVisible(false)}
       />
 
+      {/* Delete Confirmation Modal */}
       <Modal transparent visible={deleteModalVisible} animationType="fade">
         <Pressable style={styles.alertOverlay} onPress={() => setDeleteModalVisible(false)}>
           <View style={styles.alertContainer}>
@@ -780,4 +1205,16 @@ const styles = StyleSheet.create({
   alertMessage: { fontSize: 14, color: '#666', marginBottom: 20, textAlign: 'center' },
   alertButton: { backgroundColor: '#007AFF', padding: 12, borderRadius: 8, alignItems: 'center' },
   alertButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
+  promotionCard: { padding: 15, marginBottom: 15 },
+  promotionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 15 },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  promotionDetails: { marginBottom: 15 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  promotionActions: { flexDirection: 'row', gap: 10 },
+  iconActionBtn: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  typeSelector: { flexDirection: 'row', gap: 10, marginBottom: 15 },
+  typeButton: { flex: 1, padding: 12, borderRadius: 8, backgroundColor: '#f0f0f0', alignItems: 'center' },
+  typeButtonText: { fontWeight: '600' },
+  checkboxContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 15 },
+  checkbox: { width: 24, height: 24, borderRadius: 4, borderWidth: 2, borderColor: '#ddd', justifyContent: 'center', alignItems: 'center' },
 });

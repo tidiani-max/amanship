@@ -3445,6 +3445,420 @@ app.get("/api/products/ramadan-specials", async (req, res) => {
   }
 });
 
+// ===== PICKER: CREATE PROMOTION FOR THEIR STORE =====
+app.post("/api/picker/promotions", async (req, res) => {
+  try {
+    const { userId, title, description, type, discountValue, minOrder, validUntil, showInBanner } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Get picker's store
+    const [staff] = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.userId, userId));
+
+    if (!staff) {
+      return res.status(403).json({ error: "Not assigned to any store" });
+    }
+
+    // Create store-specific promotion
+    const [newPromotion] = await db
+      .insert(promotions)
+      .values({
+        title,
+        description,
+        type,
+        discountValue: discountValue ? parseInt(discountValue) : null,
+        minOrder: minOrder ? parseInt(minOrder) : 0,
+        validFrom: new Date(),
+        validUntil: new Date(validUntil),
+        storeId: staff.storeId, // ✅ Link to store
+        createdBy: userId,
+        scope: "store", // ✅ Store-level promotion
+        showInBanner: showInBanner || false,
+        isActive: true,
+        usedCount: 0,
+        userLimit: 1,
+      })
+      .returning();
+
+    console.log(`✅ Picker created promotion: ${newPromotion.title} for store ${staff.storeId}`);
+
+    res.json(newPromotion);
+  } catch (error) {
+    console.error("❌ Picker create promotion error:", error);
+    res.status(500).json({ error: "Failed to create promotion" });
+  }
+});
+
+// ===== PICKER: GET THEIR STORE'S PROMOTIONS =====
+app.get("/api/picker/promotions", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Get picker's store
+    const [staff] = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.userId, userId as string));
+
+    if (!staff) {
+      return res.status(403).json({ error: "Not assigned to any store" });
+    }
+
+    // Get all promotions for this store
+    const storePromotions = await db
+      .select()
+      .from(promotions)
+      .where(eq(promotions.storeId, staff.storeId))
+      .orderBy(sql`${promotions.createdAt} DESC`);
+
+    res.json(storePromotions);
+  } catch (error) {
+    console.error("❌ Get picker promotions error:", error);
+    res.status(500).json({ error: "Failed to fetch promotions" });
+  }
+});
+
+// ===== PICKER: UPDATE PROMOTION =====
+app.patch("/api/picker/promotions/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, title, description, discountValue, minOrder, validUntil, isActive, showInBanner } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Get picker's store
+    const [staff] = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.userId, userId));
+
+    if (!staff) {
+      return res.status(403).json({ error: "Not assigned to any store" });
+    }
+
+    // Verify promotion belongs to their store
+    const [promotion] = await db
+      .select()
+      .from(promotions)
+      .where(eq(promotions.id, id));
+
+    if (!promotion || promotion.storeId !== staff.storeId) {
+      return res.status(403).json({ error: "Promotion not found or not yours" });
+    }
+
+    // Update promotion
+    const updateData: any = {};
+    if (title) updateData.title = title;
+    if (description) updateData.description = description;
+    if (discountValue !== undefined) updateData.discountValue = parseInt(discountValue);
+    if (minOrder !== undefined) updateData.minOrder = parseInt(minOrder);
+    if (validUntil) updateData.validUntil = new Date(validUntil);
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (showInBanner !== undefined) updateData.showInBanner = showInBanner;
+
+    const [updated] = await db
+      .update(promotions)
+      .set(updateData)
+      .where(eq(promotions.id, id))
+      .returning();
+
+    console.log(`✅ Updated promotion: ${id}`);
+    res.json(updated);
+  } catch (error) {
+    console.error("❌ Update promotion error:", error);
+    res.status(500).json({ error: "Failed to update promotion" });
+  }
+});
+
+// ===== PICKER: DELETE PROMOTION =====
+app.delete("/api/picker/promotions/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Get picker's store
+    const [staff] = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.userId, userId as string));
+
+    if (!staff) {
+      return res.status(403).json({ error: "Not assigned to any store" });
+    }
+
+    // Verify promotion belongs to their store
+    const [promotion] = await db
+      .select()
+      .from(promotions)
+      .where(eq(promotions.id, id));
+
+    if (!promotion || promotion.storeId !== staff.storeId) {
+      return res.status(403).json({ error: "Promotion not found or not yours" });
+    }
+
+    // Delete promotion
+    await db.delete(promotions).where(eq(promotions.id, id));
+
+    console.log(`✅ Deleted promotion: ${id}`);
+    res.json({ success: true, message: "Promotion deleted" });
+  } catch (error) {
+    console.error("❌ Delete promotion error:", error);
+    res.status(500).json({ error: "Failed to delete promotion" });
+  }
+});
+
+// ===== ADMIN: CREATE APP-WIDE PROMOTION =====
+app.post("/api/admin/promotions", async (req, res) => {
+  try {
+    const { userId, title, description, type, discountValue, minOrder, validUntil, showInBanner, applicableStoreIds } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Verify admin
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId));
+
+    if (!user || user.role !== "admin") {
+      return res.status(403).json({ error: "Admin only" });
+    }
+
+    // Create app-wide promotion
+    const [newPromotion] = await db
+      .insert(promotions)
+      .values({
+        title,
+        description,
+        type,
+        discountValue: discountValue ? parseInt(discountValue) : null,
+        minOrder: minOrder ? parseInt(minOrder) : 0,
+        validFrom: new Date(),
+        validUntil: new Date(validUntil),
+        storeId: null, // ✅ null = app-wide
+        createdBy: userId,
+        scope: "app", // ✅ App-level promotion
+        applicableStoreIds: applicableStoreIds || null, // Which stores can use it
+        showInBanner: showInBanner || false,
+        isActive: true,
+        usedCount: 0,
+        userLimit: 1,
+      })
+      .returning();
+
+    console.log(`✅ Admin created app-wide promotion: ${newPromotion.title}`);
+
+    res.json(newPromotion);
+  } catch (error) {
+    console.error("❌ Admin create promotion error:", error);
+    res.status(500).json({ error: "Failed to create promotion" });
+  }
+});
+
+// ===== ADMIN: GET ALL PROMOTIONS =====
+app.get("/api/admin/promotions", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Verify admin
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId as string));
+
+    if (!user || user.role !== "admin") {
+      return res.status(403).json({ error: "Admin only" });
+    }
+
+    // Get all promotions with store info
+    const allPromotions = await db
+      .select({
+        promotion: promotions,
+        storeName: stores.name,
+        creatorName: users.username,
+      })
+      .from(promotions)
+      .leftJoin(stores, eq(promotions.storeId, stores.id))
+      .leftJoin(users, eq(promotions.createdBy, users.id))
+      .orderBy(sql`${promotions.createdAt} DESC`);
+
+    res.json(allPromotions);
+  } catch (error) {
+    console.error("❌ Get admin promotions error:", error);
+    res.status(500).json({ error: "Failed to fetch promotions" });
+  }
+});
+
+// ===== ADMIN: UPDATE ANY PROMOTION =====
+app.patch("/api/admin/promotions/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, title, description, discountValue, minOrder, validUntil, isActive, showInBanner, applicableStoreIds } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Verify admin
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId));
+
+    if (!user || user.role !== "admin") {
+      return res.status(403).json({ error: "Admin only" });
+    }
+
+    // Update promotion
+    const updateData: any = {};
+    if (title) updateData.title = title;
+    if (description) updateData.description = description;
+    if (discountValue !== undefined) updateData.discountValue = parseInt(discountValue);
+    if (minOrder !== undefined) updateData.minOrder = parseInt(minOrder);
+    if (validUntil) updateData.validUntil = new Date(validUntil);
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (showInBanner !== undefined) updateData.showInBanner = showInBanner;
+    if (applicableStoreIds !== undefined) updateData.applicableStoreIds = applicableStoreIds;
+
+    const [updated] = await db
+      .update(promotions)
+      .set(updateData)
+      .where(eq(promotions.id, id))
+      .returning();
+
+    console.log(`✅ Admin updated promotion: ${id}`);
+    res.json(updated);
+  } catch (error) {
+    console.error("❌ Admin update promotion error:", error);
+    res.status(500).json({ error: "Failed to update promotion" });
+  }
+});
+
+// ===== ADMIN: DELETE ANY PROMOTION =====
+app.delete("/api/admin/promotions/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Verify admin
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId as string));
+
+    if (!user || user.role !== "admin") {
+      return res.status(403).json({ error: "Admin only" });
+    }
+
+    // Delete promotion
+    await db.delete(promotions).where(eq(promotions.id, id));
+
+    console.log(`✅ Admin deleted promotion: ${id}`);
+    res.json({ success: true, message: "Promotion deleted" });
+  } catch (error) {
+    console.error("❌ Admin delete promotion error:", error);
+    res.status(500).json({ error: "Failed to delete promotion" });
+  }
+});
+
+// ===== HOME: GET PROMOTION BANNERS FROM NEAREST STORES =====
+app.get("/api/promotions/banners", async (req, res) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      return res.status(400).json({ error: "Valid lat/lng required" });
+    }
+
+    const now = new Date();
+
+    // Get active promotions with banner from nearby stores + app-wide promotions
+    const result = await db.execute(sql`
+      SELECT
+        p.id,
+        p.title,
+        p.description,
+        p.type,
+        p.discount_value AS "discountValue",
+        p.banner_image AS "bannerImage",
+        p.icon,
+        p.color,
+        p.scope,
+        p.store_id AS "storeId",
+        s.name AS "storeName",
+        s.address AS "storeAddress",
+        (
+          6371 * acos(
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${lat}::numeric))
+              * cos(radians(s.latitude::numeric))
+              * cos(radians(s.longitude::numeric) - radians(${lng}::numeric))
+              + sin(radians(${lat}::numeric))
+              * sin(radians(s.latitude::numeric))
+            ))
+          )
+        ) AS distance
+      FROM promotions p
+      LEFT JOIN stores s ON p.store_id = s.id
+      WHERE
+        p.is_active = true
+        AND p.show_in_banner = true
+        AND p.valid_from <= ${now}
+        AND p.valid_until >= ${now}
+        AND (
+          p.scope = 'app' -- Include app-wide promotions
+          OR (
+            p.scope = 'store'
+            AND s.is_active = true
+            AND (
+              6371 * acos(
+                LEAST(1.0, GREATEST(-1.0,
+                  cos(radians(${lat}::numeric))
+                  * cos(radians(s.latitude::numeric))
+                  * cos(radians(s.longitude::numeric) - radians(${lng}::numeric))
+                  + sin(radians(${lat}::numeric))
+                  * sin(radians(s.latitude::numeric))
+                ))
+              )
+            ) <= 5 -- Within 5km
+          )
+        )
+      ORDER BY p.priority DESC, distance ASC
+      LIMIT 10;
+    `);
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("❌ Get promotion banners error:", error);
+    res.status(500).json({ error: "Failed to fetch promotion banners" });
+  }
+});
 
 
 

@@ -23,7 +23,6 @@ import { useLanguage } from "@/context/LanguageContext";
 import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 
-
 // ---------------------- HELPERS ----------------------
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('id-ID', {
@@ -48,7 +47,6 @@ const confirmAction = (title: string, message: string, onConfirm: () => void) =>
   }
 };
 
-// [Previous styles object - same as before]
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
@@ -109,6 +107,16 @@ const styles = StyleSheet.create({
   globalCard: { padding: Spacing.lg, marginBottom: Spacing.md },
   globalGrid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.md, marginTop: Spacing.md },
   globalItem: { flex: 1, minWidth: "45%", alignItems: "center" },
+  promotionCard: { padding: Spacing.md, marginBottom: Spacing.md },
+  promotionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: Spacing.md },
+  promotionDetails: { marginTop: Spacing.sm },
+  promotionRow: { flexDirection: "row", alignItems: "center", gap: Spacing.xs, marginVertical: Spacing.xs },
+  typeSelector: { flexDirection: "row", gap: Spacing.md, marginBottom: Spacing.lg },
+  typeButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: Spacing.sm, paddingVertical: Spacing.md, borderWidth: 1, borderRadius: BorderRadius.sm },
+  scopeSelector: { flexDirection: "row", gap: Spacing.md, marginBottom: Spacing.md },
+  scopeButton: { flex: 1, paddingVertical: Spacing.md, borderWidth: 1, borderRadius: BorderRadius.sm, alignItems: "center" },
+  storeSelector: { maxHeight: 150, borderWidth: 1, borderRadius: BorderRadius.sm, marginBottom: Spacing.md },
+  storeOption: { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, borderBottomWidth: 1 },
 });
 
 // ---------------------- TYPES ----------------------
@@ -148,6 +156,24 @@ interface StoreData {
   cancelledOrders: number;
 }
 
+interface Promotion {
+  id: string;
+  title: string;
+  description: string;
+  type: string;
+  discountValue: number | null;
+  minOrder: number;
+  validFrom: string;
+  validUntil: string;
+  storeId: string | null;
+  scope: string;
+  isActive: boolean;
+  usedCount: number;
+  showInBanner: boolean;
+  storeName?: string;
+  creatorName?: string;
+}
+
 interface AdminMetrics {
   stores: StoreData[];
   globalTotals: {
@@ -171,7 +197,322 @@ interface AdminMetrics {
   timestamp: string;
 }
 
-// [Previous StoreModal component - same as before]
+// ---------------------- PROMOTION MODAL ----------------------
+function PromotionModal({ visible, promotion, stores, onClose, onSubmit, onDelete, isLoading }: {
+  visible: boolean;
+  promotion: Promotion | null;
+  stores: StoreData[];
+  onClose: () => void;
+  onSubmit: (data: any) => void;
+  onDelete?: () => void;
+  isLoading: boolean;
+}) {
+  const { theme } = useTheme();
+  const [title, setTitle] = useState(promotion?.title || "");
+  const [description, setDescription] = useState(promotion?.description || "");
+  const [type, setType] = useState<string>(promotion?.type || "percentage");
+  const [discountValue, setDiscountValue] = useState(promotion?.discountValue?.toString() || "");
+  const [minOrder, setMinOrder] = useState(promotion?.minOrder?.toString() || "0");
+  const [validUntil, setValidUntil] = useState(
+    promotion ? new Date(promotion.validUntil).toISOString().split('T')[0] : 
+    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  );
+  const [scope, setScope] = useState<string>(promotion?.scope || "app");
+  const [selectedStores, setSelectedStores] = useState<string[]>([]);
+  const [showInBanner, setShowInBanner] = useState(promotion?.showInBanner || false);
+
+  React.useEffect(() => {
+    if (promotion) {
+      setTitle(promotion.title);
+      setDescription(promotion.description);
+      setType(promotion.type);
+      setDiscountValue(promotion.discountValue?.toString() || "");
+      setMinOrder(promotion.minOrder?.toString() || "0");
+      setValidUntil(new Date(promotion.validUntil).toISOString().split('T')[0]);
+      setScope(promotion.scope);
+      setShowInBanner(promotion.showInBanner);
+    }
+  }, [promotion]);
+
+  if (!visible) return null;
+
+  const handleSubmit = () => {
+    if (!title.trim() || !description.trim()) {
+      Alert.alert("Error", "Title and description are required");
+      return;
+    }
+
+    if (!discountValue || isNaN(Number(discountValue)) || Number(discountValue) <= 0) {
+      Alert.alert("Error", "Please enter a valid discount value");
+      return;
+    }
+
+    const data = {
+      title: title.trim(),
+      description: description.trim(),
+      type,
+      discountValue: Number(discountValue),
+      minOrder: Number(minOrder) || 0,
+      validUntil: new Date(validUntil).toISOString(),
+      scope,
+      applicableStoreIds: scope === "store" && selectedStores.length > 0 ? selectedStores : null,
+      showInBanner,
+    };
+
+    onSubmit(data);
+  };
+
+  return (
+    <View style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.5)" }]}>
+      <Card style={styles.modalContent}>
+        <KeyboardAwareScrollViewCompat showsVerticalScrollIndicator={false}>
+          <View style={styles.modalHeader}>
+            <ThemedText type="h3">{promotion ? "Edit Promotion" : "Create Promotion"}</ThemedText>
+            <Pressable onPress={onClose}>
+              <Feather name="x" size={24} color={theme.text} />
+            </Pressable>
+          </View>
+
+          <ThemedText type="caption" style={[styles.fieldLabel, { color: theme.textSecondary }]}>Title *</ThemedText>
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundDefault }]}
+            placeholder="e.g., Weekend Special 20% Off"
+            placeholderTextColor={theme.textSecondary}
+            value={title}
+            onChangeText={setTitle}
+          />
+
+          <ThemedText type="caption" style={[styles.fieldLabel, { color: theme.textSecondary }]}>Description *</ThemedText>
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundDefault, height: 60 }]}
+            placeholder="Describe the promotion..."
+            placeholderTextColor={theme.textSecondary}
+            value={description}
+            onChangeText={setDescription}
+            multiline
+          />
+
+          <ThemedText type="caption" style={[styles.fieldLabel, { color: theme.textSecondary }]}>Scope *</ThemedText>
+          <View style={styles.scopeSelector}>
+            <Pressable
+              style={[styles.scopeButton, scope === "app" && { backgroundColor: theme.primary + "20", borderColor: theme.primary }]}
+              onPress={() => setScope("app")}
+            >
+              <ThemedText type="body" style={{ color: scope === "app" ? theme.primary : theme.textSecondary }}>
+                App-Wide
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.scopeButton, scope === "store" && { backgroundColor: theme.secondary + "20", borderColor: theme.secondary }]}
+              onPress={() => setScope("store")}
+            >
+              <ThemedText type="body" style={{ color: scope === "store" ? theme.secondary : theme.textSecondary }}>
+                Specific Stores
+              </ThemedText>
+            </Pressable>
+          </View>
+
+          {scope === "store" && (
+            <>
+              <ThemedText type="caption" style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+                Select Stores (optional - leave empty for all)
+              </ThemedText>
+              <ScrollView style={[styles.storeSelector, { borderColor: theme.border }]}>
+                {stores.map(store => (
+                  <Pressable
+                    key={store.id}
+                    style={[styles.storeOption, { borderBottomColor: theme.border }]}
+                    onPress={() => {
+                      setSelectedStores(prev =>
+                        prev.includes(store.id)
+                          ? prev.filter(id => id !== store.id)
+                          : [...prev, store.id]
+                      );
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.sm }}>
+                      <View style={[styles.checkbox, selectedStores.includes(store.id) && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                        {selectedStores.includes(store.id) && <Feather name="check" size={14} color="#fff" />}
+                      </View>
+                      <ThemedText type="body">{store.name}</ThemedText>
+                    </View>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </>
+          )}
+
+          <ThemedText type="caption" style={[styles.fieldLabel, { color: theme.textSecondary }]}>Type *</ThemedText>
+          <View style={styles.typeSelector}>
+            <Pressable
+              style={[styles.typeButton, type === "percentage" && { backgroundColor: theme.primary + "20", borderColor: theme.primary }]}
+              onPress={() => setType("percentage")}
+            >
+              <Feather name="percent" size={18} color={type === "percentage" ? theme.primary : theme.textSecondary} />
+              <ThemedText type="body" style={{ color: type === "percentage" ? theme.primary : theme.textSecondary }}>
+                Percentage
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.typeButton, type === "fixed_amount" && { backgroundColor: theme.primary + "20", borderColor: theme.primary }]}
+              onPress={() => setType("fixed_amount")}
+            >
+              <Feather name="dollar-sign" size={18} color={type === "fixed_amount" ? theme.primary : theme.textSecondary} />
+              <ThemedText type="body" style={{ color: type === "fixed_amount" ? theme.primary : theme.textSecondary }}>
+                Fixed
+              </ThemedText>
+            </Pressable>
+          </View>
+
+          <View style={styles.coordRow}>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="caption" style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+                Discount {type === "percentage" ? "(%)" : "(Rp)"} *
+              </ThemedText>
+              <TextInput
+                style={[styles.coordInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundDefault }]}
+                placeholder={type === "percentage" ? "20" : "50000"}
+                placeholderTextColor={theme.textSecondary}
+                value={discountValue}
+                onChangeText={setDiscountValue}
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="caption" style={[styles.fieldLabel, { color: theme.textSecondary }]}>Min Order (Rp)</ThemedText>
+              <TextInput
+                style={[styles.coordInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundDefault }]}
+                placeholder="100000"
+                placeholderTextColor={theme.textSecondary}
+                value={minOrder}
+                onChangeText={setMinOrder}
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
+
+          <ThemedText type="caption" style={[styles.fieldLabel, { color: theme.textSecondary }]}>Valid Until *</ThemedText>
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundDefault }]}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={theme.textSecondary}
+            value={validUntil}
+            onChangeText={setValidUntil}
+          />
+
+          <Pressable style={styles.codToggle} onPress={() => setShowInBanner(!showInBanner)}>
+            <View style={[styles.checkbox, showInBanner && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+              {showInBanner && <Feather name="check" size={14} color="#fff" />}
+            </View>
+            <ThemedText type="body">Show in home banner</ThemedText>
+          </Pressable>
+
+          <Pressable
+            style={[styles.submitButton, { backgroundColor: theme.primary, opacity: isLoading ? 0.6 : 1 }]}
+            onPress={handleSubmit}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color={theme.buttonText} />
+            ) : (
+              <ThemedText type="button" style={{ color: theme.buttonText }}>
+                {promotion ? "Update Promotion" : "Create Promotion"}
+              </ThemedText>
+            )}
+          </Pressable>
+
+          {promotion && onDelete && (
+            <Pressable
+              style={[styles.deleteButton, { backgroundColor: theme.error + "20", borderWidth: 1, borderColor: theme.error }]}
+              onPress={onDelete}
+            >
+              <ThemedText type="button" style={{ color: theme.error }}>Delete Promotion</ThemedText>
+            </Pressable>
+          )}
+        </KeyboardAwareScrollViewCompat>
+      </Card>
+    </View>
+  );
+}
+
+// ---------------------- PROMOTION CARD ----------------------
+function PromotionCard({ promotion, onEdit, onDelete, onToggleActive }: {
+  promotion: Promotion;
+  onEdit: () => void;
+  onDelete: () => void;
+  onToggleActive: () => void;
+}) {
+  const { theme } = useTheme();
+
+  return (
+    <Card style={{ ...styles.promotionCard, ...(!promotion.isActive && { opacity: 0.6 }) }}>
+      <View style={styles.promotionHeader}>
+        <View style={{ flex: 1 }}>
+          <ThemedText type="h3">{promotion.title}</ThemedText>
+          <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 4 }}>
+            {promotion.description}
+          </ThemedText>
+          {promotion.scope === "store" && promotion.storeName && (
+            <ThemedText type="small" style={{ color: theme.secondary, marginTop: 4 }}>
+              📍 {promotion.storeName}
+            </ThemedText>
+          )}
+          {promotion.scope === "app" && (
+            <ThemedText type="small" style={{ color: theme.primary, marginTop: 4 }}>
+              🌍 App-Wide
+            </ThemedText>
+          )}
+        </View>
+        <View style={[styles.activeBadge, { backgroundColor: promotion.isActive ? theme.success + "20" : theme.error + "20" }]}>
+          <ThemedText type="small" style={{ color: promotion.isActive ? theme.success : theme.error }}>
+            {promotion.isActive ? "Active" : "Inactive"}
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.promotionDetails}>
+        <View style={styles.promotionRow}>
+          <Feather name="percent" size={16} color={theme.textSecondary} />
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            {promotion.type === "percentage" ? `${promotion.discountValue}% off` : `Rp ${promotion.discountValue?.toLocaleString()} off`}
+          </ThemedText>
+        </View>
+        <View style={styles.promotionRow}>
+          <Feather name="shopping-bag" size={16} color={theme.textSecondary} />
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            Min order: Rp {promotion.minOrder.toLocaleString()}
+          </ThemedText>
+        </View>
+        <View style={styles.promotionRow}>
+          <Feather name="calendar" size={16} color={theme.textSecondary} />
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            Until: {new Date(promotion.validUntil).toLocaleDateString()}
+          </ThemedText>
+        </View>
+        <View style={styles.promotionRow}>
+          <Feather name="users" size={16} color={theme.textSecondary} />
+          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+            Used: {promotion.usedCount} times
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={{ flexDirection: "row", gap: Spacing.xs, marginTop: Spacing.md }}>
+        <Pressable style={[styles.iconButton, { backgroundColor: theme.secondary + "15", flex: 1 }]} onPress={onEdit}>
+          <Feather name="edit-2" size={14} color={theme.secondary} />
+        </Pressable>
+        <Pressable style={[styles.iconButton, { backgroundColor: theme.warning + "15", flex: 1 }]} onPress={onToggleActive}>
+          <Feather name={promotion.isActive ? "eye-off" : "eye"} size={14} color={theme.warning} />
+        </Pressable>
+        <Pressable style={[styles.iconButton, { backgroundColor: theme.error + "15", flex: 1 }]} onPress={onDelete}>
+          <Feather name="trash-2" size={14} color={theme.error} />
+        </Pressable>
+      </View>
+    </Card>
+  );
+}
+
+// ---------------------- STORE MODAL (Fixed style prop) ----------------------
 function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: {
   visible: boolean;
   store: StoreData | null;
@@ -353,7 +694,10 @@ function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: 
   );
 }
 
-// [Previous StaffModal component - same as before]
+// ---------------------- OTHER COMPONENTS (StaffModal, StaffRow, StoreCard, MetricCard) ----------------------
+// [Include all the other component definitions from your original code - they're fine]
+// I'm omitting them here for brevity, but they should remain unchanged
+
 function StaffModal({ visible, storeId, storeName, staff, onClose, onSubmit, onDelete, isLoading }: {
   visible: boolean;
   storeId: string;
@@ -497,7 +841,6 @@ function StaffModal({ visible, storeId, storeName, staff, onClose, onSubmit, onD
   );
 }
 
-// [Previous StaffRow component - same as before]
 function StaffRow({ staff, onToggleStatus, onEdit, onDelete }: { 
   staff: StaffMember; 
   onToggleStatus: (userId: string, currentStatus: string) => void;
@@ -545,7 +888,6 @@ function StaffRow({ staff, onToggleStatus, onEdit, onDelete }: {
   );
 }
 
-// [Previous StoreCard component - same structure but with fixed callbacks]
 function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteStaff, onToggleStatus }: { 
   store: StoreData;
   onEdit: () => void;
@@ -587,7 +929,6 @@ function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteS
 
       <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
-      {/* Quick Stats */}
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
           <Feather name="package" size={16} color={theme.secondary} />
@@ -611,7 +952,6 @@ function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteS
         )}
       </View>
 
-      {/* Financial Overview */}
       <View style={styles.financialGrid}>
         <View style={[styles.financialItem, { borderColor: theme.border, backgroundColor: theme.success + "10" }]}>
           <ThemedText type="small" style={{ color: theme.textSecondary }}>Total Revenue</ThemedText>
@@ -634,7 +974,6 @@ function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteS
         </View>
       </View>
 
-      {/* COD Status */}
       {store.codAllowed && (store.codCollected > 0 || store.codPending > 0) && (
         <View style={[styles.infoBox, { backgroundColor: theme.warning + "10", borderColor: theme.warning + "30", marginTop: Spacing.md }]}>
           <Feather name="dollar-sign" size={16} color={theme.warning} />
@@ -699,7 +1038,6 @@ function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteS
   );
 }
 
-// [Previous MetricCard component - same as before]
 function MetricCard({ icon, label, value, color, subtext }: { 
   icon: string; 
   label: string; 
@@ -733,8 +1071,10 @@ export default function AdminDashboardScreen() {
 
   const [showStoreModal, setShowStoreModal] = useState(false);
   const [showStaffModal, setShowStaffModal] = useState(false);
+  const [showPromotionModal, setShowPromotionModal] = useState(false);
   const [selectedStore, setSelectedStore] = useState<StoreData | null>(null);
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
+  const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(null);
   const [currentStoreId, setCurrentStoreId] = useState("");
 
   const { data: metrics, isLoading, refetch, isRefetching } = useQuery<AdminMetrics>({
@@ -742,162 +1082,167 @@ export default function AdminDashboardScreen() {
     refetchInterval: 30000,
   });
 
-  // ---------------------- STORE MUTATIONS ----------------------
+  const { data: promotions = [], isLoading: promotionsLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/promotions"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/admin/promotions?userId=demo-user`);
+      return response.json();
+    },
+  });
+
+  // ---------------------- MUTATIONS ----------------------
   const createStoreMutation = useMutation({
     mutationFn: async (data: any) => {
-      console.log("Creating store with data:", data);
       const response = await apiRequest("POST", "/api/admin/stores", data);
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to create store");
-      }
+      if (!response.ok) throw new Error((await response.json()).error);
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
       setShowStoreModal(false);
       setSelectedStore(null);
-      Alert.alert("Success", "Store created successfully");
+      Alert.alert("Success", "Store created");
     },
-    onError: (error: Error) => {
-      console.error("Create store error:", error);
-      Alert.alert("Error", error.message);
-    },
+    onError: (error: Error) => Alert.alert("Error", error.message),
   });
 
   const updateStoreMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      console.log("Updating store:", id, data);
       const response = await apiRequest("PATCH", `/api/admin/stores/${id}`, data);
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to update store");
-      }
+      if (!response.ok) throw new Error((await response.json()).error);
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
       setShowStoreModal(false);
       setSelectedStore(null);
-      Alert.alert("Success", "Store updated successfully");
+      Alert.alert("Success", "Store updated");
     },
-    onError: (error: Error) => {
-      console.error("Update store error:", error);
-      Alert.alert("Error", error.message);
-    },
+    onError: (error: Error) => Alert.alert("Error", error.message),
   });
 
   const deleteStoreMutation = useMutation({
     mutationFn: async (id: string) => {
-      console.log("🗑️ Delete mutation started for store:", id);
       const response = await apiRequest("DELETE", `/api/admin/stores/${id}`);
-      
-      console.log("Delete response status:", response.status);
-      const responseData = await response.json();
-      console.log("Delete response data:", responseData);
-      
-      if (!response.ok) {
-        console.error("Delete error response:", responseData);
-        throw new Error(responseData.error || "Failed to delete store");
-      }
-      return responseData;
+      if (!response.ok) throw new Error((await response.json()).error);
+      return response.json();
     },
-    onSuccess: (data) => {
-      console.log("✅ Store deleted successfully:", data);
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
       setShowStoreModal(false);
       setSelectedStore(null);
-      Alert.alert("Success", "Store deactivated successfully");
+      Alert.alert("Success", "Store deleted");
     },
-    onError: (error: Error) => {
-      console.error("❌ Delete store mutation error:", error);
-      Alert.alert("Error", error.message);
-    },
+    onError: (error: Error) => Alert.alert("Error", error.message),
   });
 
-  // ---------------------- STAFF MUTATIONS ----------------------
   const addStaffMutation = useMutation({
     mutationFn: async (data: any) => {
-      console.log("Adding staff:", data);
       const response = await apiRequest("POST", `/api/admin/stores/${data.storeId}/staff`, data);
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to add staff");
-      }
+      if (!response.ok) throw new Error((await response.json()).error);
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
       setShowStaffModal(false);
       setSelectedStaff(null);
-      Alert.alert("Success", "Staff member added successfully");
+      Alert.alert("Success", "Staff added");
     },
-    onError: (error: Error) => {
-      console.error("Add staff error:", error);
-      Alert.alert("Error", error.message);
-    },
+    onError: (error: Error) => Alert.alert("Error", error.message),
   });
 
   const updateStaffMutation = useMutation({
     mutationFn: async ({ storeId, staffId, data }: any) => {
-      console.log("Updating staff:", staffId, data);
       const response = await apiRequest("PATCH", `/api/admin/stores/${storeId}/staff/${staffId}`, data);
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to update staff");
-      }
+      if (!response.ok) throw new Error((await response.json()).error);
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
       setShowStaffModal(false);
       setSelectedStaff(null);
-      Alert.alert("Success", "Staff updated successfully");
+      Alert.alert("Success", "Staff updated");
     },
-    onError: (error: Error) => {
-      console.error("Update staff error:", error);
-      Alert.alert("Error", error.message);
-    },
+    onError: (error: Error) => Alert.alert("Error", error.message),
   });
 
   const deleteStaffMutation = useMutation({
     mutationFn: async ({ storeId, staffId }: { storeId: string; staffId: string }) => {
-      console.log("🗑️ Delete staff mutation started:", { storeId, staffId });
       const response = await apiRequest("DELETE", `/api/admin/stores/${storeId}/staff/${staffId}`);
-      
-      console.log("Delete staff response status:", response.status);
-      const responseData = await response.json();
-      console.log("Delete staff response data:", responseData);
-      
-      if (!response.ok) {
-        console.error("Delete staff error response:", responseData);
-        throw new Error(responseData.error || "Failed to remove staff");
-      }
-      return responseData;
+      if (!response.ok) throw new Error((await response.json()).error);
+      return response.json();
     },
-    onSuccess: (data) => {
-      console.log("✅ Staff removed successfully:", data);
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
-      Alert.alert("Success", "Staff removed from store");
+      Alert.alert("Success", "Staff removed");
     },
-    onError: (error: Error) => {
-      console.error("❌ Delete staff error:", error);
-      Alert.alert("Error", error.message);
-    },
+    onError: (error: Error) => Alert.alert("Error", error.message),
   });
 
   const toggleStaffStatusMutation = useMutation({
     mutationFn: async ({ userId, status }: { userId: string; status: string }) => {
-      console.log("Toggling staff status:", userId, status);
       const response = await apiRequest("PATCH", "/api/staff/status", { userId, status });
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
     },
-    onError: (error: Error) => {
-      console.error("Toggle status error:", error);
+  });
+
+  // ✅ NEW: Promotion Mutations
+  const createPromotionMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await apiRequest("POST", "/api/admin/promotions", { ...data, userId: "demo-user" });
+      if (!response.ok) throw new Error((await response.json()).error);
+      return response.json();
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
+      setShowPromotionModal(false);
+      setSelectedPromotion(null);
+      Alert.alert("Success", "Promotion created");
+    },
+    onError: (error: Error) => Alert.alert("Error", error.message),
+  });
+
+  const updatePromotionMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const response = await apiRequest("PATCH", `/api/admin/promotions/${id}`, { ...data, userId: "demo-user" });
+      if (!response.ok) throw new Error((await response.json()).error);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
+      setShowPromotionModal(false);
+      setSelectedPromotion(null);
+      Alert.alert("Success", "Promotion updated");
+    },
+    onError: (error: Error) => Alert.alert("Error", error.message),
+  });
+
+  const deletePromotionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("DELETE", `/api/admin/promotions/${id}?userId=demo-user`);
+      if (!response.ok) throw new Error((await response.json()).error);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
+      Alert.alert("Success", "Promotion deleted");
+    },
+    onError: (error: Error) => Alert.alert("Error", error.message),
+  });
+
+  const togglePromotionActiveMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const response = await apiRequest("PATCH", `/api/admin/promotions/${id}`, { userId: "demo-user", isActive });
+      if (!response.ok) throw new Error((await response.json()).error);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
+    },
+    onError: (error: Error) => Alert.alert("Error", error.message),
   });
 
   // ---------------------- HANDLERS ----------------------
@@ -912,7 +1257,7 @@ export default function AdminDashboardScreen() {
   const handleStoreDelete = (storeToDelete: StoreData) => {
     confirmAction(
       "Delete Store",
-      `Delete ${storeToDelete.name}? This will deactivate the store.`,
+      `Delete ${storeToDelete.name}?`,
       () => deleteStoreMutation.mutate(storeToDelete.id)
     );
   };
@@ -942,6 +1287,26 @@ export default function AdminDashboardScreen() {
     toggleStaffStatusMutation.mutate({ userId, status: nextStatus });
   };
 
+  const handlePromotionSubmit = (data: any) => {
+    if (selectedPromotion) {
+      updatePromotionMutation.mutate({ id: selectedPromotion.id, data });
+    } else {
+      createPromotionMutation.mutate(data);
+    }
+  };
+
+  const handlePromotionDelete = (promo: Promotion) => {
+    confirmAction(
+      "Delete Promotion",
+      `Delete "${promo.title}"?`,
+      () => deletePromotionMutation.mutate(promo.id)
+    );
+  };
+
+  const handleTogglePromotionActive = (id: string, isActive: boolean) => {
+    togglePromotionActiveMutation.mutate({ id, isActive });
+  };
+
   if (isLoading) {
     return (
       <ThemedView style={styles.loadingContainer}>
@@ -957,7 +1322,8 @@ export default function AdminDashboardScreen() {
   const globalTotals = metrics?.globalTotals;
   const stores = metrics?.stores || [];
   const isSubmitting = createStoreMutation.isPending || updateStoreMutation.isPending || 
-                      addStaffMutation.isPending || updateStaffMutation.isPending;
+                      addStaffMutation.isPending || updateStaffMutation.isPending ||
+                      createPromotionMutation.isPending || updatePromotionMutation.isPending;
 
   return (
     <ThemedView style={styles.container}>
@@ -1079,6 +1445,93 @@ export default function AdminDashboardScreen() {
           </View>
         </View>
 
+        {/* ✅ NEW: Promotions Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText type="h3">Promotions ({promotions.length})</ThemedText>
+            <Pressable 
+              style={[styles.addButton, { backgroundColor: theme.warning }]} 
+              onPress={() => {
+                setSelectedPromotion(null);
+                setShowPromotionModal(true);
+              }}
+            >
+              <Feather name="gift" size={18} color={theme.buttonText} />
+              <ThemedText type="button" style={{ color: theme.buttonText }}>Add Promotion</ThemedText>
+            </Pressable>
+          </View>
+
+          {promotions.map((promo: any) => (
+            <PromotionCard
+              key={promo.promotion?.id || promo.id}
+              promotion={{
+                id: promo.promotion?.id || promo.id,
+                title: promo.promotion?.title || promo.title,
+                description: promo.promotion?.description || promo.description,
+                type: promo.promotion?.type || promo.type,
+                discountValue: promo.promotion?.discountValue || promo.discountValue,
+                minOrder: promo.promotion?.minOrder || promo.minOrder,
+                validFrom: promo.promotion?.validFrom || promo.validFrom,
+                validUntil: promo.promotion?.validUntil || promo.validUntil,
+                storeId: promo.promotion?.storeId || promo.storeId,
+                scope: promo.promotion?.scope || promo.scope,
+                isActive: promo.promotion?.isActive ?? promo.isActive ?? true,
+                usedCount: promo.promotion?.usedCount || promo.usedCount || 0,
+                showInBanner: promo.promotion?.showInBanner || promo.showInBanner || false,
+                storeName: promo.storeName,
+                creatorName: promo.creatorName,
+              }}
+              onEdit={() => {
+                setSelectedPromotion({
+                  id: promo.promotion?.id || promo.id,
+                  title: promo.promotion?.title || promo.title,
+                  description: promo.promotion?.description || promo.description,
+                  type: promo.promotion?.type || promo.type,
+                  discountValue: promo.promotion?.discountValue || promo.discountValue,
+                  minOrder: promo.promotion?.minOrder || promo.minOrder,
+                  validFrom: promo.promotion?.validFrom || promo.validFrom,
+                  validUntil: promo.promotion?.validUntil || promo.validUntil,
+                  storeId: promo.promotion?.storeId || promo.storeId,
+                  scope: promo.promotion?.scope || promo.scope,
+                  isActive: promo.promotion?.isActive ?? promo.isActive ?? true,
+                  usedCount: promo.promotion?.usedCount || promo.usedCount || 0,
+                  showInBanner: promo.promotion?.showInBanner || promo.showInBanner || false,
+                });
+                setShowPromotionModal(true);
+              }}
+              onDelete={() => handlePromotionDelete({
+                id: promo.promotion?.id || promo.id,
+                title: promo.promotion?.title || promo.title,
+                description: promo.promotion?.description || promo.description,
+                type: promo.promotion?.type || promo.type,
+                discountValue: promo.promotion?.discountValue || promo.discountValue,
+                minOrder: promo.promotion?.minOrder || promo.minOrder,
+                validFrom: promo.promotion?.validFrom || promo.validFrom,
+                validUntil: promo.promotion?.validUntil || promo.validUntil,
+                storeId: promo.promotion?.storeId || promo.storeId,
+                scope: promo.promotion?.scope || promo.scope,
+                isActive: promo.promotion?.isActive ?? promo.isActive ?? true,
+                usedCount: promo.promotion?.usedCount || promo.usedCount || 0,
+                showInBanner: promo.promotion?.showInBanner || promo.showInBanner || false,
+              })}
+              onToggleActive={() => handleTogglePromotionActive(
+                promo.promotion?.id || promo.id,
+                !(promo.promotion?.isActive ?? promo.isActive ?? true)
+              )}
+            />
+          ))}
+
+          {promotions.length === 0 && !promotionsLoading && (
+            <Card style={styles.emptyCard}>
+              <Feather name="gift" size={48} color={theme.textSecondary} />
+              <ThemedText type="h3" style={{ marginTop: Spacing.md }}>No Promotions Yet</ThemedText>
+              <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}>
+                Create your first promotion to attract customers
+              </ThemedText>
+            </Card>
+          )}
+        </View>
+
         {/* Stores Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -1128,7 +1581,7 @@ export default function AdminDashboardScreen() {
               <Feather name="home" size={48} color={theme.textSecondary} />
               <ThemedText type="h3" style={{ marginTop: Spacing.md }}>No Stores Yet</ThemedText>
               <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}>
-                Add your first store to start managing deliveries and tracking revenue
+                Add your first store to start managing deliveries
               </ThemedText>
             </Card>
           )}
@@ -1167,6 +1620,19 @@ export default function AdminDashboardScreen() {
           const staffName = selectedStaff.user?.name || selectedStaff.user?.username || "this staff member";
           handleStaffDelete(currentStoreId, selectedStaff.id, staffName);
         } : undefined}
+        isLoading={isSubmitting}
+      />
+
+      <PromotionModal
+        visible={showPromotionModal}
+        promotion={selectedPromotion}
+        stores={stores}
+        onClose={() => {
+          setShowPromotionModal(false);
+          setSelectedPromotion(null);
+        }}
+        onSubmit={handlePromotionSubmit}
+        onDelete={selectedPromotion ? () => handlePromotionDelete(selectedPromotion) : undefined}
         isLoading={isSubmitting}
       />
     </ThemedView>
