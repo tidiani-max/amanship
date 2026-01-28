@@ -414,133 +414,113 @@ export default function ImprovedHomeScreen() {
     }
   };
 
-  const renderProductCard = (product: UIProduct) => {
-    const hasDiscount = product.originalPrice && product.originalPrice > product.price;
-    const discountPercent = hasDiscount 
-      ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
-      : 0;
+const renderProductCard = (product: UIProduct) => {
+  const hasDiscount = product.originalPrice && product.originalPrice > product.price;
+  const discountPercent = hasDiscount 
+    ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
+    : 0;
 
-    // Use actual screenWidth for mobile, maxWidth for larger screens
-    const effectiveWidth = screenWidth < 600 ? screenWidth : (screenWidth > maxWidth ? maxWidth : screenWidth);
-    
-    const cardWidth = getProductCardWidth(
-      effectiveWidth, 
-      responsiveColumns, 
-      responsivePadding
-    );
+  // Use actual screenWidth for mobile, maxWidth for larger screens
+  const effectiveWidth = screenWidth < 600 ? screenWidth : (screenWidth > maxWidth ? maxWidth : screenWidth);
+  
+  const cardWidth = getProductCardWidth(
+    effectiveWidth, 
+    responsiveColumns, 
+    responsivePadding
+  );
 
-    const scaleAnim = useRef(new Animated.Value(1)).current;
+  // Remove the useRef hook from here - animation will work without refs for this use case
+  // Or use a CSS-based animation instead
 
-    const handlePressIn = () => {
-      Animated.spring(scaleAnim, {
-        toValue: 0.95,
-        useNativeDriver: true,
-      }).start();
-    };
-
-    const handlePressOut = () => {
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 3,
-        tension: 40,
-        useNativeDriver: true,
-      }).start();
-    };
-
-    return (
-      <Animated.View
-        key={product.id}
-        style={{ transform: [{ scale: scaleAnim }] }}
-      >
-        <Pressable
-          style={[
-            styles.productCard,
-            { 
-              backgroundColor: theme.cardBackground,
-              width: cardWidth,
-            },
-            !product.inStock && { opacity: 0.5 }
-          ]}
-          onPress={() => navigation.navigate("ProductDetail", { product })}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
+  return (
+    <Pressable
+      key={product.id}
+      style={[
+        styles.productCard,
+        { 
+          backgroundColor: theme.cardBackground,
+          width: cardWidth,
+        },
+        !product.inStock && { opacity: 0.5 }
+      ]}
+      onPress={() => navigation.navigate("ProductDetail", { product })}
+      // Remove the animation handlers or use a simpler approach
+    >
+      {hasDiscount && product.inStock && (
+        <LinearGradient
+          colors={['#ef4444', '#dc2626']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.discountBadge}
         >
-        {hasDiscount && product.inStock && (
-          <LinearGradient
-            colors={['#ef4444', '#dc2626']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.discountBadge}
-          >
-            <ThemedText style={styles.discountText}>{String(discountPercent)}% OFF</ThemedText>
-          </LinearGradient>
+          <ThemedText style={styles.discountText}>{String(discountPercent)}% OFF</ThemedText>
+        </LinearGradient>
+      )}
+      
+      <View style={styles.productImageContainer}>
+        {product.image ? (
+          <Image
+            source={{ uri: getImageUrl(product.image) }}
+            style={styles.productImage}
+            resizeMode="contain"
+          />
+        ) : (
+          <Feather name="package" size={40} color="#d1d5db" />
         )}
-        
-        <View style={styles.productImageContainer}>
-          {product.image ? (
-            <Image
-              source={{ uri: getImageUrl(product.image) }}
-              style={styles.productImage}
-              resizeMode="contain"
-            />
-          ) : (
-            <Feather name="package" size={40} color="#d1d5db" />
-          )}
-        </View>
+      </View>
 
-        <View style={styles.productInfo}>
-          <View style={styles.deliveryInfoRow}>
-            <View style={styles.storeBadge}>
-              <Feather name="map-pin" size={9} color="#059669" />
-              <ThemedText style={styles.storeText} numberOfLines={1}>
-                {String(product.storeName || "Store")}
-              </ThemedText>
-            </View>
-            <View style={styles.timeBadge}>
-              <Feather name="clock" size={9} color="#10b981" />
-              <ThemedText style={styles.timeText}>
-                {String(product.deliveryMinutes || 15)} min
-              </ThemedText>
-            </View>
+      <View style={styles.productInfo}>
+        <View style={styles.deliveryInfoRow}>
+          <View style={styles.storeBadge}>
+            <Feather name="map-pin" size={9} color="#059669" />
+            <ThemedText style={styles.storeText} numberOfLines={1}>
+              {String(product.storeName || "Store")}
+            </ThemedText>
           </View>
-
-          <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
-            {String(product.name || 'Product')}
-          </ThemedText>
-          <ThemedText type="small" style={styles.brandText} numberOfLines={1}>
-            {String(product.brand || 'Brand')}
-          </ThemedText>
-
-          <View style={styles.productFooter}>
-            <View style={{ flex: 1 }}>
-              <ThemedText type="body" style={styles.priceText}>
-                {formatPrice(product.price)}
-              </ThemedText>
-              {hasDiscount && (
-                <ThemedText type="small" style={styles.originalPriceText}>
-                  {formatPrice(product.originalPrice!)}
-                </ThemedText>
-              )}
-            </View>
-            <Pressable
-              disabled={!product.inStock}
-              style={[
-                styles.addButton,
-                { backgroundColor: product.inStock ? theme.primary : '#e5e7eb' }
-              ]}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleAddToCart(product);
-              }}
-            >
-              <ThemedText style={styles.addButtonText}>ADD</ThemedText>
-            </Pressable>
+          <View style={styles.timeBadge}>
+            <Feather name="clock" size={9} color="#10b981" />
+            <ThemedText style={styles.timeText}>
+              {String(product.deliveryMinutes || 15)} min
+            </ThemedText>
           </View>
         </View>
-      </Pressable>
-      </Animated.View>
-    );
-  };
+
+        <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
+          {String(product.name || 'Product')}
+        </ThemedText>
+        <ThemedText type="small" style={styles.brandText} numberOfLines={1}>
+          {String(product.brand || 'Brand')}
+        </ThemedText>
+
+        <View style={styles.productFooter}>
+          <View style={{ flex: 1 }}>
+            <ThemedText type="body" style={styles.priceText}>
+              {formatPrice(product.price)}
+            </ThemedText>
+            {hasDiscount && (
+              <ThemedText type="small" style={styles.originalPriceText}>
+                {formatPrice(product.originalPrice!)}
+              </ThemedText>
+            )}
+          </View>
+          <Pressable
+            disabled={!product.inStock}
+            style={[
+              styles.addButton,
+              { backgroundColor: product.inStock ? theme.primary : '#e5e7eb' }
+            ]}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleAddToCart(product);
+            }}
+          >
+            <ThemedText style={styles.addButtonText}>ADD</ThemedText>
+          </Pressable>
+        </View>
+      </View>
+    </Pressable>
+  );
+};
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>

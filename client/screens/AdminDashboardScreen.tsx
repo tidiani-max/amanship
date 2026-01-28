@@ -9,6 +9,7 @@ import {
   TextInput,
   Platform,
   Alert,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -48,6 +49,7 @@ const confirmAction = (title: string, message: string, onConfirm: () => void) =>
   }
 };
 
+// ---------------------- STYLES ----------------------
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
@@ -118,6 +120,29 @@ const styles = StyleSheet.create({
   scopeButton: { flex: 1, paddingVertical: Spacing.md, borderWidth: 1, borderRadius: BorderRadius.sm, alignItems: "center" },
   storeSelector: { maxHeight: 150, borderWidth: 1, borderRadius: BorderRadius.sm, marginBottom: Spacing.md },
   storeOption: { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, borderBottomWidth: 1 },
+  imagePicker: {
+    height: 140,
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.md,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+  },
+  imagePlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  promotionImage: {
+    width: '100%',
+    height: '100%',
+  },
+  promotionCardImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.md,
+  },
 });
 
 // ---------------------- TYPES ----------------------
@@ -173,6 +198,25 @@ interface Promotion {
   showInBanner: boolean;
   storeName?: string;
   creatorName?: string;
+  image?: string | null;
+  bannerImage?: string | null;
+}
+
+interface PromotionModalProps {
+  visible: boolean;
+  promotion: Promotion | null;
+  stores: StoreData[];
+  onClose: () => void;
+  onSubmit: (data: FormData) => void;
+  onDelete?: () => void;
+  isLoading: boolean;
+}
+
+interface PromotionCardProps {
+  promotion: Promotion;
+  onEdit: () => void;
+  onDelete: () => void;
+  onToggleActive: () => void;
 }
 
 interface AdminMetrics {
@@ -199,15 +243,15 @@ interface AdminMetrics {
 }
 
 // ---------------------- PROMOTION MODAL ----------------------
-function PromotionModal({ visible, promotion, stores, onClose, onSubmit, onDelete, isLoading }: {
-  visible: boolean;
-  promotion: Promotion | null;
-  stores: StoreData[];
-  onClose: () => void;
-  onSubmit: (data: any) => void;
-  onDelete?: () => void;
-  isLoading: boolean;
-}) {
+const PromotionModal: React.FC<PromotionModalProps> = ({ 
+  visible, 
+  promotion, 
+  stores, 
+  onClose, 
+  onSubmit, 
+  onDelete, 
+  isLoading 
+}) => {
   const { theme } = useTheme();
   const [title, setTitle] = useState(promotion?.title || "");
   const [description, setDescription] = useState(promotion?.description || "");
@@ -221,6 +265,8 @@ function PromotionModal({ visible, promotion, stores, onClose, onSubmit, onDelet
   const [scope, setScope] = useState<string>(promotion?.scope || "app");
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
   const [showInBanner, setShowInBanner] = useState(promotion?.showInBanner || false);
+  const [image, setImage] = useState<string | null>(promotion?.image || promotion?.bannerImage || null);
+  const [imageChanged, setImageChanged] = useState(false);
 
   React.useEffect(() => {
     if (promotion) {
@@ -232,12 +278,40 @@ function PromotionModal({ visible, promotion, stores, onClose, onSubmit, onDelet
       setValidUntil(new Date(promotion.validUntil).toISOString().split('T')[0]);
       setScope(promotion.scope);
       setShowInBanner(promotion.showInBanner);
+      setImage(promotion.image || promotion.bannerImage || null);
+      setImageChanged(false);
+    } else {
+      setTitle("");
+      setDescription("");
+      setType("percentage");
+      setDiscountValue("");
+      setMinOrder("0");
+      setValidUntil(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+      setScope("app");
+      setSelectedStores([]);
+      setShowInBanner(false);
+      setImage(null);
+      setImageChanged(false);
     }
   }, [promotion]);
 
   if (!visible) return null;
 
-  const handleSubmit = () => {
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    
+    if (!result.canceled && result.assets[0]) {
+      setImage(result.assets[0].uri);
+      setImageChanged(true);
+    }
+  };
+
+  const handleSubmit = async () => {
     if (!title.trim() || !description.trim()) {
       Alert.alert("Error", "Title and description are required");
       return;
@@ -248,19 +322,51 @@ function PromotionModal({ visible, promotion, stores, onClose, onSubmit, onDelet
       return;
     }
 
-    const data = {
-      title: title.trim(),
-      description: description.trim(),
-      type,
-      discountValue: Number(discountValue),
-      minOrder: Number(minOrder) || 0,
-      validUntil: new Date(validUntil).toISOString(),
-      scope,
-      applicableStoreIds: scope === "store" && selectedStores.length > 0 ? selectedStores : null,
-      showInBanner,
-    };
+    const formData = new FormData();
+    formData.append('userId', 'demo-user');
+    formData.append('title', title.trim());
+    formData.append('description', description.trim());
+    formData.append('type', type);
+    formData.append('discountValue', discountValue);
+    formData.append('minOrder', minOrder || '0');
+    formData.append('validUntil', new Date(validUntil).toISOString());
+    formData.append('scope', scope);
+    formData.append('showInBanner', showInBanner.toString());
 
-    onSubmit(data);
+    if (scope === "store" && selectedStores.length > 0) {
+      formData.append('applicableStoreIds', JSON.stringify(selectedStores));
+    }
+
+    if (image && imageChanged) {
+      const isNewImage = image.startsWith('file://') || image.startsWith('blob:');
+      
+      if (isNewImage) {
+        try {
+          if (image.startsWith('blob:')) {
+            const response = await fetch(image);
+            const blob = await response.blob();
+            const filename = `promo-${Date.now()}.jpg`;
+            const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
+            formData.append("image", file as any);
+          } else {
+            const filename = image.split('/').pop() || 'promo.jpg';
+            const match = /\.(\w+)$/.exec(filename);
+            const fileType = match ? `image/${match[1]}` : 'image/jpeg';
+            formData.append("image", {
+              uri: image,
+              name: filename,
+              type: fileType,
+            } as any);
+          }
+        } catch (error) {
+          console.error("Image processing error:", error);
+          Alert.alert("Error", "Failed to process image");
+          return;
+        }
+      }
+    }
+
+    onSubmit(formData);
   };
 
   return (
@@ -273,6 +379,25 @@ function PromotionModal({ visible, promotion, stores, onClose, onSubmit, onDelet
               <Feather name="x" size={24} color={theme.text} />
             </Pressable>
           </View>
+
+          <ThemedText type="caption" style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+            Banner Image (16:9)
+          </ThemedText>
+          <Pressable 
+            style={[styles.imagePicker, { backgroundColor: theme.backgroundTertiary, borderColor: theme.border }]}
+            onPress={pickImage}
+          >
+            {image ? (
+              <Image source={{ uri: image }} style={styles.promotionImage} resizeMode="cover" />
+            ) : (
+              <View style={styles.imagePlaceholder}>
+                <Feather name="image" size={40} color={theme.textSecondary} />
+                <ThemedText type="caption" style={{ marginTop: 8, color: theme.textSecondary }}>
+                  Tap to add banner image
+                </ThemedText>
+              </View>
+            )}
+          </Pressable>
 
           <ThemedText type="caption" style={[styles.fieldLabel, { color: theme.textSecondary }]}>Title *</ThemedText>
           <TextInput
@@ -434,19 +559,27 @@ function PromotionModal({ visible, promotion, stores, onClose, onSubmit, onDelet
       </Card>
     </View>
   );
-}
+};
 
 // ---------------------- PROMOTION CARD ----------------------
-function PromotionCard({ promotion, onEdit, onDelete, onToggleActive }: {
-  promotion: Promotion;
-  onEdit: () => void;
-  onDelete: () => void;
-  onToggleActive: () => void;
-}) {
+const PromotionCard: React.FC<PromotionCardProps> = ({ 
+  promotion, 
+  onEdit, 
+  onDelete, 
+  onToggleActive 
+}) => {
   const { theme } = useTheme();
 
   return (
     <Card style={{ ...styles.promotionCard, ...(!promotion.isActive && { opacity: 0.6 }) }}>
+      {(promotion.image || promotion.bannerImage) && (
+        <Image 
+          source={{ uri: promotion.image || promotion.bannerImage || '' }} 
+          style={styles.promotionCardImage}
+          resizeMode="cover"
+        />
+      )}
+      
       <View style={styles.promotionHeader}>
         <View style={{ flex: 1 }}>
           <ThemedText type="h3">{promotion.title}</ThemedText>
@@ -511,17 +644,17 @@ function PromotionCard({ promotion, onEdit, onDelete, onToggleActive }: {
       </View>
     </Card>
   );
-}
+};
 
-// ---------------------- STORE MODAL (Fixed style prop) ----------------------
-function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: {
+// ---------------------- STORE MODAL ----------------------
+const StoreModal: React.FC<{
   visible: boolean;
   store: StoreData | null;
   onClose: () => void;
   onSubmit: (data: any) => void;
   onDelete?: () => void;
   isLoading: boolean;
-}) {
+}> = ({ visible, store, onClose, onSubmit, onDelete, isLoading }) => {
   const { theme } = useTheme();
   const [name, setName] = useState(store?.name || "");
   const [address, setAddress] = useState(store?.address || "");
@@ -551,7 +684,6 @@ function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: 
     setGeocoding(true);
     try {
       const response = await apiRequest("POST", "/api/admin/geocode", { address });
-      
       const data = await response.json();
       
       if (data.latitude && data.longitude) {
@@ -693,13 +825,10 @@ function StoreModal({ visible, store, onClose, onSubmit, onDelete, isLoading }: 
       </Card>
     </View>
   );
-}
+};
 
-// ---------------------- OTHER COMPONENTS (StaffModal, StaffRow, StoreCard, MetricCard) ----------------------
-// [Include all the other component definitions from your original code - they're fine]
-// I'm omitting them here for brevity, but they should remain unchanged
-
-function StaffModal({ visible, storeId, storeName, staff, onClose, onSubmit, onDelete, isLoading }: {
+// ---------------------- STAFF MODAL ----------------------
+const StaffModal: React.FC<{
   visible: boolean;
   storeId: string;
   storeName: string;
@@ -708,7 +837,7 @@ function StaffModal({ visible, storeId, storeName, staff, onClose, onSubmit, onD
   onSubmit: (data: any) => void;
   onDelete?: () => void;
   isLoading: boolean;
-}) {
+}> = ({ visible, storeId, storeName, staff, onClose, onSubmit, onDelete, isLoading }) => {
   const { theme } = useTheme();
   const [phone, setPhone] = useState(staff?.user?.phone || "");
   const [email, setEmail] = useState(staff?.user?.email || "");
@@ -840,14 +969,15 @@ function StaffModal({ visible, storeId, storeName, staff, onClose, onSubmit, onD
       </Card>
     </View>
   );
-}
+};
 
-function StaffRow({ staff, onToggleStatus, onEdit, onDelete }: { 
+// ---------------------- STAFF ROW ----------------------
+const StaffRow: React.FC<{ 
   staff: StaffMember; 
   onToggleStatus: (userId: string, currentStatus: string) => void;
   onEdit: () => void;
   onDelete: () => void;
-}) {
+}> = ({ staff, onToggleStatus, onEdit, onDelete }) => {
   const { theme } = useTheme();
   const isOnline = staff.status === "online";
   const isPicker = staff.role === "picker";
@@ -887,9 +1017,10 @@ function StaffRow({ staff, onToggleStatus, onEdit, onDelete }: {
       </View>
     </View>
   );
-}
+};
 
-function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteStaff, onToggleStatus }: { 
+// ---------------------- STORE CARD ----------------------
+const StoreCard: React.FC<{ 
   store: StoreData;
   onEdit: () => void;
   onDelete: () => void;
@@ -897,7 +1028,7 @@ function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteS
   onEditStaff: (staff: StaffMember) => void;
   onDeleteStaff: (staffId: string) => void;
   onToggleStatus: (userId: string, currentStatus: string) => void;
-}) {
+}> = ({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteStaff, onToggleStatus }) => {
   const { theme } = useTheme();
   const pickers = store.staff.filter(s => s.role === "picker");
   const drivers = store.staff.filter(s => s.role === "driver");
@@ -1037,15 +1168,16 @@ function StoreCard({ store, onEdit, onDelete, onAddStaff, onEditStaff, onDeleteS
       )}
     </Card>
   );
-}
+};
 
-function MetricCard({ icon, label, value, color, subtext }: { 
+// ---------------------- METRIC CARD ----------------------
+const MetricCard: React.FC<{ 
   icon: string; 
   label: string; 
   value: number | string; 
   color: string;
   subtext?: string;
-}) {
+}> = ({ icon, label, value, color, subtext }) => {
   const { theme } = useTheme();
   return (
     <Card style={styles.metricCard}>
@@ -1061,7 +1193,7 @@ function MetricCard({ icon, label, value, color, subtext }: {
       )}
     </Card>
   );
-}
+};
 
 // ---------------------- MAIN SCREEN ----------------------
 export default function AdminDashboardScreen() {
@@ -1083,24 +1215,23 @@ export default function AdminDashboardScreen() {
     refetchInterval: 30000,
   });
 
-const { data: promotions = [], isLoading: promotionsLoading, refetch: refetchPromotions } = useQuery<Promotion[]>({
-  queryKey: ["/api/admin/promotions", "demo-user"],
-  queryFn: async () => {
-    try {
-      const response = await apiRequest("GET", `/api/admin/promotions?userId=demo-user`);
-      if (!response.ok) {
-        console.error("Failed to fetch promotions:", response.status);
+  const { data: promotions = [], isLoading: promotionsLoading, refetch: refetchPromotions } = useQuery<Promotion[]>({
+    queryKey: ["/api/admin/promotions", "demo-user"],
+    queryFn: async () => {
+      try {
+        const response = await apiRequest("GET", `/api/admin/promotions?userId=demo-user`);
+        if (!response.ok) {
+          console.error("Failed to fetch promotions:", response.status);
+          return [];
+        }
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error("Error fetching promotions:", error);
         return [];
       }
-      const data = await response.json();
-      console.log("✅ Promotions fetched:", data);
-      return data;
-    } catch (error) {
-      console.error("Error fetching promotions:", error);
-      return [];
-    }
-  },
-});
+    },
+  });
 
   // ---------------------- MUTATIONS ----------------------
   const createStoreMutation = useMutation({
@@ -1201,58 +1332,84 @@ const { data: promotions = [], isLoading: promotionsLoading, refetch: refetchPro
     },
   });
 
-  // ✅ NEW: Promotion Mutations
-const createPromotionMutation = useMutation({
-  mutationFn: async (data: any) => {
-    const response = await apiRequest("POST", "/api/admin/promotions", { 
-      ...data, 
-      userId: "demo-user" 
-    });
-    if (!response.ok) throw new Error((await response.json()).error);
-    return response.json();
-  },
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
-    refetchPromotions(); // ✅ ADD THIS LINE
-    setShowPromotionModal(false);
-    setSelectedPromotion(null);
-    Alert.alert("Success", "Promotion created");
-  },
-  onError: (error: Error) => Alert.alert("Error", error.message),
-});
+  const createPromotionMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/admin/promotions`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create promotion');
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
+      refetchPromotions();
+      setShowPromotionModal(false);
+      setSelectedPromotion(null);
+      Alert.alert("Success", "Promotion created successfully!");
+    },
+    onError: (error: Error) => {
+      console.error("Create promotion error:", error);
+      Alert.alert("Error", error.message);
+    },
+  });
 
-const updatePromotionMutation = useMutation({
-  mutationFn: async ({ id, data }: { id: string; data: any }) => {
-    const response = await apiRequest("PATCH", `/api/admin/promotions/${id}`, { 
-      ...data, 
-      userId: "demo-user" 
-    });
-    if (!response.ok) throw new Error((await response.json()).error);
-    return response.json();
-  },
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
-    refetchPromotions(); // ✅ ADD THIS LINE
-    setShowPromotionModal(false);
-    setSelectedPromotion(null);
-    Alert.alert("Success", "Promotion updated");
-  },
-  onError: (error: Error) => Alert.alert("Error", error.message),
-});
+  const updatePromotionMutation = useMutation({
+    mutationFn: async ({ id, formData }: { id: string; formData: FormData }) => {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/admin/promotions/${id}`, {
+        method: 'PATCH',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to update promotion');
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
+      refetchPromotions();
+      setShowPromotionModal(false);
+      setSelectedPromotion(null);
+      Alert.alert("Success", "Promotion updated successfully!");
+    },
+    onError: (error: Error) => {
+      console.error("Update promotion error:", error);
+      Alert.alert("Error", error.message);
+    },
+  });
 
-const deletePromotionMutation = useMutation({
-  mutationFn: async (id: string) => {
-    const response = await apiRequest("DELETE", `/api/admin/promotions/${id}?userId=demo-user`);
-    if (!response.ok) throw new Error((await response.json()).error);
-    return response.json();
-  },
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
-    refetchPromotions(); // ✅ ADD THIS LINE
-    Alert.alert("Success", "Promotion deleted");
-  },
-  onError: (error: Error) => Alert.alert("Error", error.message),
-});
+  const deletePromotionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/admin/promotions/${id}?userId=demo-user`,
+        { method: 'DELETE' }
+      );
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete promotion');
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
+      refetchPromotions();
+      Alert.alert("Success", "Promotion deleted successfully!");
+    },
+    onError: (error: Error) => {
+      console.error("Delete promotion error:", error);
+      Alert.alert("Error", error.message);
+    },
+  });
 
   const togglePromotionActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
@@ -1262,6 +1419,7 @@ const deletePromotionMutation = useMutation({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions"] });
+      refetchPromotions();
     },
     onError: (error: Error) => Alert.alert("Error", error.message),
   });
@@ -1308,25 +1466,26 @@ const deletePromotionMutation = useMutation({
     toggleStaffStatusMutation.mutate({ userId, status: nextStatus });
   };
 
-const handlePromotionSubmit = (data: any) => {
-  if (selectedPromotion) {
-    updatePromotionMutation.mutate({ id: selectedPromotion.id, data });
-  } else {
-    createPromotionMutation.mutate(data);
-  }
-};
+  const handlePromotionSubmit = (formData: FormData) => {
+    if (selectedPromotion) {
+      updatePromotionMutation.mutate({ id: selectedPromotion.id, formData });
+    } else {
+      createPromotionMutation.mutate(formData);
+    }
+  };
 
-const handlePromotionDelete = (promo: Promotion) => {
-  confirmAction(
-    "Delete Promotion",
-    `Delete "${promo.title}"?`,
-    () => deletePromotionMutation.mutate(promo.id)
-  );
-};
+  const handlePromotionDelete = (promo: Promotion) => {
+    confirmAction(
+      "Delete Promotion",
+      `Delete "${promo.title}"?`,
+      () => deletePromotionMutation.mutate(promo.id)
+    );
+  };
 
-const handleTogglePromotionActive = (id: string, isActive: boolean) => {
-  togglePromotionActiveMutation.mutate({ id, isActive });
-};
+  const handleTogglePromotionActive = (id: string, isActive: boolean) => {
+    togglePromotionActiveMutation.mutate({ id, isActive });
+  };
+
   if (isLoading) {
     return (
       <ThemedView style={styles.loadingContainer}>
@@ -1361,7 +1520,6 @@ const handleTogglePromotionActive = (id: string, isActive: boolean) => {
           />
         }
       >
-        {/* Global Financial Overview */}
         {globalTotals && (
           <Card style={styles.globalCard}>
             <ThemedText type="h2">Global Overview</ThemedText>
@@ -1421,7 +1579,6 @@ const handleTogglePromotionActive = (id: string, isActive: boolean) => {
           </Card>
         )}
 
-        {/* Order Summary */}
         <View style={styles.section}>
           <ThemedText type="h3" style={styles.sectionTitle}>Order Summary</ThemedText>
           <View style={styles.metricsGrid}>
@@ -1465,50 +1622,48 @@ const handleTogglePromotionActive = (id: string, isActive: boolean) => {
           </View>
         </View>
 
-        {/* ✅ NEW: Promotions Section */}
         <View style={styles.section}>
-  <View style={styles.sectionHeader}>
-    <ThemedText type="h3">Promotions ({promotions.length})</ThemedText>
-    <Pressable 
-      style={[styles.addButton, { backgroundColor: theme.warning }]} 
-      onPress={() => {
-        setSelectedPromotion(null);
-        setShowPromotionModal(true);
-      }}
-    >
-      <Feather name="gift" size={18} color={theme.buttonText} />
-      <ThemedText type="button" style={{ color: theme.buttonText }}>Add Promotion</ThemedText>
-    </Pressable>
-  </View>
+          <View style={styles.sectionHeader}>
+            <ThemedText type="h3">Promotions ({promotions.length})</ThemedText>
+            <Pressable 
+              style={[styles.addButton, { backgroundColor: theme.warning }]} 
+              onPress={() => {
+                setSelectedPromotion(null);
+                setShowPromotionModal(true);
+              }}
+            >
+              <Feather name="gift" size={18} color={theme.buttonText} />
+              <ThemedText type="button" style={{ color: theme.buttonText }}>Add Promotion</ThemedText>
+            </Pressable>
+          </View>
 
-  {promotions.map((promo: Promotion) => (
-    <PromotionCard
-      key={promo.id}
-      promotion={promo}
-      onEdit={() => {
-        setSelectedPromotion(promo);
-        setShowPromotionModal(true);
-      }}
-      onDelete={() => handlePromotionDelete(promo)}
-      onToggleActive={() => handleTogglePromotionActive(
-        promo.id,
-        !promo.isActive
-      )}
-    />
-  ))}
+          {promotions.map((promo: Promotion) => (
+            <PromotionCard
+              key={promo.id}
+              promotion={promo}
+              onEdit={() => {
+                setSelectedPromotion(promo);
+                setShowPromotionModal(true);
+              }}
+              onDelete={() => handlePromotionDelete(promo)}
+              onToggleActive={() => handleTogglePromotionActive(
+                promo.id,
+                !promo.isActive
+              )}
+            />
+          ))}
 
-  {promotions.length === 0 && !promotionsLoading && (
-    <Card style={styles.emptyCard}>
-      <Feather name="gift" size={48} color={theme.textSecondary} />
-      <ThemedText type="h3" style={{ marginTop: Spacing.md }}>No Promotions Yet</ThemedText>
-      <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}>
-        Create your first promotion to attract customers
-      </ThemedText>
-    </Card>
-  )}
-</View>
+          {promotions.length === 0 && !promotionsLoading && (
+            <Card style={styles.emptyCard}>
+              <Feather name="gift" size={48} color={theme.textSecondary} />
+              <ThemedText type="h3" style={{ marginTop: Spacing.md }}>No Promotions Yet</ThemedText>
+              <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}>
+                Create your first promotion to attract customers
+              </ThemedText>
+            </Card>
+          )}
+        </View>
 
-        {/* Stores Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <ThemedText type="h3">Stores ({stores.length})</ThemedText>

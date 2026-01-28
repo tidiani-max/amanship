@@ -1,4 +1,4 @@
-// Enhanced Picker Dashboard with Promotions Tab - FIXED TypeScript errors
+// Enhanced Picker Dashboard with Promotions Tab - COMPLETE FIXED VERSION
 import React, { useState, useMemo } from "react";
 import { 
   View, StyleSheet, ScrollView, RefreshControl, 
@@ -20,6 +20,8 @@ import { Spacing } from "@/constants/theme";
 import { OrderReceipt } from "@/components/OrderReceipt";
 
 const BASE_URL = process.env.EXPO_PUBLIC_DOMAIN!;
+
+// ==================== INTERFACES ====================
 
 interface Category {
   id: string;
@@ -56,7 +58,10 @@ interface Promotion {
   showInBanner: boolean;
   usedCount: number;
   createdAt: string;
+  image?: string | null;
 }
+
+// ==================== ORDER CARD COMPONENT ====================
 
 function OrderCard({ 
   order, 
@@ -148,22 +153,33 @@ function OrderCard({
   );
 }
 
-// ✅ FIXED: Changed type="h4" to type="h3" and fixed style array issue
-function PromotionCard({ 
+// ==================== PROMOTION CARD COMPONENT ====================
+
+interface PromotionCardProps {
+  promotion: Promotion;
+  onEdit: (promo: Promotion) => void;
+  onDelete: (id: string) => void;
+  onToggleActive: (id: string, isActive: boolean) => void;
+}
+
+const PromotionCard: React.FC<PromotionCardProps> = ({ 
   promotion, 
   onEdit, 
   onDelete, 
   onToggleActive 
-}: { 
-  promotion: Promotion; 
-  onEdit: (promo: Promotion) => void;
-  onDelete: (id: string) => void;
-  onToggleActive: (id: string, isActive: boolean) => void;
-}) {
+}) => {
   const { theme } = useTheme();
   
   return (
     <Card style={{ ...styles.promotionCard, ...(!promotion.isActive && { opacity: 0.6 }) }}>
+      {promotion.image && (
+        <Image 
+          source={{ uri: promotion.image }} 
+          style={styles.promotionCardImage}
+          resizeMode="cover"
+        />
+      )}
+      
       <View style={styles.promotionHeader}>
         <View style={{ flex: 1 }}>
           <ThemedText type="h3">{promotion.title}</ThemedText>
@@ -232,7 +248,9 @@ function PromotionCard({
       </View>
     </Card>
   );
-}
+};
+
+// ==================== ALERT MODAL COMPONENT ====================
 
 function CustomAlertModal({ 
   visible, 
@@ -262,6 +280,39 @@ function CustomAlertModal({
   );
 }
 
+// ==================== INVENTORY ITEM ROW COMPONENT ====================
+
+function InventoryItemRow({ 
+  item, 
+  onEdit, 
+  onDelete 
+}: { 
+  item: InventoryItem; 
+  onEdit: (item: InventoryItem) => void; 
+  onDelete: (id: string) => void; 
+}) {
+  const { theme } = useTheme();
+  return (
+    <View style={[styles.inventoryRow, { borderBottomColor: theme.border }]}>
+      <Image source={{ uri: getImageUrl(item.product.image) }} style={styles.inventoryImg} />
+      <View style={styles.inventoryInfo}>
+        <ThemedText type="body" style={{ fontWeight: '600' }}>
+          {item.product.name}
+        </ThemedText>
+        <ThemedText type="caption">Stock: {item.stockCount} | Rp {item.product.price}</ThemedText>
+      </View>
+      <TouchableOpacity style={styles.iconBtn} onPress={() => onDelete(item.id)}>
+        <Feather name="trash-2" size={18} color="#e74c3c" />
+      </TouchableOpacity>
+      <TouchableOpacity style={[styles.editBtnSmall, { backgroundColor: theme.primary + "15" }]} onPress={() => onEdit(item)}>
+        <Feather name="edit-2" size={16} color={theme.primary} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// ==================== MAIN COMPONENT ====================
+
 export default function PickerDashboardScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -269,14 +320,21 @@ export default function PickerDashboardScreen() {
   const queryClient = useQueryClient();
   const navigation = useNavigation<any>();
 
+  // Tab state
   const [activeTab, setActiveTab] = useState<"orders" | "inventory" | "promotions">("orders");
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Modal states
   const [modalVisible, setModalVisible] = useState(false);
   const [promotionModalVisible, setPromotionModalVisible] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [alertVisible, setAlertVisible] = useState(false);
+  
+  // Editing states
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingPromotion, setIsEditingPromotion] = useState(false);
   
-  // Inventory states
+  // Inventory form states
   const [selectedInventoryId, setSelectedInventoryId] = useState<string | null>(null);
   const [formName, setFormName] = useState("");
   const [formBrand, setFormBrand] = useState("");
@@ -289,22 +347,26 @@ export default function PickerDashboardScreen() {
   const [formImage, setFormImage] = useState<string | null>(null);
   const [imageChanged, setImageChanged] = useState(false);
 
-  // Promotion states
+  // Promotion form states
   const [selectedPromotionId, setSelectedPromotionId] = useState<string | null>(null);
   const [promoTitle, setPromoTitle] = useState("");
   const [promoDescription, setPromoDescription] = useState("");
   const [promoType, setPromoType] = useState<"percentage" | "fixed_amount">("percentage");
   const [promoDiscountValue, setPromoDiscountValue] = useState("");
   const [promoMinOrder, setPromoMinOrder] = useState("");
-  const [promoValidUntil, setPromoValidUntil] = useState(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [promoValidUntil, setPromoValidUntil] = useState(
+    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  );
   const [promoShowInBanner, setPromoShowInBanner] = useState(false);
+  const [promoImage, setPromoImage] = useState<string | null>(null);
+  const [promoImageChanged, setPromoImageChanged] = useState(false);
 
-  const [alertVisible, setAlertVisible] = useState(false);
+  // Alert states
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
-
-  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+
+  // ==================== HELPER FUNCTIONS ====================
 
   const showAlert = (title: string, message: string) => {
     setAlertTitle(title);
@@ -329,7 +391,7 @@ export default function PickerDashboardScreen() {
     );
   };
 
-  // ===== QUERIES =====
+  // ==================== QUERIES ====================
   
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
@@ -371,20 +433,20 @@ export default function PickerDashboardScreen() {
     enabled: !!user?.id,
   });
 
-  // ===== MUTATIONS =====
+  // ==================== MUTATIONS ====================
 
   const createPromotionMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (formData: FormData) => {
       const res = await fetch(`${BASE_URL}/api/picker/promotions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, userId: user?.id }),
+        body: formData,
       });
       if (!res.ok) throw new Error('Failed to create promotion');
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/picker/promotions"] });
+      refetchPromotions();
       setPromotionModalVisible(false);
       showAlert("Success", "Promotion created!");
       resetPromotionForm();
@@ -393,17 +455,17 @@ export default function PickerDashboardScreen() {
   });
 
   const updatePromotionMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+    mutationFn: async ({ id, formData }: { id: string; formData: FormData }) => {
       const res = await fetch(`${BASE_URL}/api/picker/promotions/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, userId: user?.id }),
+        body: formData,
       });
       if (!res.ok) throw new Error('Failed to update promotion');
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/picker/promotions"] });
+      refetchPromotions();
       setPromotionModalVisible(false);
       showAlert("Success", "Promotion updated!");
       resetPromotionForm();
@@ -442,7 +504,7 @@ export default function PickerDashboardScreen() {
     onError: () => showAlert("Error", "Failed to toggle promotion"),
   });
 
-  // ===== HELPER FUNCTIONS =====
+  // ==================== PROMOTION HANDLERS ====================
 
   const resetPromotionForm = () => {
     setPromoTitle("");
@@ -454,6 +516,8 @@ export default function PickerDashboardScreen() {
     setPromoShowInBanner(false);
     setSelectedPromotionId(null);
     setIsEditingPromotion(false);
+    setPromoImage(null);
+    setPromoImageChanged(false);
   };
 
   const openPromotionModal = (promotion?: Promotion) => {
@@ -467,13 +531,29 @@ export default function PickerDashboardScreen() {
       setPromoMinOrder(promotion.minOrder.toString());
       setPromoValidUntil(new Date(promotion.validUntil).toISOString().split('T')[0]);
       setPromoShowInBanner(promotion.showInBanner);
+      setPromoImage(promotion.image || null);
+      setPromoImageChanged(false);
     } else {
       resetPromotionForm();
     }
     setPromotionModalVisible(true);
   };
 
-  const handleSavePromotion = () => {
+  const pickPromoImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    
+    if (!result.canceled && result.assets[0]) {
+      setPromoImage(result.assets[0].uri);
+      setPromoImageChanged(true);
+    }
+  };
+
+  const handleSavePromotion = async () => {
     if (!promoTitle.trim()) {
       showAlert("Error", "Please enter a promotion title");
       return;
@@ -484,20 +564,50 @@ export default function PickerDashboardScreen() {
       return;
     }
 
-    const data = {
-      title: promoTitle,
-      description: promoDescription,
-      type: promoType,
-      discountValue: Number(promoDiscountValue),
-      minOrder: Number(promoMinOrder) || 0,
-      validUntil: new Date(promoValidUntil).toISOString(),
-      showInBanner: promoShowInBanner,
-    };
+    const formData = new FormData();
+    formData.append("userId", user?.id || "");
+    formData.append("title", promoTitle.trim());
+    formData.append("description", promoDescription.trim());
+    formData.append("type", promoType);
+    formData.append("discountValue", promoDiscountValue);
+    formData.append("minOrder", promoMinOrder || "0");
+    formData.append("validUntil", promoValidUntil);
+    formData.append("showInBanner", promoShowInBanner.toString());
+
+    // Handle image upload
+    if (promoImage && promoImageChanged) {
+      const isNewImage = promoImage.startsWith('file://') || promoImage.startsWith('blob:');
+      
+      if (isNewImage) {
+        try {
+          if (promoImage.startsWith('blob:')) {
+            const response = await fetch(promoImage);
+            const blob = await response.blob();
+            const filename = `promo-${Date.now()}.jpg`;
+            const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
+            formData.append("image", file as any);
+          } else {
+            const filename = promoImage.split('/').pop() || 'promo.jpg';
+            const match = /\.(\w+)$/.exec(filename);
+            const fileType = match ? `image/${match[1]}` : 'image/jpeg';
+            formData.append("image", {
+              uri: promoImage,
+              name: filename,
+              type: fileType,
+            } as any);
+          }
+        } catch (error) {
+          console.error("Image processing error:", error);
+          showAlert("Error", "Failed to process image");
+          return;
+        }
+      }
+    }
 
     if (isEditingPromotion && selectedPromotionId) {
-      updatePromotionMutation.mutate({ id: selectedPromotionId, data });
+      updatePromotionMutation.mutate({ id: selectedPromotionId, formData });
     } else {
-      createPromotionMutation.mutate(data);
+      createPromotionMutation.mutate(formData);
     }
   };
 
@@ -520,28 +630,7 @@ export default function PickerDashboardScreen() {
     togglePromotionActiveMutation.mutate({ id, isActive });
   };
 
-  const ordersToDisplay = useMemo(() => {
-    if (!dashboard?.orders) return [];
-    const allOrders = [
-      ...(dashboard.orders.pending || []),
-      ...(dashboard.orders.active || []),
-      ...(dashboard.orders.packed || []),
-    ];
-    return allOrders.sort((a: any, b: any) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-  }, [dashboard]);
-
-  const filteredInventory = useMemo(() => {
-    if (!inventory) return [];
-    return inventory.filter(item => 
-      item.product.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [inventory, searchQuery]);
-
-  const onRefresh = async () => {
-    await Promise.all([refetchInv(), refetchDash(), refetchPromotions()]);
-  };
+  // ==================== INVENTORY HANDLERS ====================
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -735,6 +824,8 @@ export default function PickerDashboardScreen() {
     }
   };
 
+  // ==================== ORDER HANDLERS ====================
+
   const handleUpdateOrderStatus = async (orderId: string, nextStatus: string) => {
     if (!user?.id) return;
 
@@ -760,6 +851,33 @@ export default function PickerDashboardScreen() {
 
     queryClient.invalidateQueries({ queryKey: ["/api/picker/dashboard", user?.id] });
   };
+
+  // ==================== COMPUTED VALUES ====================
+
+  const ordersToDisplay = useMemo(() => {
+    if (!dashboard?.orders) return [];
+    const allOrders = [
+      ...(dashboard.orders.pending || []),
+      ...(dashboard.orders.active || []),
+      ...(dashboard.orders.packed || []),
+    ];
+    return allOrders.sort((a: any, b: any) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [dashboard]);
+
+  const filteredInventory = useMemo(() => {
+    if (!inventory) return [];
+    return inventory.filter(item => 
+      item.product.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [inventory, searchQuery]);
+
+  const onRefresh = async () => {
+    await Promise.all([refetchInv(), refetchDash(), refetchPromotions()]);
+  };
+
+  // ==================== RENDER ====================
 
   return (
     <ThemedView style={styles.container}>
@@ -826,6 +944,7 @@ export default function PickerDashboardScreen() {
         </View>
       </View>
 
+      {/* Content */}
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={invLoading || dashLoading || promotionsLoading} onRefresh={onRefresh} tintColor={theme.primary} />}
@@ -950,6 +1069,23 @@ export default function PickerDashboardScreen() {
               placeholder="Describe your promotion..." 
               placeholderTextColor={theme.textSecondary} 
             />
+
+            <ThemedText style={styles.label}>Banner Image (16:9)</ThemedText>
+            <TouchableOpacity 
+              style={[styles.imagePicker, { backgroundColor: theme.backgroundTertiary, borderColor: theme.border, borderWidth: 2, borderStyle: 'dashed' }]}
+              onPress={pickPromoImage}
+            >
+              {promoImage ? (
+                <Image source={{ uri: promoImage }} style={styles.fullImage} />
+              ) : (
+                <View style={styles.imagePlaceholder}>
+                  <Feather name="image" size={40} color={theme.textSecondary} />
+                  <ThemedText style={{ marginTop: 8, color: theme.textSecondary }}>
+                    Tap to add banner image
+                  </ThemedText>
+                </View>
+              )}
+            </TouchableOpacity>
 
             <ThemedText style={styles.label}>Type *</ThemedText>
             <View style={styles.typeSelector}>
@@ -1138,26 +1274,7 @@ export default function PickerDashboardScreen() {
   );
 }
 
-function InventoryItemRow({ item, onEdit, onDelete }: { item: InventoryItem; onEdit: (item: InventoryItem) => void; onDelete: (id: string) => void; }) {
-  const { theme } = useTheme();
-  return (
-    <View style={[styles.inventoryRow, { borderBottomColor: theme.border }]}>
-      <Image source={{ uri: getImageUrl(item.product.image) }} style={styles.inventoryImg} />
-      <View style={styles.inventoryInfo}>
-        <ThemedText type="body" style={{ fontWeight: '600' }}>
-          {item.product.name}
-        </ThemedText>
-        <ThemedText type="caption">Stock: {item.stockCount} | Rp {item.product.price}</ThemedText>
-      </View>
-      <TouchableOpacity style={styles.iconBtn} onPress={() => onDelete(item.id)}>
-        <Feather name="trash-2" size={18} color="#e74c3c" />
-      </TouchableOpacity>
-      <TouchableOpacity style={[styles.editBtnSmall, { backgroundColor: theme.primary + "15" }]} onPress={() => onEdit(item)}>
-        <Feather name="edit-2" size={16} color={theme.primary} />
-      </TouchableOpacity>
-    </View>
-  );
-}
+// ==================== STYLES ====================
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -1206,6 +1323,7 @@ const styles = StyleSheet.create({
   alertButton: { backgroundColor: '#007AFF', padding: 12, borderRadius: 8, alignItems: 'center' },
   alertButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
   promotionCard: { padding: 15, marginBottom: 15 },
+  promotionCardImage: { width: '100%', height: 120, borderRadius: 12, marginBottom: 15 },
   promotionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 15 },
   statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   promotionDetails: { marginBottom: 15 },
