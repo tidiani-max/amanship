@@ -98,7 +98,6 @@ export default function HomeScreen() {
   const [screenWidth, setScreenWidth] = useState(width);
   const [selectedStore, setSelectedStore] = useState<APIStore | null>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
-  const [activePromotions, setActivePromotions] = useState<any[]>([]);
   
   const bannerScrollRef = useRef<ScrollView>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -186,17 +185,21 @@ export default function HomeScreen() {
     },
   });
 
-  // Fetch active promotions
-  const { data: promotionsData } = useQuery({
-    queryKey: ["/api/promotions/featured"],
+  // ✅ FIXED: Fetch active promotions/banners from both app-wide and nearby stores
+  const { data: promotionsData = [] } = useQuery({
+    queryKey: ["/api/promotions/banners", latitude, longitude],
+    enabled: !!latitude && !!longitude,
     queryFn: async () => {
-      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/featured`);
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/promotions/banners?lat=${latitude}&lng=${longitude}`
+      );
+      if (!res.ok) return [];
       return res.json();
     },
   });
 
   // ✅ FIXED: Fetch active vouchers with proper null check
-  const { data: vouchersData } = useQuery({
+  const { data: vouchersData = [] } = useQuery({
     queryKey: ["/api/vouchers/active", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -204,6 +207,7 @@ export default function HomeScreen() {
       const res = await fetch(
         `${process.env.EXPO_PUBLIC_DOMAIN}/api/vouchers/active?userId=${user.id}`
       );
+      if (!res.ok) return [];
       return res.json();
     },
   });
@@ -287,6 +291,32 @@ export default function HomeScreen() {
 
   const handleCategoryPress = (category: Category) => {
     navigation.navigate("Category", { category });
+  };
+
+  // ✅ FIXED: Handle promotion claim
+  const handlePromotionClaim = (promo: any) => {
+    if (!user) {
+      Alert.alert(
+        "Login Required",
+        "Please log in to claim this promotion",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Login", onPress: () => navigation.navigate("Login" as any) }
+        ]
+      );
+      return;
+    }
+
+    // Show promotion details
+    Alert.alert(
+      `🌙 ${promo.title}`,
+      `${promo.description}\n\n${
+        promo.scope === "store" && promo.storeName 
+          ? `Available at: ${promo.storeName}` 
+          : "Available at all stores"
+      }\n\nThis promotion will be automatically applied at checkout!`,
+      [{ text: "Got it!", style: "default" }]
+    );
   };
 
   const renderProductCard = (product: UIProduct) => {
@@ -532,18 +562,14 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ===== RAMADAN PROMOTIONS ===== */}
+        {/* ===== PROMOTIONS SECTION (App-wide + Nearby Stores) ===== */}
         {promotionsData && promotionsData.length > 0 && (
           <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
             <View style={styles.ramadanHeader}>
               <ThemedText type="h3" style={styles.sectionTitle}>
-                🌙 Ramadan Specials
+                🎉 Special Promotions
               </ThemedText>
-              {/* Note: You need to add "Promotions" to RootStackParamList to make this navigation work */}
-              <Pressable onPress={() => {
-                // Temporary workaround - navigate to a screen that exists
-                console.log('Navigate to promotions page');
-              }}>
+              <Pressable onPress={() => navigation.navigate("Vouchers")}>
                 <ThemedText style={{ color: theme.primary, fontWeight: '600' }}>
                   View All
                 </ThemedText>
@@ -559,21 +585,27 @@ export default function HomeScreen() {
                 <Pressable
                   key={promo.id}
                   style={[styles.promoCard, { 
-                    backgroundColor: promo.color + '15',
-                    borderColor: promo.color 
+                    backgroundColor: (promo.color || '#10b981') + '15',
+                    borderColor: promo.color || '#10b981'
                   }]}
-                  onPress={() => {
-                    // Apply promotion logic
-                  }}
+                  onPress={() => handlePromotionClaim(promo)}
                 >
-                  <Feather name={promo.icon} size={32} color={promo.color} />
+                  <Feather name={promo.icon || 'gift'} size={32} color={promo.color || '#10b981'} />
                   <ThemedText style={styles.promoTitle} numberOfLines={2}>
                     {promo.title}
                   </ThemedText>
                   <ThemedText style={styles.promoDesc} numberOfLines={2}>
                     {promo.description}
                   </ThemedText>
-                  <View style={[styles.promoButton, { backgroundColor: promo.color }]}>
+                  {promo.scope === "store" && promo.storeName && (
+                    <View style={styles.storePromoBadge}>
+                      <Feather name="map-pin" size={10} color="#059669" />
+                      <ThemedText style={styles.storePromoText} numberOfLines={1}>
+                        {promo.storeName}
+                      </ThemedText>
+                    </View>
+                  )}
+                  <View style={[styles.promoButton, { backgroundColor: promo.color || '#10b981' }]}>
                     <ThemedText style={{ color: 'white', fontWeight: '700' }}>
                       CLAIM NOW
                     </ThemedText>
@@ -597,18 +629,17 @@ export default function HomeScreen() {
                   key={voucher.id}
                   style={[styles.voucherCard, { 
                     backgroundColor: theme.cardBackground,
-                    borderLeftColor: voucher.color,
+                    borderLeftColor: voucher.color || theme.primary,
                     borderLeftWidth: 4
                   }]}
                   onPress={() => {
-                    // Copy voucher code
                     Clipboard.setString(voucher.code);
                     Alert.alert('Copied!', `Voucher code "${voucher.code}" copied to clipboard`);
                   }}
                 >
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Feather name={voucher.icon} size={16} color={voucher.color} />
+                      <Feather name={voucher.icon || 'tag'} size={16} color={voucher.color || theme.primary} />
                       <ThemedText style={{ fontWeight: '800', fontSize: 16 }}>
                         {voucher.code}
                       </ThemedText>
@@ -1031,6 +1062,21 @@ const styles = StyleSheet.create({
   promoDesc: {
     fontSize: 12,
     color: '#666',
+  },
+  storePromoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  storePromoText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#065f46',
   },
   promoButton: {
     paddingVertical: 8,
