@@ -19,6 +19,8 @@ import { useCart } from "@/context/CartContext";
 import { useLocation } from "@/context/LocationContext";
 import { getImageUrl } from "@/lib/image-url";
 import { useAuth } from "@/context/AuthContext";
+import { Alert } from 'react-native';
+
 
 const { width } = Dimensions.get("window");
 
@@ -403,13 +405,29 @@ export default function ImprovedHomeScreen() {
         return;
       }
 
-      if (data.alreadyClaimed) {
-        alert(`Already Claimed! ✓\n\nYou've already claimed this promotion!\n\n📦 It will automatically apply at checkout when you spend ${formatPrice(promo.minOrder)} or more.`);
-        return;
-      }
+if (data.alreadyClaimed) {
+  Alert.alert(
+    "Already Claimed! ✓",
+    `You've already claimed this promotion!\n\n📦 It will automatically apply at checkout when you spend ${formatPrice(promo.minOrder)} or more.`,
+    [{ text: "Got it", style: "cancel" }]
+  );
+  return;
+}
 
-      alert(`🎉 Promotion Claimed!\n\n${promo.title} has been added to your account!\n\n✓ Will auto-apply at checkout\n✓ Minimum order: ${formatPrice(promo.minOrder)}\n✓ Valid until ${formatDate(promo.validUntil)}`);
-      refetchPromotions();
+Alert.alert(
+  "Promotion Claimed!",
+  `${promo.title} has been added to your account!\n\n Will auto-apply at checkout\n💰 Minimum order: ${formatPrice(promo.minOrder)}\n⏳ Valid until ${formatDate(promo.validUntil)}`,
+  [
+    { text: "Awesome!", style: "default" },
+    { 
+      text: "View Cart", 
+      onPress: () => navigation.navigate("Cart"),
+      style: "default" 
+    }
+  ]
+);
+refetchPromotions();
+
       
     } catch (error) {
       console.error("❌ Claim promotion error:", error);
