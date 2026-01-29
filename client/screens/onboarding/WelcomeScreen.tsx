@@ -76,7 +76,7 @@ export default function WelcomeScreen() {
           style={styles.skipLink}
         >
           <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-            Skip for Demo
+           
           </ThemedText>
         </Pressable>
       </View>

@@ -22,6 +22,7 @@ import { useAuth } from "@/context/AuthContext";
 
 const { width } = Dimensions.get("window");
 
+
 // ===== RESPONSIVE BREAKPOINTS =====
 const getResponsiveColumns = (screenWidth: number) => {
   if (screenWidth >= 1400) return 6;
@@ -121,6 +122,8 @@ export default function ImprovedHomeScreen() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const headerOpacity = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const { items } = useCart(); 
+
 
   const {
     location,
@@ -534,23 +537,8 @@ const renderProductCard = (product: UIProduct) => {
         }
       ]}>
         <View style={styles.headerRow}>
-          <View style={styles.headerLeft}>
-            {nearestStore && (
-              <View style={styles.storeInfoCompact}>
-                <Feather name="navigation" size={12} color="#10b981" />
-                <ThemedText style={styles.storeNameSmall} numberOfLines={1}>
-                  {String(nearestStore.name || 'Store')}
-                </ThemedText>
-                <View style={styles.storeDot} />
-                <ThemedText style={styles.storeMinutesSmall}>
-                  {String((storesData[0]?.deliveryMinutes || 15))}min
-                </ThemedText>
-              </View>
-            )}
-          </View>
-          
           <View style={styles.headerCenter}>
-            <ThemedText style={styles.logoText}>KilatGo</ThemedText>
+            <ThemedText style={styles.logoText}></ThemedText>
           </View>
         </View>
       </Animated.View>
@@ -866,12 +854,6 @@ const renderProductCard = (product: UIProduct) => {
         {!searchQuery && availableCategories.length > 0 && (
           <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: Spacing.md }}>
-              <LinearGradient
-                colors={['#10b981', '#059669']}
-                style={styles.sectionIconBadge}
-              >
-                <Feather name="grid" size={18} color="white" />
-              </LinearGradient>
               <ThemedText type="h3" style={styles.sectionTitle}>Shop by Category</ThemedText>
             </View>
             <ScrollView
@@ -881,30 +863,35 @@ const renderProductCard = (product: UIProduct) => {
               decelerationRate="fast"
             >
               {availableCategories.map((category) => (
-                <Pressable
-                  key={category.id}
-                  style={styles.categoryItem}
-                  onPress={() => handleCategoryPress(category)}
-                >
-                  <LinearGradient
-                    colors={[category.color + "15", category.color + "25"]}
-                    style={styles.categoryIcon}
-                  >
-                    {category.image ? (
-                      <Image
-                        source={{ uri: getImageUrl(category.image) }}
-                        style={styles.categoryImage}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <Feather name={category.icon as any} size={32} color={category.color} />
-                    )}
-                  </LinearGradient>
-                  <ThemedText type="small" style={styles.categoryLabel} numberOfLines={1}>
-                    {category.name}
-                  </ThemedText>
-                </Pressable>
-              ))}
+  <Pressable
+    key={category.id}
+    style={styles.categoryItem}
+    onPress={() => handleCategoryPress(category)}
+  >
+    <LinearGradient
+      colors={[category.color + "15", category.color + "25"]}
+      style={styles.categoryIcon}
+    >
+      {/* 
+        Strictly only render the image. 
+        The Feather icon component has been deleted entirely.
+      */}
+      {category.image && (
+        <Image
+          source={{ uri: getImageUrl(category.image) }}
+          style={styles.categoryImage}
+          resizeMode="cover"
+        />
+      )}
+    </LinearGradient>
+    
+    {/* Removed numberOfLines to allow vertical wrapping */}
+    <ThemedText type="small" style={styles.categoryLabel}>
+      {category.name}
+    </ThemedText>
+  </Pressable>
+))}
+
             </ScrollView>
           </View>
         )}
@@ -913,12 +900,6 @@ const renderProductCard = (product: UIProduct) => {
         {storesData.length > 0 && (
           <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: Spacing.md }}>
-              <LinearGradient
-                colors={['#3b82f6', '#2563eb']}
-                style={styles.sectionIconBadge}
-              >
-                <Feather name="map-pin" size={18} color="white" />
-              </LinearGradient>
               <ThemedText type="h3" style={styles.sectionTitle}>Nearby Stores</ThemedText>
             </View>
             <ScrollView 
@@ -985,23 +966,10 @@ const renderProductCard = (product: UIProduct) => {
         <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
           <View style={styles.sectionHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <LinearGradient
-                colors={['#8b5cf6', '#7c3aed']}
-                style={styles.sectionIconBadge}
-              >
-                <Feather name="package" size={18} color="white" />
-              </LinearGradient>
               <ThemedText type="h3" style={styles.sectionTitle}>
                 {selectedStore ? `${selectedStore.name} Products` : "All Products"}
               </ThemedText>
             </View>
-            {filteredProducts.length > 0 && (
-              <View style={styles.productCountBadge}>
-                <ThemedText style={styles.productCount}>
-                  {String(filteredProducts.length)}
-                </ThemedText>
-              </View>
-            )}
           </View>
           
           {productsLoading ? (
@@ -1029,10 +997,11 @@ const renderProductCard = (product: UIProduct) => {
       </Animated.ScrollView>
 
       <CartToast
-        visible={toastVisible}
-        productName={lastAddedProduct}
-        onDismiss={() => setToastVisible(false)}
-      />
+  visible={toastVisible}
+  hasItems={items.length > 0} // <--- Pass this now!
+  productName={lastAddedProduct}
+  onDismiss={() => setToastVisible(false)}
+/>
     </View>
   );
 }

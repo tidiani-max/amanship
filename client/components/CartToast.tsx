@@ -8,108 +8,98 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
-  runOnJS,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
-import { useLanguage } from "@/context/LanguageContext";
-import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
+import { Spacing, Shadows } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
+// 1. FIXED: Added hasItems to the interface
 interface CartToastProps {
   visible: boolean;
+  hasItems: boolean; 
   productName: string;
   onDismiss: () => void;
 }
 
-export function CartToast({ visible, productName, onDismiss }: CartToastProps) {
+export function CartToast({ visible, hasItems, productName, onDismiss }: CartToastProps) {
   const { theme } = useTheme();
-  const { t } = useLanguage();
   const navigation = useNavigation<NavigationProp>();
   const insets = useSafeAreaInsets();
   
-  const translateY = useSharedValue(150);
-  const opacity = useSharedValue(0);
+  // 0 = Mini Bubble, 1 = Fully Expanded
+  const expansion = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
-      translateY.value = withSpring(0, { damping: 15, stiffness: 150 });
-      opacity.value = withTiming(1, { duration: 200 });
-      
+      expansion.value = withSpring(1, { damping: 15 });
+      // Auto-shrink back to bubble after 4s
       const timer = setTimeout(() => {
-        dismissToast();
+        expansion.value = withSpring(0);
+        onDismiss(); 
       }, 4000);
-      
       return () => clearTimeout(timer);
-    } else {
-      translateY.value = withSpring(150);
-      opacity.value = withTiming(0, { duration: 200 });
     }
   }, [visible]);
 
-  const dismissToast = () => {
-    translateY.value = withTiming(150, { duration: 200 });
-    opacity.value = withTiming(0, { duration: 200 }, () => {
-      runOnJS(onDismiss)();
-    });
-  };
-
+  // FIXED: Function was missing in the previous snippet
   const handleGoToCart = () => {
-    dismissToast();
-    setTimeout(() => {
-      navigation.navigate("Cart");
-    }, 100);
+    navigation.navigate("Cart");
   };
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-    opacity: opacity.value,
+    width: expansion.value === 1 ? '90%' : 60,
+    borderRadius: expansion.value === 1 ? 12 : 30,
+    transform: [{ translateX: withSpring(expansion.value === 1 ? 0 : -10) }],
   }));
 
-  if (!visible) return null;
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: expansion.value,
+    display: expansion.value < 0.1 ? 'none' : 'flex',
+  }));
+
+  // Only show if there are items in the cart
+  if (!hasItems) return null;
 
   return (
     <Animated.View
       style={[
         styles.container,
-        {
-          bottom: insets.bottom + 100,
-          backgroundColor: theme.cardBackground,
+        { 
+          bottom: insets.bottom + 100, 
+          backgroundColor: theme.cardBackground 
         },
         Shadows.medium,
         animatedStyle,
       ]}
     >
-      <View style={[styles.iconContainer, { backgroundColor: theme.success + "20" }]}>
-        <Feather name="check" size={20} color={theme.success} />
-      </View>
-      
-      <View style={styles.textContainer}>
-        <ThemedText type="body" style={{ fontWeight: "600" }} numberOfLines={1}>
-          {t.product.addedToCart}
-        </ThemedText>
-        <ThemedText type="caption" style={{ color: theme.textSecondary }} numberOfLines={1}>
-          {productName}
-        </ThemedText>
-      </View>
-      
-      <Pressable
-        style={[styles.cartButton, { backgroundColor: theme.primary }]}
-        onPress={handleGoToCart}
+      <Pressable 
+        style={styles.mainArea} 
+        onPress={() => (expansion.value = expansion.value === 0 ? withSpring(1) : withSpring(0))}
       >
-        <Feather name="shopping-cart" size={16} color={theme.buttonText} />
-        <ThemedText type="small" style={{ color: theme.buttonText, fontWeight: "600", marginLeft: 4 }}>
-          {t.cart.title}
-        </ThemedText>
+        <View style={[styles.iconContainer, { backgroundColor: theme.primary }]}>
+          <Feather name="shopping-cart" size={20} color="#fff" />
+          {/* Badge dot shows when minimized */}
+          <View style={[styles.dot, { backgroundColor: theme.success }]} />
+        </View>
+        
+        <Animated.View style={[styles.textContainer, contentStyle]}>
+          <ThemedText type="small" style={{ fontWeight: "700" }}>Added to Cart</ThemedText>
+          <ThemedText type="caption" numberOfLines={1} style={{ color: theme.textSecondary }}>
+            {productName}
+          </ThemedText>
+        </Animated.View>
       </Pressable>
-      
-      <Pressable style={styles.closeButton} onPress={dismissToast}>
-        <Feather name="x" size={18} color={theme.textSecondary} />
-      </Pressable>
+
+      <Animated.View style={contentStyle}>
+         <Pressable onPress={handleGoToCart} style={[styles.goBtn, { backgroundColor: theme.primary }]}>
+            <ThemedText style={{ color: '#fff', fontWeight: '600' }}>View</ThemedText>
+         </Pressable>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -117,36 +107,44 @@ export function CartToast({ visible, productName, onDismiss }: CartToastProps) {
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    left: Spacing.lg,
-    right: Spacing.lg,
+    left: 20,
+    height: 60,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: Spacing.md,
-    paddingLeft: Spacing.md,
-    paddingRight: Spacing.xs,
-    borderRadius: BorderRadius.md,
+    padding: 10,
     zIndex: 1000,
+    overflow: 'hidden',
+  },
+  mainArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   textContainer: {
+    marginLeft: 12,
     flex: 1,
-    marginLeft: Spacing.md,
-    marginRight: Spacing.sm,
   },
-  cartButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.sm,
+  dot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: 'white'
   },
-  closeButton: {
-    padding: Spacing.sm,
-  },
+  goBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 10
+  }
 });
