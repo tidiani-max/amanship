@@ -91,6 +91,7 @@ export default function CategoryScreen() {
   const [screenWidth, setScreenWidth] = useState(width);
   const [toastVisible, setToastVisible] = useState(false);
   const [lastAddedProduct, setLastAddedProduct] = useState<string>("");
+  const { items } = useCart(); 
 
   React.useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
@@ -132,7 +133,8 @@ const products: UIProduct[] = (apiProducts || []).map((p) => ({
   nutrition: p.nutrition,
   stockCount: Number(p.stockCount) || 0,
   inStock: p.isAvailable && Number(p.stockCount) > 0,
-  storeName: p.storeName ? String(p.storeName) : undefined,
+  storeName: p.storeName ? String(p.storeName) : "Unknown Store",
+  
   storeDistance: p.distance ? Number(p.distance) : undefined,
   deliveryMinutes: p.deliveryMinutes ? Number(p.deliveryMinutes) : undefined,
   storeId: p.storeId ? String(p.storeId) : undefined,
@@ -205,9 +207,11 @@ const renderProduct = ({ item }: { item: UIProduct }) => {
         <View style={styles.deliveryInfoRow}>
           <View style={styles.storeBadge}>
             <Feather name="map-pin" size={9} color="#059669" />
-            <ThemedText style={styles.storeText} numberOfLines={1}>
-              {String(item.storeName || "Store")}
-            </ThemedText>
+           
+           <ThemedText style={styles.storeText} numberOfLines={1}>
+  {item.storeName ? String(item.storeName) : "Official Store"}
+</ThemedText>
+
           </View>
           <View style={styles.timeBadge}>
             <Feather name="clock" size={9} color="#10b981" />
@@ -347,11 +351,12 @@ const renderProduct = ({ item }: { item: UIProduct }) => {
         />
       </View>
 
-      <CartToast
-        visible={toastVisible}
-        productName={lastAddedProduct}
-        onDismiss={() => setToastVisible(false)}
-      />
+        <CartToast
+      visible={toastVisible}
+      hasItems={items.length > 0} // <--- Pass this now!
+      productName={lastAddedProduct}
+      onDismiss={() => setToastVisible(false)}
+    />
     </View>
   );
 }

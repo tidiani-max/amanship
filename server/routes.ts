@@ -1397,6 +1397,7 @@ app.get("/api/category/products", async (req: Request, res: Response) => {
         p.description,
         p.nutrition,
         si.stock_count AS "stockCount",
+        s.name AS "storeName",
         TRUE AS "isAvailable",
         (
           6371 * acos(

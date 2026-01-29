@@ -451,7 +451,7 @@ const renderProductCard = (product: UIProduct) => {
   );
 
   // Remove the useRef hook from here - animation will work without refs for this use case
-  // Or use a CSS-based animation instead
+ 
 
   return (
     <Pressable
