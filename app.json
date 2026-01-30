@@ -31,7 +31,6 @@
 
     "android": {
       "package": "com.kilatgo.app",
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
 
       "permissions": [
@@ -78,13 +77,13 @@
       ],
 
       [
-        "expo-build-properties",
-        {
-          "android": {
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 34
-          }
-        }
+       "expo-build-properties",
+  {
+    "android": {
+      "compileSdkVersion": 34,
+      "targetSdkVersion": 33
+    }
+  }
       ]
     ],
 
