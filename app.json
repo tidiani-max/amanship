@@ -8,7 +8,7 @@
     "scheme": "kilatgo",
     "userInterfaceStyle": "automatic",
 
-    "newArchEnabled": true,
+    "newArchEnabled": false,
 
     "notification": {
       "icon": "./assets/images/notification-icon.png",
