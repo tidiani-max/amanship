@@ -133,7 +133,7 @@ const handleLogout = async () => {
             <MenuItem
               icon="map-pin"
               label={t.account.savedAddresses}
-              onPress={() => navigation.navigate("EditAddress", {})}
+              onPress={() => navigation.navigate("EditAddress")} 
             />
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
             <MenuItem

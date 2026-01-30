@@ -125,6 +125,7 @@ export default function ImprovedHomeScreen() {
   const headerOpacity = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const { items } = useCart(); 
+  
 
 
   const {
@@ -709,165 +710,6 @@ const renderProductCard = (product: UIProduct) => {
           </View>
         )}
 
-        {/* ===== PROMOTIONS SECTION ===== */}
-        {promotionsData && promotionsData.length > 0 && (
-          <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
-            <View style={styles.sectionHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <LinearGradient
-                  colors={['#f59e0b', '#d97706']}
-                  style={styles.sectionIconBadge}
-                >
-                  <Feather name="gift" size={18} color="white" />
-                </LinearGradient>
-                <ThemedText type="h3" style={styles.sectionTitle}>
-                  Special Offers
-                </ThemedText>
-              </View>
-              <Pressable 
-                onPress={() => refetchPromotions()}
-                style={styles.refreshButton}
-              >
-                <Feather name="refresh-cw" size={18} color={theme.primary} />
-              </Pressable>
-            </View>
-            
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: Spacing.md + 2, paddingVertical: Spacing.sm }}
-              decelerationRate="fast"
-              snapToInterval={isMobile ? 260 : 280}
-            >
-              {promotionsData.map((promo) => {
-                const isClaimed = claimedPromotionsMap[promo.id] || false;
-                const now = new Date();
-                const validFrom = new Date(promo.validFrom);
-                const validUntil = new Date(promo.validUntil);
-                const isNotStarted = now < validFrom;
-                const isExpired = now > validUntil;
-                
-                return (
-                  <Pressable
-                    key={promo.id}
-                    style={[
-                      styles.promoCard,
-                      {
-                        backgroundColor: theme.cardBackground,
-                        borderColor: promo.color,
-                        opacity: isClaimed ? 0.85 : isNotStarted || isExpired ? 0.6 : 1,
-                      },
-                    ]}
-                    onPress={() => handleClaimPromotion(promo)}
-                    disabled={isClaimed && !isNotStarted && !isExpired}
-                  >
-                    {promo.bannerImage ? (
-                      <View style={styles.promoImageContainer}>
-                        <Image
-                          source={{ uri: promo.bannerImage }}
-                          style={styles.promoImageFull}
-                          resizeMode="cover"
-                        />
-                        <LinearGradient
-                          colors={['transparent', 'rgba(0,0,0,0.4)']}
-                          style={styles.promoImageOverlay}
-                        >
-                          <View style={[styles.promoIconBadge, { backgroundColor: promo.color }]}>
-                            <Feather name={promo.icon as any} size={20} color="white" />
-                          </View>
-                        </LinearGradient>
-                      </View>
-                    ) : (
-                      <LinearGradient
-                        colors={[promo.color + "20", promo.color + "40"]}
-                        style={styles.promoIconContainer}
-                      >
-                        <Feather name={promo.icon as any} size={36} color={promo.color} />
-                      </LinearGradient>
-                    )}
-                    
-                    <View style={styles.promoContent}>
-                      <ThemedText style={styles.promoTitle} numberOfLines={2}>
-                        {promo.title}
-                      </ThemedText>
-                      
-                      <ThemedText style={styles.promoDesc} numberOfLines={2}>
-                        {promo.description}
-                      </ThemedText>
-                      
-                      <View style={styles.promoDetailsRow}>
-                        {promo.scope === 'store' && promo.storeName && (
-                          <View style={styles.storeTag}>
-                            <Feather name="map-pin" size={10} color="#059669" />
-                            <ThemedText style={styles.storeTagText}>
-                              {promo.storeName}
-                            </ThemedText>
-                          </View>
-                        )}
-                        
-                        {promo.minOrder > 0 && (
-                          <View style={[styles.minOrderTag, { backgroundColor: promo.color + '15' }]}>
-                            <Feather name="shopping-bag" size={10} color={promo.color} />
-                            <ThemedText style={[styles.minOrderText, { color: promo.color }]}>
-                              Min {formatPrice(promo.minOrder)}
-                            </ThemedText>
-                          </View>
-                        )}
-                      </View>
-                      
-                      {isNotStarted && (
-                        <View style={[styles.statusBadge, { backgroundColor: '#fbbf24' + '20' }]}>
-                          <Feather name="clock" size={11} color="#f59e0b" />
-                          <ThemedText style={{ fontSize: 10, color: '#f59e0b', marginLeft: 4, fontWeight: '700' }}>
-                            Opens {formatDate(promo.validFrom)}
-                          </ThemedText>
-                        </View>
-                      )}
-                      
-                      {isExpired && (
-                        <View style={[styles.statusBadge, { backgroundColor: '#ef4444' + '20' }]}>
-                          <Feather name="x-circle" size={11} color="#ef4444" />
-                          <ThemedText style={{ fontSize: 10, color: '#ef4444', marginLeft: 4, fontWeight: '700' }}>
-                            Expired
-                          </ThemedText>
-                        </View>
-                      )}
-                      
-                      <LinearGradient
-                        colors={
-                          isNotStarted 
-                            ? ['#6b7280', '#4b5563']
-                            : isExpired 
-                            ? ['#ef4444', '#dc2626'] 
-                            : isClaimed 
-                            ? ['#10b981', '#059669'] 
-                            : [promo.color, promo.color]
-                        }
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.promoButton}
-                      >
-                        <ThemedText style={styles.promoButtonText}>
-                          {isNotStarted 
-                            ? "🔒 COMING SOON" 
-                            : isExpired 
-                            ? "❌ EXPIRED" 
-                            : isClaimed 
-                            ? "✓ CLAIMED" 
-                            : "CLAIM NOW"}
-                        </ThemedText>
-                        {!isNotStarted && !isExpired && !isClaimed && (
-                          <Feather name="arrow-right" size={14} color="white" />
-                        )}
-                      </LinearGradient>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
-        )}
-
         {/* ===== CATEGORIES SECTION ===== */}
         {!searchQuery && availableCategories.length > 0 && (
           <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
@@ -913,6 +755,167 @@ const renderProductCard = (product: UIProduct) => {
             </ScrollView>
           </View>
         )}
+
+        {/* ===== PROMOTIONS SECTION ===== */}
+        {promotionsData && promotionsData.length > 0 && (
+          <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
+            <View style={styles.sectionHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <LinearGradient
+                  colors={['#f59e0b', '#d97706']}
+                  style={styles.sectionIconBadge}
+                >
+                  <Feather name="gift" size={18} color="white" />
+                </LinearGradient>
+                <ThemedText type="h3" style={styles.sectionTitle}>
+                  Special Offers
+                </ThemedText>
+              </View>
+              <Pressable 
+                onPress={() => refetchPromotions()}
+                style={styles.refreshButton}
+              >
+                <Feather name="refresh-cw" size={18} color={theme.primary} />
+              </Pressable>
+            </View>
+            
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: Spacing.md + 2, paddingVertical: Spacing.sm }}
+              decelerationRate="fast"
+              snapToInterval={isMobile ? 260 : 280}
+            >
+              {promotionsData.map((promo) => {
+                const isClaimed = claimedPromotionsMap[promo.id] || false;
+                const now = new Date();
+                const validFrom = new Date(promo.validFrom);
+                const validUntil = new Date(promo.validUntil);
+                const isNotStarted = now < validFrom;
+                const isExpired = now > validUntil;
+                
+                return (
+  <Pressable
+    key={promo.id}
+    style={[
+      styles.promoCard,
+      {
+        backgroundColor: theme.cardBackground,
+        borderColor: promo.color,
+        opacity: isClaimed ? 0.85 : isNotStarted || isExpired ? 0.6 : 1,
+        height: 200, // Fixed height to allow background image to fill space
+      },
+    ]}
+    onPress={() => handleClaimPromotion(promo)}
+    disabled={isClaimed && !isNotStarted && !isExpired}
+  >
+    {/* 1. THE IMAGE (Background layer) */}
+    {promo.bannerImage ? (
+      <>
+        <Image
+          source={{ uri: promo.bannerImage }}
+          style={[StyleSheet.absoluteFill, styles.promoImageFull]}
+          resizeMode="cover"
+        />
+        {/* Dark Scrim for readability */}
+        <LinearGradient
+          colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.8)']}
+          style={StyleSheet.absoluteFill}
+        />
+      </>
+    ) : (
+      <LinearGradient
+        colors={[promo.color + "20", promo.color + "40"]}
+        style={StyleSheet.absoluteFill}
+      />
+    )}
+
+    {/* 2. THE CONTENT (Foreground layer) */}
+    <View style={[styles.promoContent, { flex: 1, justifyContent: 'space-between' }]}>
+      {/* Top row: Icon and Badges */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <View style={[styles.promoIconBadge, { backgroundColor: promo.color }]}>
+          <Feather name={promo.icon as any} size={20} color="white" />
+        </View>
+        
+        <View style={{ gap: 4 }}>
+          {isNotStarted && (
+            <View style={[styles.statusBadge, { backgroundColor: '#fbbf24' }]}>
+              <Feather name="clock" size={11} color="white" />
+              <ThemedText style={{ fontSize: 10, color: 'white', marginLeft: 4, fontWeight: '700' }}>
+                {formatDate(promo.validFrom)}
+              </ThemedText>
+            </View>
+          )}
+          {isExpired && (
+            <View style={[styles.statusBadge, { backgroundColor: '#ef4444' }]}>
+              <Feather name="x-circle" size={11} color="white" />
+              <ThemedText style={{ fontSize: 10, color: 'white', marginLeft: 4, fontWeight: '700' }}>
+                Expired
+              </ThemedText>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Bottom section: Text and Button */}
+      <View style={{ gap: 4 }}>
+        <ThemedText style={[styles.promoTitle, { color: 'white' }]} numberOfLines={1}>
+          {promo.title}
+        </ThemedText>
+        
+        <ThemedText style={[styles.promoDesc, { color: 'rgba(255,255,255,0.9)' }]} numberOfLines={1}>
+          {promo.description}
+        </ThemedText>
+        
+        <View style={styles.promoDetailsRow}>
+          {promo.scope === 'store' && promo.storeName && (
+            <View style={[styles.storeTag, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Feather name="map-pin" size={10} color="white" />
+              <ThemedText style={[styles.storeTagText, { color: 'white' }]}>
+                {promo.storeName}
+              </ThemedText>
+            </View>
+          )}
+          
+          {promo.minOrder > 0 && (
+            <View style={[styles.minOrderTag, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Feather name="shopping-bag" size={10} color="white" />
+              <ThemedText style={[styles.minOrderText, { color: 'white' }]}>
+                Min {formatPrice(promo.minOrder)}
+              </ThemedText>
+            </View>
+          )}
+        </View>
+        
+        <LinearGradient
+          colors={
+            isNotStarted ? ['#6b7280', '#4b5563'] : 
+            isExpired ? ['#ef4444', '#dc2626'] : 
+            isClaimed ? ['#10b981', '#059669'] : 
+            [promo.color, promo.color]
+          }
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={[styles.promoButton, { paddingVertical: 8, marginTop: 4 }]}
+        >
+          <ThemedText style={styles.promoButtonText}>
+            {isNotStarted ? "🔒 COMING SOON" : isExpired ? "❌ EXPIRED" : isClaimed ? "✓ CLAIMED" : "CLAIM NOW"}
+          </ThemedText>
+          {!isNotStarted && !isExpired && !isClaimed && (
+            <Feather name="arrow-right" size={14} color="white" />
+          )}
+        </LinearGradient>
+      </View>
+    </View>
+  </Pressable>
+);
+
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        
 
         {/* ===== STORE SELECTOR ===== */}
         {storesData.length > 0 && (
