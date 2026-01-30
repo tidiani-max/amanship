@@ -174,7 +174,7 @@ const PromotionCard: React.FC<PromotionCardProps> = ({
     <Card style={{ ...styles.promotionCard, ...(!promotion.isActive && { opacity: 0.6 }) }}>
       {promotion.image && (
         <Image 
-          source={{ uri: promotion.image }} 
+          source={{ uri: getImageUrl(promotion.image) }} // ADD getImageUrl here
           style={styles.promotionCardImage}
           resizeMode="cover"
         />

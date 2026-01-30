@@ -24,7 +24,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import * as ImagePicker from 'expo-image-picker';
-
+import { getImageUrl } from "@/lib/image-url";
 // ===================== TYPES =====================
 interface StaffMember {
   id: string;
@@ -1968,13 +1968,13 @@ export default function AdminDashboardScreen() {
               <View style={styles.contentSection}>
                 {promotions.map((promo: Promotion) => (
                   <View key={promo.id} style={[styles.promotionCard, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, opacity: promo.isActive ? 1 : 0.6 }]}>
-                    {(promo.image || promo.bannerImage) && (
-                      <Image 
-                        source={{ uri: promo.image || promo.bannerImage || '' }} 
-                        style={styles.promotionImage}
-                        resizeMode="cover"
-                      />
-                    )}
+                   {(promo.image || promo.bannerImage) && (
+                    <Image 
+                      source={{ uri: getImageUrl(promo.image || promo.bannerImage) }} // ADD getImageUrl here
+                      style={styles.promotionImage}
+                      resizeMode="cover"
+                    />
+                  )}
                     
                     <View style={styles.promotionHeader}>
                       <View style={{ flex: 1 }}>

@@ -1,24 +1,22 @@
 import { getApiUrl } from "./query-client";
 
-export function getImageUrl(path: string | null | undefined): string | undefined {
-  if (!path || path.trim() === "") return undefined;
+export function getImageUrl(imagePath?: string | null): string {
+  if (!imagePath) return "https://placehold.co/400x400/e0e0e0/666666?text=No+Image";
   
-  if (path.startsWith("http://") || path.startsWith("https://")) {
-    return path;
+  // If it's already a full URL, return as-is
+  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+    return imagePath;
   }
   
-  const baseUrl = getApiUrl();
+  // If it's a local file path (blob or file), return as-is
+  if (imagePath.startsWith('blob:') || imagePath.startsWith('file://')) {
+    return imagePath;
+  }
   
-  // Remove trailing slash from base if exists
-  const cleanBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  // Handle relative paths - ensure they start with /
+  const cleanPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
   
-  // Ensure path starts with exactly one slash
-  const cleanPath = path.startsWith("/") ? path : `/${path}`;
-  
-  const finalUrl = `${cleanBase}${cleanPath}`;
-  
-  // Log this once to your terminal to see the actual URL being generated
-  // console.log("Generated Image URL:", finalUrl); 
-  
-  return finalUrl;
+  // Construct full URL with your backend domain
+  const baseUrl = process.env.EXPO_PUBLIC_DOMAIN || 'http://localhost:3000';
+  return `${baseUrl}${cleanPath}`;
 }
