@@ -9,7 +9,6 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "notification": {
-      "icon": "./assets/images/notification-icon.jpeg",
       "color": "#4F46E5",
       "iosDisplayInForeground": true,
       "androidMode": "default",
@@ -61,7 +60,6 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/notification-icon.jpeg",
           "color": "#4F46E5"
         }
       ],
