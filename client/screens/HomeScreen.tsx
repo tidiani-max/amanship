@@ -126,6 +126,7 @@ export default function ImprovedHomeScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const { items } = useCart(); 
   
+  
 
 
   const {
@@ -442,7 +443,6 @@ const renderProductCard = (product: UIProduct) => {
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
     : 0;
 
-  // Use actual screenWidth for mobile, maxWidth for larger screens
   const effectiveWidth = screenWidth < 600 ? screenWidth : (screenWidth > maxWidth ? maxWidth : screenWidth);
   
   const cardWidth = getProductCardWidth(
@@ -450,9 +450,6 @@ const renderProductCard = (product: UIProduct) => {
     responsiveColumns, 
     responsivePadding
   );
-
-  // Remove the useRef hook from here - animation will work without refs for this use case
- 
 
   return (
     <Pressable
@@ -466,7 +463,6 @@ const renderProductCard = (product: UIProduct) => {
         !product.inStock && { opacity: 0.5 }
       ]}
       onPress={() => navigation.navigate("ProductDetail", { product })}
-      // Remove the animation handlers or use a simpler approach
     >
       {hasDiscount && product.inStock && (
         <LinearGradient
@@ -475,7 +471,10 @@ const renderProductCard = (product: UIProduct) => {
           end={{ x: 1, y: 1 }}
           style={styles.discountBadge}
         >
-          <ThemedText style={styles.discountText}>{String(discountPercent)}% OFF</ThemedText>
+          {/* ✅ Don't translate percentages */}
+          <ThemedText style={styles.discountText} noTranslate>
+            {String(discountPercent)}% OFF
+          </ThemedText>
         </LinearGradient>
       )}
       
@@ -495,32 +494,39 @@ const renderProductCard = (product: UIProduct) => {
         <View style={styles.deliveryInfoRow}>
           <View style={styles.storeBadge}>
             <Feather name="map-pin" size={9} color="#059669" />
-            <ThemedText style={styles.storeText} numberOfLines={1}>
+            {/* ✅ Don't translate store names */}
+            <ThemedText style={styles.storeText} numberOfLines={1} noTranslate>
               {String(product.storeName || "Store")}
             </ThemedText>
           </View>
           <View style={styles.timeBadge}>
             <Feather name="clock" size={9} color="#10b981" />
-            <ThemedText style={styles.timeText}>
-              {String(product.deliveryMinutes || 15)} min
+            {/* ✅ Don't translate numbers, but translate "min" */}
+            <ThemedText style={styles.timeText} noTranslate>
+              {String(product.deliveryMinutes || 15)}{' '}
             </ThemedText>
+            <ThemedText style={styles.timeText}>min</ThemedText>
           </View>
         </View>
 
-        <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
+        {/* ✅ Don't translate product names */}
+        <ThemedText type="caption" numberOfLines={2} style={styles.productName} noTranslate>
           {String(product.name || 'Product')}
         </ThemedText>
-        <ThemedText type="small" style={styles.brandText} numberOfLines={1}>
+        
+        {/* ✅ Don't translate brand names */}
+        <ThemedText type="small" style={styles.brandText} numberOfLines={1} noTranslate>
           {String(product.brand || 'Brand')}
         </ThemedText>
 
         <View style={styles.productFooter}>
           <View style={{ flex: 1 }}>
-            <ThemedText type="body" style={styles.priceText}>
+            {/* ✅ Don't translate prices - they're already formatted */}
+            <ThemedText type="body" style={styles.priceText} noTranslate>
               {formatPrice(product.price)}
             </ThemedText>
             {hasDiscount && (
-              <ThemedText type="small" style={styles.originalPriceText}>
+              <ThemedText type="small" style={styles.originalPriceText} noTranslate>
                 {formatPrice(product.originalPrice!)}
               </ThemedText>
             )}
@@ -536,6 +542,7 @@ const renderProductCard = (product: UIProduct) => {
               handleAddToCart(product);
             }}
           >
+            {/* ✅ This will translate ADD → TAMBAH */}
             <ThemedText style={styles.addButtonText}>ADD</ThemedText>
           </Pressable>
         </View>
@@ -714,7 +721,7 @@ const renderProductCard = (product: UIProduct) => {
         {!searchQuery && availableCategories.length > 0 && (
           <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: Spacing.md }}>
-              <ThemedText type="h3" style={styles.sectionTitle}>Shop by Category</ThemedText>
+              <ThemedText type="h3" style={styles.sectionTitle}>Categories</ThemedText>
             </View>
             <ScrollView
               horizontal
@@ -983,38 +990,51 @@ const renderProductCard = (product: UIProduct) => {
           </View>
         )}
 
-        {/* ===== PRODUCTS GRID ===== */}
-        <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
-          <View style={styles.sectionHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <ThemedText type="h3" style={styles.sectionTitle}>
-                {selectedStore ? `${selectedStore.name} Products` : "All Products"}
-              </ThemedText>
-            </View>
-          </View>
-          
-          {productsLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.primary} />
-              <ThemedText style={{ color: theme.textSecondary, marginTop: 12 }}>
-                Loading products...
-              </ThemedText>
-            </View>
-          ) : (
-            <View style={styles.productsGrid}>
-              {filteredProducts.length > 0 ? (
-                filteredProducts.map(renderProductCard)
-              ) : (
-                <View style={styles.noResults}>
-                  <Feather name="search" size={48} color={theme.textSecondary} style={{ opacity: 0.3 }} />
-                  <ThemedText style={{ color: theme.textSecondary, marginTop: 12, fontSize: 15 }}>
-                    No products found
-                  </ThemedText>
-                </View>
-              )}
-            </View>
-          )}
+       {/* ===== PRODUCTS GRID ===== */}
+<View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
+  <View style={styles.sectionHeader}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <ThemedText type="h3" style={styles.sectionTitle}>
+        {selectedStore ? (
+          <>
+            <ThemedText type="h3" style={styles.sectionTitle} noTranslate>
+              {selectedStore.name}{' '}
+            </ThemedText>
+            <ThemedText type="h3" style={styles.sectionTitle}>
+              Products
+            </ThemedText>
+          </>
+        ) : (
+          <ThemedText type="h3" style={styles.sectionTitle}>
+            All Products
+          </ThemedText>
+        )}
+      </ThemedText>
+    </View>
+  </View>
+  
+  {productsLoading ? (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color={theme.primary} />
+      <ThemedText style={{ color: theme.textSecondary, marginTop: 12 }}>
+        Loading products...
+      </ThemedText>
+    </View>
+  ) : (
+    <View style={styles.productsGrid}>
+      {filteredProducts.length > 0 ? (
+        filteredProducts.map(renderProductCard)
+      ) : (
+        <View style={styles.noResults}>
+          <Feather name="search" size={48} color={theme.textSecondary} style={{ opacity: 0.3 }} />
+          <ThemedText style={{ color: theme.textSecondary, marginTop: 12, fontSize: 15 }}>
+            No products found
+          </ThemedText>
         </View>
+      )}
+    </View>
+  )}
+</View>
       </Animated.ScrollView>
 
       <CartToast
@@ -1057,9 +1077,20 @@ const styles = StyleSheet.create({
     gap: 6,
     maxWidth: '100%',
   },
-  storeNameSmall: { fontSize: 11, fontWeight: '700', color: '#065f46', flex: 1 },
+  storeNameSmall: { 
+    fontSize: 11, 
+    fontWeight: '700', 
+    color: '#065f46', 
+    flex: 1,
+    flexShrink: 1, // ✅ Allow text to shrink
+  },
   storeDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#10b981' },
-  storeMinutesSmall: { fontSize: 11, fontWeight: '800', color: '#059669' },
+  storeMinutesSmall: { 
+    fontSize: 11, 
+    fontWeight: '800', 
+    color: '#059669',
+    flexShrink: 0, // ✅ Keep number fixed
+  },
   logoText: { 
     fontSize: 24, 
     fontWeight: '900', 
@@ -1089,7 +1120,8 @@ const styles = StyleSheet.create({
     height: 44, 
     borderRadius: 22, 
     alignItems: "center", 
-    justifyContent: "center" 
+    justifyContent: "center",
+    flexShrink: 0, // ✅ Keep icon fixed size
   },
   
   searchContainer: { flexDirection: "row", gap: Spacing.sm + 2 },
@@ -1109,7 +1141,13 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  searchInput: { flex: 1, fontSize: 15, fontWeight: '500' },
+  searchInput: { 
+    flex: 1, 
+    fontSize: 15, 
+    fontWeight: '500',
+    // ✅ Better multi-language support
+    includeFontPadding: false,
+  },
   micButton: {
     width: 54,
     height: 54,
@@ -1121,6 +1159,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 6,
     elevation: 5,
+    flexShrink: 0, // ✅ Keep button fixed
   },
   
   bannerSection: { marginBottom: Spacing.xl + 4 },
@@ -1218,12 +1257,14 @@ const styles = StyleSheet.create({
     fontWeight: '900', 
     fontSize: 21, 
     letterSpacing: 0.3,
+    flexShrink: 1, // ✅ Allow long titles to shrink
   },
   productCountBadge: {
     backgroundColor: '#10b981',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
+    flexShrink: 0, // ✅ Keep badge fixed
   },
   productCount: { 
     fontSize: 13, 
@@ -1264,6 +1305,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#111827',
+    flexWrap: 'wrap', // ✅ Allow text wrapping for long category names
   },
   
   storeChipsContainer: { paddingTop: Spacing.sm, paddingBottom: Spacing.xs, gap: 10 },
@@ -1281,8 +1323,16 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  storeChipText: { fontSize: 14, fontWeight: '700' },
-  storeChipDistance: { fontSize: 12, fontWeight: '600' },
+  storeChipText: { 
+    fontSize: 14, 
+    fontWeight: '700',
+    flexShrink: 1, // ✅ Allow text to shrink
+  },
+  storeChipDistance: { 
+    fontSize: 12, 
+    fontWeight: '600',
+    flexShrink: 0, // ✅ Keep distance fixed
+  },
   
   productsGrid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.md + 2 },
   productCard: {
@@ -1306,7 +1356,12 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 10,
   },
-  discountText: { color: 'white', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  discountText: { 
+    color: 'white', 
+    fontSize: 11, 
+    fontWeight: '900', 
+    letterSpacing: 0.5,
+  },
   productImageContainer: {
     height: 150,
     width: "100%",
@@ -1316,8 +1371,15 @@ const styles = StyleSheet.create({
     padding: Spacing.md + 2,
   },
   productImage: { width: "100%", height: "100%" },
-  productInfo: { padding: Spacing.sm + 2, paddingTop: Spacing.xs + 2 },
-  deliveryInfoRow: { flexDirection: 'row', gap: 7, marginBottom: 11 },
+  productInfo: { 
+    padding: Spacing.sm + 2, 
+    paddingTop: Spacing.xs + 2,
+  },
+  deliveryInfoRow: { 
+    flexDirection: 'row', 
+    gap: 7, 
+    marginBottom: 11,
+  },
   storeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1327,8 +1389,17 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 8,
     flex: 1,
+    minWidth: 0, // ✅ Important for text truncation
   },
-  storeText: { fontSize: 9, fontWeight: '800', color: '#065f46', textTransform: 'uppercase', letterSpacing: 0.3 },
+  storeText: { 
+    fontSize: 9, 
+    fontWeight: '800', 
+    color: '#065f46', 
+    textTransform: 'uppercase', 
+    letterSpacing: 0.3,
+    flexShrink: 1, // ✅ Allow store name to shrink
+    maxWidth: '100%',
+  },
   timeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1337,12 +1408,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 8,
+    flexShrink: 0, // ✅ Keep time badge fixed
   },
-  timeText: { fontSize: 9, fontWeight: '800', color: '#065f46' },
-  productName: { marginBottom: 5, fontWeight: '700', fontSize: 14, lineHeight: 18, minHeight: 36, color: '#111827' },
-  brandText: { color: '#6b7280', fontSize: 11, fontWeight: '500', marginBottom: 9 },
-  productFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 5 },
-  priceText: { fontWeight: '900', fontSize: 17, color: '#111827' },
+  timeText: { 
+    fontSize: 9, 
+    fontWeight: '800', 
+    color: '#065f46',
+  },
+  productName: { 
+    marginBottom: 5, 
+    fontWeight: '700', 
+    fontSize: 14, 
+    lineHeight: 18, 
+    minHeight: 36, 
+    color: '#111827',
+  },
+  brandText: { 
+    color: '#6b7280', 
+    fontSize: 11, 
+    fontWeight: '500', 
+    marginBottom: 9,
+  },
+  productFooter: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    marginTop: 5,
+    gap: 8, // ✅ Add gap to prevent overlap
+  },
+  priceText: { 
+    fontWeight: '900', 
+    fontSize: 17, 
+    color: '#111827',
+    flexShrink: 1, // ✅ Allow price to shrink if needed
+  },
   addButton: { 
     paddingHorizontal: 18, 
     paddingVertical: 9, 
@@ -1352,8 +1451,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 3,
     elevation: 3,
+    flexShrink: 0, // ✅ Keep button fixed size
+    minWidth: 70, // ✅ Ensure button doesn't get too small
   },
-  addButtonText: { color: 'white', fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
+  addButtonText: { 
+    color: 'white', 
+    fontSize: 13, 
+    fontWeight: '900', 
+    letterSpacing: 0.5,
+    textAlign: 'center', // ✅ Center text in button
+  },
   originalPriceText: {
     textDecorationLine: 'line-through',
     color: '#9ca3af',
@@ -1424,11 +1531,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 20,
     color: '#111827',
+    flexShrink: 1, // ✅ Allow long titles to adapt
   },
   promoDesc: {
     fontSize: 13,
     color: '#6b7280',
     lineHeight: 18,
+    flexShrink: 1, // ✅ Allow descriptions to adapt
   },
   promoDetailsRow: {
     flexDirection: 'row',
@@ -1449,6 +1558,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#065f46',
+    flexShrink: 1, // ✅ Allow text to shrink
   },
   minOrderTag: {
     flexDirection: 'row',
@@ -1490,6 +1600,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 12,
     letterSpacing: 0.5,
+    textAlign: 'center', // ✅ Center button text
   },
   sectionIconBadge: {
     width: 36,
@@ -1497,6 +1608,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0, // ✅ Keep icon fixed
   },
   refreshButton: {
     width: 36,
@@ -1505,5 +1617,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    flexShrink: 0, // ✅ Keep button fixed
   },
 });

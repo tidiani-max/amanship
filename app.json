@@ -7,9 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "kilatgo",
     "userInterfaceStyle": "automatic",
-
     "newArchEnabled": true,
-
     "notification": {
       "icon": "./assets/images/notification-icon.png",
       "color": "#FFD700",
@@ -17,7 +15,6 @@
       "androidMode": "default",
       "androidCollapsedTitle": "{{unread_count}} new notifications"
     },
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kilatgo.app",
@@ -28,29 +25,25 @@
         "ITSAppUsesNonExemptEncryption": false
       }
     },
-
     "android": {
       "package": "com.kilatgo.app",
       "predictiveBackGestureEnabled": false,
-
       "permissions": [
         "RECORD_AUDIO",
         "NOTIFICATIONS",
         "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
+        "VIBRATE",
+        "android.permission.RECORD_AUDIO"
       ],
-
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#FFD700"
       }
     },
-
     "web": {
       "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
-
     "plugins": [
       [
         "expo-splash-screen",
@@ -64,10 +57,8 @@
           }
         }
       ],
-
       "expo-web-browser",
       "expo-speech-recognition",
-
       [
         "expo-notifications",
         {
@@ -75,28 +66,24 @@
           "color": "#FFD700"
         }
       ],
-
       [
-       "expo-build-properties",
-  {
-    "android": {
-      "compileSdkVersion": 35,
-      "targetSdkVersion": 34
-    }
-  }
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 34
+          }
+        }
       ]
     ],
-
     "experiments": {
       "reactCompiler": true
     },
-
+    "owner": "dioti",
     "extra": {
       "eas": {
-        "projectId": "113ea7fa-db9e-4380-b05f-dd63a05e5632"
+        "projectId": "8bf0d284-a394-42a9-a7db-e06415165da6"
       }
-    },
-
-    "owner": "dioti"
+    }
   }
 }
