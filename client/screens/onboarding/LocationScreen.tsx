@@ -1,19 +1,21 @@
 import React from "react";
-import { View, StyleSheet, Platform, Linking, Pressable } from "react-native";
+import { View, StyleSheet, Platform, Linking, Image, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as Location from "expo-location";
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
+import { Spacing } from "@/constants/theme";
 import { OnboardingStackParamList } from "@/navigation/OnboardingNavigator";
 
 type NavigationProp = NativeStackNavigationProp<OnboardingStackParamList, "Location">;
+
+// Strict tuple for TypeScript
+const ZENDO_PURPLE = ['#4f46e5', '#7c3aed'] as const;
 
 export default function LocationScreen() {
   const insets = useSafeAreaInsets();
@@ -43,56 +45,50 @@ export default function LocationScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* Decorative Background Elements */}
-      <View style={styles.bgDecoration}>
-        <View style={[styles.mapCircle, { top: '10%', left: -50, backgroundColor: '#4f46e508' }]} />
-        <View style={[styles.mapCircle, { bottom: '20%', right: -80, backgroundColor: '#7c3aed08', width: 400, height: 400 }]} />
-      </View>
-
-      <View style={[styles.content, { paddingTop: insets.top + 40 }]}>
-        {/* Zendo Squircle Icon */}
-        <View style={styles.iconWrapper}>
-          <LinearGradient
-            colors={['#f5f3ff', '#ede9fe']}
-            style={styles.squircleContainer}
-          >
-            <Feather name="map-pin" size={50} color="#4f46e5" />
-          </LinearGradient>
-          <View style={styles.pulseRing} />
+      {/* CENTERED CONTENT TO MATCH WELCOME SCREEN */}
+      <View style={styles.centerWrapper}>
+        
+        <View style={styles.logoWrapper}>
+          <View style={styles.logoOuterBorder}>
+             <Image 
+                source={require("../../../assets/images/icon.jpeg")} 
+                style={styles.logoImage} 
+                resizeMode="cover" 
+              />
+          </View>
         </View>
         
-        <ThemedText style={styles.title}>
-          Find Stores Near You
-        </ThemedText>
-        
-        <ThemedText style={styles.description}>
-          Zendo needs your location to show available stores and provide accurate 15-minute delivery estimates.
-        </ThemedText>
+        <View style={styles.textContainer}>
+            <ThemedText style={styles.tagline}>
+                Enable Location
+            </ThemedText>
+            
+            <ThemedText style={[styles.description, { color: theme.textSecondary }]}>
+                We need your location to show you nearby stores{"\n"}and ensure delivery by Aman Mart in minutes.
+            </ThemedText>
+        </View>
       </View>
       
-      {/* Bottom Action Area */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 40 }]}>
-        <View style={styles.infoCard}>
-          <Feather name="shield" size={16} color="#10b981" />
-          <ThemedText style={styles.infoText}>Your data is secure and never shared.</ThemedText>
-        </View>
-
-        <LinearGradient
-            colors={['#4f46e5', '#7c3aed']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.btnGradient}
-        >
-            <Pressable 
-                onPress={handleAllowLocation}
+      {/* FOOTER WITH GRADIENT BUTTON */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.xl }]}>
+        <Pressable onPress={handleAllowLocation}>
+            <LinearGradient
+                colors={ZENDO_PURPLE}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
                 style={styles.mainBtn}
             >
                 <ThemedText style={styles.btnText}>Allow Location Access</ThemedText>
-            </Pressable>
-        </LinearGradient>
+            </LinearGradient>
+        </Pressable>
 
-        <Pressable onPress={() => navigation.navigate("PhoneSignup")} style={styles.skipBtn}>
-           <ThemedText style={styles.skipText}>Not now, I'll enter it manually</ThemedText>
+        <Pressable
+          onPress={() => navigation.navigate("PhoneSignup")}
+          style={styles.skipLink}
+        >
+          <ThemedText style={{ color: theme.textSecondary, fontWeight: '600' }}>
+             Not now, I'll enter it later
+          </ThemedText>
         </Pressable>
       </View>
     </ThemedView>
@@ -102,111 +98,77 @@ export default function LocationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f8fafc',
   },
-  bgDecoration: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 0,
-  },
-  mapCircle: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-  },
-  content: {
+  centerWrapper: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-    zIndex: 1,
-  },
-  iconWrapper: {
-    marginBottom: 40,
+    justifyContent: 'center', 
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingTop: 40,
   },
-  squircleContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 2,
-    shadowColor: "#4f46e5",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
+  logoWrapper: {
+    marginBottom: 60, // Consistent with Welcome Screen spacing
   },
-  pulseRing: {
-    position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 50,
-    borderWidth: 2,
-    borderColor: '#f5f3ff',
+  logoOuterBorder: {
+    width: 180,               
+    height: 180,
+    borderRadius: 60,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.15,
+    shadowRadius: 30,
+    elevation: 15,
+    borderWidth: 6,
+    borderColor: '#fff',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: '#1e293b',
-    textAlign: "center",
-    marginBottom: 16,
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  textContainer: {
+    alignItems: 'center',
+  },
+  tagline: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#4f46e5',
+    marginBottom: 15,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    textAlign: 'center',
   },
   description: {
-    fontSize: 16,
     textAlign: "center",
-    color: '#64748b',
+    fontSize: 15,
     lineHeight: 24,
-    fontWeight: '600',
-    paddingHorizontal: 10,
+    paddingHorizontal: 20,
+    fontWeight: '500',
   },
   footer: {
-    paddingHorizontal: 32,
-    zIndex: 1,
+    paddingHorizontal: Spacing.xl,
+    width: '100%',
   },
-  infoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  mainBtn: { 
+    height: 65, 
+    borderRadius: 22, 
+    alignItems: 'center', 
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#ecfdf5',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 24,
-  },
-  infoText: {
-    fontSize: 13,
-    color: '#065f46',
-    fontWeight: '700',
-  },
-  btnGradient: {
-    borderRadius: 20,
     shadowColor: '#4f46e5',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  mainBtn: {
-    paddingVertical: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+  btnText: { 
+    color: '#fff', 
+    fontSize: 18, 
+    fontWeight: '800' 
   },
-  btnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
+  skipLink: {
+    alignItems: "center",
+    marginTop: 25,
   },
-  skipBtn: {
-    marginTop: 20,
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  skipText: {
-    color: '#94a3b8',
-    fontSize: 14,
-    fontWeight: '700',
-  }
 });

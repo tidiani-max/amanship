@@ -1,101 +1,95 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { View, StyleSheet, Image, Pressable, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { LinearGradient } from "expo-linear-gradient";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withTiming,
   withSequence,
-  interpolate,
 } from "react-native-reanimated";
-import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
+import { Spacing } from "@/constants/theme";
 import { OnboardingStackParamList } from "@/navigation/OnboardingNavigator";
 
 type NavigationProp = NativeStackNavigationProp<OnboardingStackParamList, "Welcome">;
-const { width } = Dimensions.get("window");
+
+const ZENDO_PURPLE = ['#4f46e5', '#7c3aed'] as const;
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
   const { theme } = useTheme();
-  
-  const pulse = useSharedValue(1);
+  const scale = useSharedValue(1);
 
-  React.useEffect(() => {
-    pulse.value = withRepeat(
+  useEffect(() => {
+    scale.value = withRepeat(
       withSequence(
-        withTiming(1.05, { duration: 1200 }),
-        withTiming(1, { duration: 1200 })
+        withTiming(1.05, { duration: 1500 }),
+        withTiming(1, { duration: 1500 })
       ),
       -1,
       true
     );
   }, []);
 
-  const animatedIconStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pulse.value }],
-    opacity: interpolate(pulse.value, [1, 1.05], [0.9, 1]),
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
   }));
 
   return (
     <ThemedView style={styles.container}>
-      {/* Background Decorative Gradients */}
-      <View style={styles.bgDecoration}>
-        <View style={[styles.circle, { backgroundColor: '#4f46e5', opacity: 0.05, top: -50, right: -50 }]} />
-        <View style={[styles.circle, { backgroundColor: '#7c3aed', opacity: 0.05, bottom: 100, left: -100 }]} />
-      </View>
-
-      <View style={[styles.content, { paddingTop: insets.top + 60 }]}>
-        <Animated.View style={[styles.iconContainer, animatedIconStyle]}>
-          <LinearGradient
-            colors={['#4f46e5', '#7c3aed']}
-            style={styles.squircleIcon}
-          >
-            <Feather name="zap" size={60} color="#FFFFFF" />
-          </LinearGradient>
-          {/* Shadow Glow */}
-          <View style={styles.glow} />
+      {/* CONTENT AREA */}
+      <View style={styles.centerWrapper}>
+        
+        {/* LOGO POSITIONED LOWER */}
+        <Animated.View style={[styles.logoWrapper, animatedStyle]}>
+          <View style={styles.logoOuterBorder}>
+             <Image 
+                source={require("../../../assets/images/icon.jpeg")} 
+                style={styles.logoImage} 
+                resizeMode="cover" 
+              />
+          </View>
         </Animated.View>
         
-        <View style={styles.textGroup}>
-          <ThemedText style={styles.brandTitle}>Zendo</ThemedText>
-          <ThemedText style={styles.tagline}>
-            Fresh groceries delivered to your door in <ThemedText style={styles.highlight}>15 minutes</ThemedText>
-          </ThemedText>
+        {/* TEXT CONTAINER WITH MORE TOP SPACING */}
+        <View style={styles.textContainer}>
+            <ThemedText style={styles.tagline}>
+                send order online by Aman Mart
+            </ThemedText>
+            
+            <ThemedText style={[styles.description, { color: theme.textSecondary }]}>
+                Fresh groceries and essentials delivered{"\n"}to your doorstep in minutes.
+            </ThemedText>
         </View>
       </View>
       
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 40 }]}>
-        <LinearGradient
-            colors={['#4f46e5', '#7c3aed']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.btnGradient}
-        >
-            <Pressable 
-                onPress={() => navigation.navigate("Location")}
+      {/* FOOTER */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.xl }]}>
+        <Pressable onPress={() => navigation.navigate("Location")}>
+            <LinearGradient
+                colors={ZENDO_PURPLE}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
                 style={styles.mainBtn}
             >
                 <ThemedText style={styles.btnText}>Get Started</ThemedText>
-                <Feather name="arrow-right" size={20} color="#fff" />
-            </Pressable>
-        </LinearGradient>
+            </LinearGradient>
+        </Pressable>
 
         <Pressable
           onPress={() => navigation.navigate("PhoneSignup")}
-          style={styles.loginLink}
+          style={styles.skipLink}
         >
-          <ThemedText style={styles.loginText}>
-            Already have an account? <ThemedText style={styles.loginHighlight}>Sign In</ThemedText>
+          <ThemedText style={{ color: theme.textSecondary, fontWeight: '600' }}>
+             Already have an account? <ThemedText style={{ color: '#4f46e5', fontWeight: 'bold' }}>Login</ThemedText>
           </ThemedText>
         </Pressable>
       </View>
@@ -106,107 +100,79 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f8fafc',
   },
-  bgDecoration: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
-  circle: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-  },
-  content: {
+  centerWrapper: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  iconContainer: {
-    marginBottom: 40,
-    position: 'relative',
-  },
-  squircleIcon: {
-    width: 130,
-    height: 130,
-    borderRadius: 45, // Modern Zendo Squircle
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 2,
-  },
-  glow: {
-    position: 'absolute',
-    width: 100,
-    height: 100,
-    backgroundColor: '#4f46e5',
-    borderRadius: 50,
-    bottom: 0,
-    alignSelf: 'center',
-    opacity: 0.3,
-    filter: 'blur(20px)', // Note: standard RN uses shadowProp, for web/expo-blur use blur
-    shadowColor: "#4f46e5",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-  },
-  textGroup: {
+    justifyContent: 'center', 
     alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+    // Moving the whole group slightly down to avoid looking "top-heavy"
+    paddingTop: 40, 
   },
-  brandTitle: {
-    fontSize: 42,
-    fontWeight: "900",
-    color: '#1e293b',
-    letterSpacing: -1,
+  logoWrapper: {
+    // Large bottom margin to create breathing room between logo and text
+    marginBottom: 60, 
+  },
+  logoOuterBorder: {
+    width: 180,               
+    height: 180,
+    borderRadius: 60,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.15,
+    shadowRadius: 30,
+    elevation: 15,
+    borderWidth: 6,
+    borderColor: '#fff',
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  textContainer: {
+    alignItems: 'center',
   },
   tagline: {
-    fontSize: 18,
-    textAlign: "center",
-    color: '#64748b',
-    marginTop: 12,
-    lineHeight: 26,
-    fontWeight: '600',
-    paddingHorizontal: 20,
-  },
-  highlight: {
-    color: '#4f46e5',
+    fontSize: 14,
     fontWeight: '800',
+    color: '#4f46e5',
+    marginBottom: 15,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5, // Increased letter spacing for a modern look
+    textAlign: 'center',
+  },
+  description: {
+    textAlign: "center",
+    fontSize: 16,
+    lineHeight: 24,
+    paddingHorizontal: 30,
+    fontWeight: '500',
   },
   footer: {
-    paddingHorizontal: 32,
+    paddingHorizontal: Spacing.xl,
+    width: '100%',
   },
-  btnGradient: {
-    borderRadius: 22,
-    elevation: 8,
-    shadowColor: '#4f46e5',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
-  },
-  mainBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  mainBtn: { 
+    height: 65, 
+    borderRadius: 22, 
+    alignItems: 'center', 
     justifyContent: 'center',
-    paddingVertical: 20,
-    gap: 10,
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  btnText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '900',
+  btnText: { 
+    color: '#fff', 
+    fontSize: 18, 
+    fontWeight: '800' 
   },
-  loginLink: {
+  skipLink: {
     alignItems: "center",
-    marginTop: 24,
-  },
-  loginText: {
-    color: '#94a3b8',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  loginHighlight: {
-    color: '#1e293b',
-    fontWeight: '800',
+    marginTop: 25,
   },
 });
