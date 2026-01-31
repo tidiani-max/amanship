@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, TextInput, Pressable, Platform, Modal, useColorScheme, ActivityIndicator } from "react-native";
+import { View, StyleSheet, TextInput, Pressable, Platform, Modal, useColorScheme } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import Animated, { FadeIn, FadeOut, ZoomIn, ZoomOut } from "react-native-reanimated";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 
 import { ThemedText } from "@/components/ThemedText";
-import { ThemedView } from "@/components/ThemedView";
+import { Button } from "@/components/Button";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
@@ -18,29 +16,40 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 
 WebBrowser.maybeCompleteAuthSession();
 
-const ZENDO_PURPLE = ['#4f46e5', '#7c3aed'] as const;
+// Brand Colors
+const ZENDO_PURPLE = '#7c3aed';
+const ZENDO_LIGHT_PURPLE = '#f5f3ff';
 
 // ========================================
-// BEAUTIFUL ALERT MODAL COMPONENT
+// ALERT MODAL COMPONENT
 // ========================================
-function AlertModal({ visible, title, message, onClose, theme }: any) {
+function AlertModal({ visible, title, message, onClose, theme }: {
+  visible: boolean;
+  title: string;
+  message: string;
+  onClose: () => void;
+  theme: any;
+}) {
   if (!visible) return null;
+
   return (
-    <Modal transparent visible={visible} animationType="none">
-      <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.modalOverlay}>
-        <Animated.View entering={ZoomIn} exiting={ZoomOut} style={[styles.alertBox, { backgroundColor: theme.backgroundDefault }]}>
-          <View style={styles.alertIconBg}>
-            <Feather name="alert-circle" size={32} color="#ef4444" />
+    <Modal transparent visible={visible} animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={[styles.alertBox, { backgroundColor: theme.backgroundDefault }]}>
+          <View style={styles.alertHeader}>
+            <ThemedText type="h3">{title}</ThemedText>
+            <Pressable onPress={onClose} style={styles.closeButton}>
+              <Feather name="x" size={24} color={theme.text} />
+            </Pressable>
           </View>
-          <ThemedText style={styles.alertTitle}>{title}</ThemedText>
-          <ThemedText style={styles.alertMessage}>{message}</ThemedText>
-          <Pressable onPress={onClose} style={{ width: '100%' }}>
-            <LinearGradient colors={ZENDO_PURPLE} style={styles.alertBtn}>
-              <ThemedText style={styles.alertBtnText}>Got it</ThemedText>
-            </LinearGradient>
-          </Pressable>
-        </Animated.View>
-      </Animated.View>
+          <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
+            {message}
+          </ThemedText>
+          <Button onPress={onClose} style={{ marginTop: Spacing.lg, backgroundColor: ZENDO_PURPLE }}>
+            Got it
+          </Button>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -48,7 +57,14 @@ function AlertModal({ visible, title, message, onClose, theme }: any) {
 // ========================================
 // GOOGLE SIGN IN BUTTON
 // ========================================
-function GoogleSignInButton({ onSuccess, onError, onLoadingChange, theme }: any) {
+interface GoogleSignInButtonProps {
+  onSuccess: () => void;
+  onError: (error: string) => void;
+  onLoadingChange: (loading: boolean) => void;
+  theme: any;
+}
+
+function GoogleSignInButton({ onSuccess, onError, onLoadingChange, theme }: GoogleSignInButtonProps) {
   const { loginWithGoogle } = useAuth();
   const [request, response, promptAsync] = Google.useAuthRequest({
     clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
@@ -84,7 +100,7 @@ function GoogleSignInButton({ onSuccess, onError, onLoadingChange, theme }: any)
       onPress={() => request && promptAsync()}
     >
       <Feather name="mail" size={20} color={theme.text} />
-      <ThemedText style={styles.socialButtonText}>Google</ThemedText>
+      <ThemedText type="body" style={styles.socialButtonText}>Google</ThemedText>
     </Pressable>
   );
 }
@@ -99,8 +115,11 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
   const colorScheme = useColorScheme();
   const { sendOtp, verifyOtp, loginWithApple, login, resetFirstLoginPassword, checkPhone } = useAuth();
 
-  const [mode, setMode] = useState<"login" | "signup" | "forgot">("signup");
-  const [step, setStep] = useState<"phone" | "password" | "otp" | "resetPassword">("phone");
+  type AuthMode = "login" | "signup" | "forgot";
+  type Step = "phone" | "password" | "otp" | "resetPassword";
+
+  const [mode, setMode] = useState<AuthMode>("signup");
+  const [step, setStep] = useState<Step>("phone");
 
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
@@ -125,211 +144,284 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
   };
 
   const handlePhoneSubmit = async () => {
-    if (phone.length < 9) { showAlert("Invalid Phone", "Please enter a valid phone number"); return; }
+    if (phone.length < 9) {
+      showAlert("Invalid Phone", "Please enter a valid phone number");
+      return;
+    }
     setIsLoading(true);
-
     if (mode === "login") {
       const result = await checkPhone(fullPhone);
       setIsLoading(false);
-      if (!result.exists) { showAlert("Account Not Found", result.message || "No account found."); return; }
-      if (result.requiresPasswordReset) { setStep("resetPassword"); return; }
+      if (!result.exists) {
+        showAlert("Account Not Found", result.message || "No account found with this number. Please sign up.");
+        return;
+      }
+      if (result.requiresPasswordReset) {
+        setStep("resetPassword");
+        return;
+      }
       setStep("password");
     } 
     else if (mode === "forgot") {
       const result = await sendOtp(fullPhone, "forgot");
       setIsLoading(false);
-      if (result.success) { setSentCode(result.code); setStep("otp"); }
-      else showAlert("Error", result.error || "Unable to send OTP");
+      if (result.success) {
+        setSentCode(result.code);
+        setStep("otp");
+      } else {
+        showAlert("Error", result.error || "Unable to send OTP");
+      }
     }
     else {
       const result = await sendOtp(fullPhone, mode);
       setIsLoading(false);
-      if (result.success) { setSentCode(result.code); setStep("otp"); }
-      else showAlert("Account Exists", result.error || "This phone is already registered");
+      if (result.success) {
+        setSentCode(result.code);
+        setStep("otp");
+      } else {
+        showAlert("Account Exists", result.error || "This phone is already registered");
+      }
     }
   };
 
   const handlePasswordSubmit = async () => {
-    if (password.length < 4) { showAlert("Invalid Password", "At least 4 characters"); return; }
+    if (password.length < 4) {
+      showAlert("Invalid Password", "Password must be at least 4 characters");
+      return;
+    }
     setIsLoading(true);
     const result = await login(fullPhone, password);
     setIsLoading(false);
-    if (result.success) onComplete();
-    else showAlert("Login Failed", result.error || "Invalid credentials");
+    if (result.success) {
+      onComplete();
+    } else {
+      showAlert("Login Failed", result.error || "Invalid credentials");
+    }
   };
 
-const handleVerifyOTP = async () => {
-  if (otpCode.length !== 6) { 
-    showAlert("Invalid OTP", "Enter 6 digits"); 
-    return; 
-  }
-  
-  setIsLoading(true);
-  const result = await verifyOtp(fullPhone, otpCode, { 
-      name, email, password, 
-      mode: mode === "forgot" ? "forgot" : "signup" 
-  });
-  setIsLoading(false);
-
-  if (result.success) {
-    if (mode === "forgot") {
-      setStep("phone"); // Moved from logic chain to separate lines
-      setMode("login");
-    } else {
-      onComplete();
+  const handleVerifyOTP = async () => {
+    if (otpCode.length !== 6) {
+      showAlert("Invalid OTP", "Please enter the 6-digit code");
+      return;
     }
-  } else {
-    showAlert("Verification Failed", result.error || "Invalid OTP");
-  }
-};
+    if (mode === "forgot") {
+      if (!password || password.length < 4) {
+        showAlert("Invalid Password", "Please enter a password (min 4 characters)");
+        return;
+      }
+      setIsLoading(true);
+      const result = await verifyOtp(fullPhone, otpCode, { password, mode: "forgot" });
+      setIsLoading(false);
+      if (result.success) {
+        showAlert("Success", "Password reset successfully! Please login.");
+        setMode("login");
+        setStep("phone");
+        setPassword("");
+        setOtpCode("");
+      } else {
+        showAlert("Verification Failed", result.error || "Invalid OTP");
+      }
+      return;
+    }
+    if (!name || !email || !password) {
+      showAlert("Missing Information", "Please fill in all fields");
+      return;
+    }
+    setIsLoading(true);
+    const result = await verifyOtp(fullPhone, otpCode, { name, email, password, mode: "signup" });
+    setIsLoading(false);
+    if (result.success) {
+      onComplete();
+    } else {
+      showAlert("Verification Failed", result.error || "Invalid OTP");
+    }
+  };
 
-const handleResetPassword = async () => {
-  if (newPassword.length < 4 || newPassword !== confirmPassword) {
-    showAlert("Error", "Passwords must match and be at least 4 characters");
-    return;
-  }
-  
-  setIsLoading(true); // Call separately
-  const result = await resetFirstLoginPassword(fullPhone, newPassword);
-  
-  if (result.success) { 
-    showAlert("Success", "Password updated!"); 
-    setStep("phone"); // Call separately
-    setMode("login"); 
-  } else {
-    showAlert("Error", result.error || "Failed");
-  }
-  setIsLoading(false);
-};
+  const handleResetPassword = async () => {
+    if (newPassword.length < 4) {
+      showAlert("Invalid Password", "Password must be at least 4 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showAlert("Password Mismatch", "Passwords do not match");
+      return;
+    }
+    setIsLoading(true);
+    const result = await resetFirstLoginPassword(fullPhone, newPassword);
+    setIsLoading(false);
+    if (result.success) {
+      showAlert("Success", "Password updated successfully!");
+      setMode("login");
+      setStep("phone");
+    } else {
+      showAlert("Error", result.error || "Failed to update password");
+    }
+  };
 
   const handleAppleSignIn = async () => {
     try {
       const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME, 
+          AppleAuthentication.AppleAuthenticationScope.EMAIL
+        ],
       });
       setIsLoading(true);
       const result = await loginWithApple(credential.user, credential.email || undefined);
       setIsLoading(false);
       if (result.success) onComplete();
-    } catch (e) {}
+      else showAlert("Error", result.error || "Apple Sign-In failed");
+    } catch (e: any) {
+      if (e.code !== "ERR_REQUEST_CANCELED") showAlert("Error", "Apple Sign-In failed");
+    }
   };
 
-  return (
-    <ThemedView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+  if (step === "resetPassword") {
+    return (
       <KeyboardAwareScrollViewCompat
-        contentContainerStyle={[styles.container, { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl }]}
+        style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
+        contentContainerStyle={[styles.container, { paddingTop: headerHeight + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl }]}
       >
         <View style={styles.centerWrapper}>
           <View style={styles.content}>
-            
-            {step === "phone" && (
-              <View style={styles.tabContainer}>
-                <Pressable onPress={() => setMode("signup")} style={[styles.tab, mode === "signup" && styles.activeTab]}>
-                  <ThemedText style={[styles.tabText, mode === "signup" && { color: '#4f46e5' }]}>Signup</ThemedText>
-                </Pressable>
-                <Pressable onPress={() => setMode("login")} style={[styles.tab, mode === "login" && styles.activeTab]}>
-                  <ThemedText style={[styles.tabText, mode === "login" && { color: '#4f46e5' }]}>Login</ThemedText>
-                </Pressable>
-              </View>
-            )}
-
-            <ThemedText style={styles.title}>
-                {step === "phone" && (mode === "signup" ? "Create Account" : mode === "forgot" ? "Reset Password" : "Welcome Back")}
-                {step === "password" && "Enter Password"}
-                {step === "otp" && "Verify Code"}
-                {step === "resetPassword" && "Set Password"}
-            </ThemedText>
-
-            <View style={styles.inputContainer}>
-              {/* SIGNUP FIELDS */}
-              {step === "phone" && mode === "signup" && (
-                <>
-                  <TextInput placeholder="Full Name" value={name} onChangeText={setName} style={styles.input} placeholderTextColor="#94a3b8" />
-                  <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={[styles.input, { marginTop: 12 }]} keyboardType="email-address" placeholderTextColor="#94a3b8" />
-                  <TextInput placeholder="Password" value={password} onChangeText={setPassword} style={[styles.input, { marginTop: 12 }]} secureTextEntry placeholderTextColor="#94a3b8" />
-                </>
-              )}
-
-              {/* PHONE INPUT */}
-              {step === "phone" && (
-                <View style={styles.phoneWrapper}>
-                  <View style={styles.countryCode}><ThemedText style={{ fontWeight: 'bold' }}>+62</ThemedText></View>
-                  <TextInput placeholder="Phone number" value={phone} onChangeText={setPhone} style={styles.phoneInput} keyboardType="phone-pad" placeholderTextColor="#94a3b8" />
-                </View>
-              )}
-
-              {/* PASSWORD/RESET FIELDS */}
-              {step === "password" && (
-                <TextInput placeholder="Password" value={password} onChangeText={setPassword} style={styles.input} secureTextEntry placeholderTextColor="#94a3b8" />
-              )}
-              {step === "resetPassword" && (
-                <>
-                    <TextInput placeholder="New Password" value={newPassword} onChangeText={setNewPassword} style={styles.input} secureTextEntry placeholderTextColor="#94a3b8" />
-                    <TextInput placeholder="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} style={[styles.input, { marginTop: 12 }]} secureTextEntry placeholderTextColor="#94a3b8" />
-                </>
-              )}
-
-              {/* OTP FIELD */}
-              {step === "otp" && (
-                <TextInput placeholder="000000" value={otpCode} onChangeText={setOtpCode} style={styles.otpInput} maxLength={6} keyboardType="number-pad" />
-              )}
-
-              <Pressable 
-                onPress={step === "phone" ? handlePhoneSubmit : step === "password" ? handlePasswordSubmit : step === "resetPassword" ? handleResetPassword : handleVerifyOTP} 
-                disabled={isLoading} 
-                style={{ marginTop: 20 }}
-              >
-                <LinearGradient colors={ZENDO_PURPLE} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.mainBtn}>
-                  {isLoading ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.btnText}>Continue</ThemedText>}
-                </LinearGradient>
-              </Pressable>
+            <View style={{ marginBottom: Spacing.lg, padding: Spacing.lg, backgroundColor: ZENDO_LIGHT_PURPLE, borderRadius: BorderRadius.sm }}>
+              <Feather name="lock" size={32} color={ZENDO_PURPLE} style={{ alignSelf: 'center', marginBottom: Spacing.md }} />
+              <ThemedText type="h2" style={{ textAlign: 'center', marginBottom: Spacing.sm }}>Set Your Password</ThemedText>
             </View>
-
-            {step === "phone" && (
-                <>
-                    <View style={styles.dividerContainer}><View style={styles.line} /><ThemedText style={styles.dividerText}>Or continue with</ThemedText><View style={styles.line} /></View>
-                    <View style={styles.socialButtons}>
-                        <GoogleSignInButton onSuccess={onComplete} onError={(err: any) => showAlert("Error", err)} onLoadingChange={setIsLoading} theme={theme} />
-                    </View>
-                </>
-            )}
+            <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]} placeholder="New Password" placeholderTextColor={theme.textSecondary} secureTextEntry value={newPassword} onChangeText={setNewPassword} />
+            <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.sm }]} placeholder="Confirm Password" placeholderTextColor={theme.textSecondary} secureTextEntry value={confirmPassword} onChangeText={setConfirmPassword} />
+            <Button onPress={handleResetPassword} disabled={isLoading || !newPassword || !confirmPassword} style={{ marginTop: Spacing.lg, backgroundColor: ZENDO_PURPLE }}>
+              {isLoading ? "Updating..." : "Set Password"}
+            </Button>
           </View>
         </View>
-
         <AlertModal visible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} theme={theme} />
       </KeyboardAwareScrollViewCompat>
-    </ThemedView>
+    );
+  }
+
+  return (
+    <KeyboardAwareScrollViewCompat
+      style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
+      contentContainerStyle={[styles.container, { paddingTop: headerHeight + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl }]}
+    >
+      <View style={styles.centerWrapper}>
+        <View style={styles.content}>
+          {step === "phone" && (
+            <View style={styles.tabContainer}>
+              <Pressable onPress={() => { setMode("signup"); setStep("phone"); }} style={[styles.tab, mode === "signup" && { borderBottomColor: ZENDO_PURPLE }]}>
+                <ThemedText style={{ color: mode === "signup" ? ZENDO_PURPLE : theme.textSecondary, fontWeight: '600' }}>Signup</ThemedText>
+              </Pressable>
+              <Pressable onPress={() => { setMode("login"); setStep("phone"); }} style={[styles.tab, mode === "login" && { borderBottomColor: ZENDO_PURPLE }]}>
+                <ThemedText style={{ color: mode === "login" ? ZENDO_PURPLE : theme.textSecondary, fontWeight: '600' }}>Login</ThemedText>
+              </Pressable>
+            </View>
+          )}
+
+          <ThemedText type="h2" style={styles.title}>
+            {step === "phone" && (mode === "signup" ? "Create Account" : mode === "forgot" ? "Reset Password" : "Welcome Back")}
+            {step === "password" && "Enter Password"}
+            {step === "otp" && (mode === "forgot" ? "Verify & Set Password" : "Verify Code")}
+          </ThemedText>
+
+          {sentCode && step === "otp" && (
+            <View style={[styles.codeHint, { backgroundColor: ZENDO_LIGHT_PURPLE }]}>
+              <ThemedText type="caption" style={{ color: ZENDO_PURPLE, fontWeight: '700' }}>Demo OTP: {sentCode}</ThemedText>
+            </View>
+          )}
+
+          {step === "phone" && (
+            <>
+              {mode === "signup" && (
+                <>
+                  <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]} placeholder="Full Name" placeholderTextColor={theme.textSecondary} value={name} onChangeText={setName} />
+                  <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.sm }]} placeholder="Email" placeholderTextColor={theme.textSecondary} value={email} onChangeText={setEmail} keyboardType="email-address" />
+                  <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.sm }]} placeholder="Password" placeholderTextColor={theme.textSecondary} secureTextEntry value={password} onChangeText={setPassword} />
+                </>
+              )}
+              <View style={[styles.phoneInputContainer, { marginTop: Spacing.sm }]}>
+                <View style={[styles.countryCode, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+                  <ThemedText type="body">+62</ThemedText>
+                </View>
+                <TextInput style={[styles.phoneInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]} placeholder="Phone number" placeholderTextColor={theme.textSecondary} keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+              </View>
+              {mode === "login" && (
+                <Pressable onPress={() => setMode("forgot")} style={{ alignSelf: 'flex-end', marginTop: Spacing.sm }}>
+                  <ThemedText type="caption" style={{ color: ZENDO_PURPLE }}>Forgot Password?</ThemedText>
+                </Pressable>
+              )}
+              <Button onPress={handlePhoneSubmit} disabled={isLoading || phone.length < 9 || (mode === "signup" && (!name || !email || !password))} style={{ marginTop: Spacing.lg, backgroundColor: ZENDO_PURPLE }}>
+                {isLoading ? "Processing..." : "Continue"}
+              </Button>
+            </>
+          )}
+
+          {step === "password" && (
+            <>
+              <View style={[styles.phoneDisplay, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+                <ThemedText type="body">{fullPhone}</ThemedText>
+                <Pressable onPress={() => setStep("phone")}><Feather name="edit-2" size={16} color={ZENDO_PURPLE} /></Pressable>
+              </View>
+              <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.md }]} placeholder="Password" placeholderTextColor={theme.textSecondary} secureTextEntry value={password} onChangeText={setPassword} autoFocus />
+              <Button onPress={handlePasswordSubmit} disabled={isLoading || password.length < 4} style={{ marginTop: Spacing.lg, backgroundColor: ZENDO_PURPLE }}>
+                {isLoading ? "Logging in..." : "Login"}
+              </Button>
+            </>
+          )}
+
+          {step === "otp" && (
+            <>
+              <TextInput style={[styles.otpInput, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]} placeholder="000000" placeholderTextColor={theme.textSecondary} keyboardType="number-pad" value={otpCode} onChangeText={setOtpCode} maxLength={6} />
+              {mode === "forgot" && (
+                <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginBottom: Spacing.md }]} placeholder="New Password" placeholderTextColor={theme.textSecondary} secureTextEntry value={password} onChangeText={setPassword} />
+              )}
+              <Button onPress={handleVerifyOTP} disabled={otpCode.length !== 6 || isLoading || (mode === "forgot" && password.length < 4)} style={{ backgroundColor: ZENDO_PURPLE }}>
+                {isLoading ? "Verifying..." : mode === "forgot" ? "Reset Password" : "Confirm OTP"}
+              </Button>
+            </>
+          )}
+
+          {step === "phone" && (
+            <>
+              <View style={styles.dividerContainer}>
+                <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                <ThemedText type="caption" style={[styles.dividerText, { color: theme.textSecondary }]}>Or continue with</ThemedText>
+                <View style={[styles.divider, { backgroundColor: theme.border }]} />
+              </View>
+              <View style={styles.socialButtons}>
+                <GoogleSignInButton onSuccess={onComplete} onError={(err) => showAlert("Error", err)} onLoadingChange={setIsLoading} theme={theme} />
+              </View>
+            </>
+          )}
+        </View>
+      </View>
+      <AlertModal visible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} theme={theme} />
+    </KeyboardAwareScrollViewCompat>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, paddingHorizontal: 25, justifyContent: 'center' },
-  centerWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { flexGrow: 1, paddingHorizontal: Spacing.lg, justifyContent: 'center' },
+  centerWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', width: '100%' },
   content: { width: '100%', maxWidth: 400 },
-  tabContainer: { flexDirection: 'row', marginBottom: 30, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  tab: { flex: 1, alignItems: 'center', paddingBottom: 12, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  activeTab: { borderBottomColor: '#4f46e5' },
-  tabText: { fontWeight: '700', color: '#94a3b8' },
-  title: { fontSize: 26, fontWeight: '900', color: '#1e293b', marginBottom: 25, textAlign: 'center' },
-  inputContainer: { width: '100%' },
-  input: { height: 60, backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 20, borderWidth: 1.5, borderColor: '#e2e8f0', fontSize: 16, color: '#1e293b' },
-  phoneWrapper: { flexDirection: 'row', marginTop: 12, gap: 10 },
-  countryCode: { height: 60, width: 70, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1.5, borderColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center' },
-  phoneInput: { flex: 1, height: 60, backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 20, borderWidth: 1.5, borderColor: '#e2e8f0', fontSize: 16, color: '#1e293b' },
-  otpInput: { height: 70, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1.5, borderColor: '#e2e8f0', fontSize: 28, textAlign: 'center', fontWeight: 'bold', letterSpacing: 8 },
-  mainBtn: { height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  btnText: { color: '#fff', fontSize: 18, fontWeight: '800' },
-  dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 30 },
-  line: { flex: 1, height: 1, backgroundColor: '#e2e8f0' },
-  dividerText: { paddingHorizontal: 15, color: '#94a3b8', fontSize: 12, fontWeight: 'bold' },
-  socialButtons: { flexDirection: 'row', gap: 12 },
-  socialButton: { flex: 1, height: 55, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1.5 },
-  socialButtonText: { fontWeight: '700', color: '#1e293b' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'center', alignItems: 'center', padding: 25 },
-  alertBox: { width: '100%', maxWidth: 320, borderRadius: 24, padding: 25, alignItems: 'center' },
-  alertIconBg: { width: 60, height: 60, borderRadius: 20, backgroundColor: '#fef2f2', justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
-  alertTitle: { fontSize: 20, fontWeight: '800', color: '#1e293b', marginBottom: 8 },
-  alertMessage: { textAlign: 'center', color: '#64748b', marginBottom: 20, lineHeight: 20 },
-  alertBtn: { height: 50, borderRadius: 12, width: '100%', justifyContent: 'center', alignItems: 'center' },
-  alertBtnText: { color: '#fff', fontWeight: 'bold' }
+  tabContainer: { flexDirection: 'row', marginBottom: Spacing.lg, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  tab: { flex: 1, alignItems: 'center', paddingBottom: Spacing.sm, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  title: { marginBottom: Spacing.lg, textAlign: 'center' },
+  codeHint: { padding: Spacing.md, borderRadius: BorderRadius.sm, marginBottom: Spacing.md, alignItems: 'center' },
+  input: { height: Spacing.inputHeight, paddingHorizontal: Spacing.lg, borderRadius: BorderRadius.sm, borderWidth: 1, fontSize: 16 },
+  phoneInputContainer: { flexDirection: "row", gap: Spacing.sm },
+  countryCode: { height: Spacing.inputHeight, paddingHorizontal: Spacing.lg, borderRadius: BorderRadius.sm, borderWidth: 1, justifyContent: "center" },
+  phoneInput: { flex: 1, height: Spacing.inputHeight, paddingHorizontal: Spacing.lg, borderRadius: BorderRadius.sm, borderWidth: 1, fontSize: 16 },
+  phoneDisplay: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: Spacing.inputHeight, paddingHorizontal: Spacing.lg, borderRadius: BorderRadius.sm, borderWidth: 1 },
+  otpInput: { height: Spacing.inputHeight, borderRadius: BorderRadius.sm, borderWidth: 1, fontSize: 24, textAlign: "center", letterSpacing: 8, marginBottom: Spacing.lg },
+  dividerContainer: { flexDirection: "row", alignItems: "center", marginVertical: Spacing.xl },
+  divider: { flex: 1, height: 1 },
+  dividerText: { paddingHorizontal: Spacing.lg },
+  socialButtons: { flexDirection: "row", gap: Spacing.md, height: Spacing.buttonHeight },
+  socialButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: BorderRadius.sm, gap: Spacing.sm },
+  socialButtonText: { fontWeight: "500" },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg },
+  alertBox: { width: '100%', maxWidth: 400, padding: Spacing.lg, borderRadius: BorderRadius.sm, elevation: 5 },
+  alertHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  closeButton: { padding: Spacing.xs },
 });
