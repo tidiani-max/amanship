@@ -1,7 +1,7 @@
-# KilatGo Design Guidelines (Compacted)
+# ZendO Design Guidelines (Compacted)
 
 ## Project Overview
-**KilatGo** is a 15-minute grocery delivery app for Indonesia. Design should be ultra-simple, clean, friendly, and fast—inspired by GoJek/Tokopedia with a lightning-fast aesthetic.
+**ZendO** is a 15-minute grocery delivery app for Indonesia. Design should be ultra-simple, clean, friendly, and fast—inspired by GoJek/Tokopedia with a lightning-fast aesthetic.
 
 ## Core Architecture
 

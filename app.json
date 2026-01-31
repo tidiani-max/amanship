@@ -1,59 +1,58 @@
 {
   "expo": {
-    "name": "KilatGo",
-    "slug": "kilatgo",
+    "name": "Zendo",
+    "slug": "zendo-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "kilatgo",
+    "icon": "./assets/images/icon.jpeg",
+    "scheme": "zendo",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "notification": {
-      "icon": "./assets/images/notification-icon.png",
-      "color": "#FFD700",
+      "icon": "./assets/images/notification-icon.jpeg",
+      "color": "#4F46E5",
       "iosDisplayInForeground": true,
       "androidMode": "default",
       "androidCollapsedTitle": "{{unread_count}} new notifications"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kilatgo.app",
+      "bundleIdentifier": "com.zendo.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "KilatGo needs access to your microphone for voice orders.",
-        "NSSpeechRecognitionUsageDescription": "KilatGo needs speech recognition for voice orders.",
-        "NSUserNotificationsUsageDescription": "We send order updates and delivery notifications.",
+        "NSMicrophoneUsageDescription": "Zendo needs access to your microphone for voice commands and support.",
+        "NSSpeechRecognitionUsageDescription": "Zendo uses speech recognition to help you find groceries faster.",
+        "NSUserNotificationsUsageDescription": "We'll send you real-time updates on your delivery status.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.kilatgo.app",
-      "predictiveBackGestureEnabled": false,
+      "package": "com.zendo.app",
+      "predictiveBackGestureEnabled": true,
       "permissions": [
         "RECORD_AUDIO",
         "NOTIFICATIONS",
         "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE",
-        "android.permission.RECORD_AUDIO"
+        "VIBRATE"
       ],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#FFD700"
+        "foregroundImage": "./assets/images/icon.jpeg",
+        "backgroundColor": "#4F46E5"
       }
     },
     "web": {
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.jpeg"
     },
     "plugins": [
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/images/splash-icon.jpeg",
+          "imageWidth": 180,
           "resizeMode": "contain",
-          "backgroundColor": "#FFD700",
+          "backgroundColor": "#4F46E5",
           "dark": {
-            "backgroundColor": "#1A1A1A"
+            "backgroundColor": "#0F172A"
           }
         }
       ],
@@ -62,8 +61,8 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/notification-icon.png",
-          "color": "#FFD700"
+          "icon": "./assets/images/notification-icon.jpeg",
+          "color": "#4F46E5"
         }
       ],
       [
@@ -71,7 +70,8 @@
         {
           "android": {
             "compileSdkVersion": 35,
-            "targetSdkVersion": 34
+            "targetSdkVersion": 34,
+            "enableProguardInReleaseBuilds": true
           }
         }
       ]

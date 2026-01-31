@@ -16,7 +16,7 @@ import { Spacing } from "@/constants/theme";
 import { useNotifications } from "../hooks/useNotification";
 
 
-const NOTIFICATIONS_KEY = "@kilatgo_notifications";
+const NOTIFICATIONS_KEY = "@ZendO_notifications";
 
 interface NotificationSettings {
   orderUpdates: boolean;

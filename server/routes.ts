@@ -1003,7 +1003,7 @@ app.get("/api/geocode/reverse", async (req, res) => {
 
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`,
-      { headers: { "User-Agent": "KilatGoApp" } }
+      { headers: { "User-Agent": "ZendOApp" } }
     );
     
     const data = await response.json();
@@ -1257,7 +1257,7 @@ app.get("/api/banners", async (req, res) => {
     const banners = [
       {
         id: "1",
-        image: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800",
+        image: "https://images.unsplash.com/photo-1671586088818-52bfbe125bae",
         title: "Fresh Groceries Delivered",
         subtitle: "Get 20% off your first order",
       },
@@ -2345,7 +2345,7 @@ app.post("/api/admin/stores", async (req, res) => {
       try {
         const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
         const geoResponse = await fetch(geocodeUrl, {
-          headers: { 'User-Agent': 'KilatGo-App' }
+          headers: { 'User-Agent': 'ZendO-App' }
         });
         const geoData = await geoResponse.json();
         
@@ -2399,7 +2399,7 @@ app.patch("/api/admin/stores/:id", async (req, res) => {
       try {
         const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
         const geoResponse = await fetch(geocodeUrl, {
-          headers: { 'User-Agent': 'KilatGo-App' }
+          headers: { 'User-Agent': 'ZendO-App' }
         });
         const geoData = await geoResponse.json();
         
@@ -2662,7 +2662,7 @@ app.post("/api/admin/geocode", async (req, res) => {
       
       const geoResponse = await fetch(geocodeUrl, {
         headers: { 
-          'User-Agent': 'KilatGo-App/1.0',
+          'User-Agent': 'ZendO-App/1.0',
           'Accept': 'application/json'
         }
       });
@@ -2761,7 +2761,7 @@ app.post("/api/seed", async (_req: Request, res: Response) => {
         
         await db.insert(stores).values({
           id: DEMO_STORE_ID_CHECK,
-          name: "KilatGo Central Jakarta",
+          name: "ZendO Central Jakarta",
           address: "Jl. Sudirman No. 1, Central Jakarta, DKI Jakarta 10220",
           latitude: "-6.2088000",
           longitude: "106.8456000",

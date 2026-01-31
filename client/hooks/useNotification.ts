@@ -146,7 +146,7 @@ export function useNotifications() {
       // Get role-specific welcome message
       const welcomeMessages: Record<string, { title: string; body: string; emoji: string }> = {
         customer: {
-          title: "Welcome to KilatGo! 🎉",
+          title: "Welcome to ZendO! 🎉",
           body: "You'll receive updates about your orders here",
           emoji: "🛒"
         },

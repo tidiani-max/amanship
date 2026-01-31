@@ -81,23 +81,24 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <OnboardingProvider>
-            <LanguageProvider>
-              <CartProvider>
-                <LocationProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <OnboardingProvider>
+          <LanguageProvider>
+            <CartProvider>
+              <LocationProvider>
+                <ErrorBoundary>
                   <AppContent />
-                </LocationProvider>
-              </CartProvider>
-            </LanguageProvider>
-          </OnboardingProvider>
-        </AuthProvider>
-      </QueryClientProvider>
-    </ErrorBoundary>
+                </ErrorBoundary>
+              </LocationProvider>
+            </CartProvider>
+          </LanguageProvider>
+        </OnboardingProvider>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
+
 
 const styles = StyleSheet.create({
   root: {

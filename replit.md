@@ -1,7 +1,7 @@
-# KilatGo - 15-Minute Grocery Delivery App
+# ZendO - 15-Minute Grocery Delivery App
 
 ## Overview
-KilatGo is a 15-minute grocery delivery app for the Indonesian market featuring voice ordering, real-time tracking, store management, and a clean Indonesian-friendly design inspired by GoJek and Tokopedia.
+ZendO is a 15-minute grocery delivery app for the Indonesian market featuring voice ordering, real-time tracking, store management, and a clean Indonesian-friendly design inspired by GoJek and Tokopedia.
 
 ## Current State: MVP with Full Backend Integration
 

@@ -1,6 +1,6 @@
-KilatGo — NEXT IMPLEMENTATION SPEC (COPY TO REPLIT)
+ZendO — NEXT IMPLEMENTATION SPEC (COPY TO REPLIT)
 📌 Goal
-Upgrade the current KilatGo MVP into a real operational quick-commerce system that enforces 15-minute delivery by controlling store availability, staff status, driver readiness, distance, and payment options (including COD).
+Upgrade the current ZendO MVP into a real operational quick-commerce system that enforces 15-minute delivery by controlling store availability, staff status, driver readiness, distance, and payment options (including COD).
 1️⃣ USER ROLES (CORE LOGIC)
 1. Customer (Buyer)
 Browses products
@@ -45,7 +45,7 @@ Finds nearest stores within 5 km
 Filters stores with picker + driver ONLINE
 If no store available:
 Show message:
-“No KilatGo store nearby can deliver in 15 minutes.”
+“No ZendO store nearby can deliver in 15 minutes.”
 If store available:
 Show products from nearest eligible store only
 Customer:

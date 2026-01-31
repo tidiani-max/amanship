@@ -18,7 +18,6 @@ import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-// 1. FIXED: Added hasItems to the interface
 interface CartToastProps {
   visible: boolean;
   hasItems: boolean; 
@@ -46,7 +45,6 @@ export function CartToast({ visible, hasItems, productName, onDismiss }: CartToa
     }
   }, [visible]);
 
-  // FIXED: Function was missing in the previous snippet
   const handleGoToCart = () => {
     navigation.navigate("Cart");
   };
@@ -81,10 +79,10 @@ export function CartToast({ visible, hasItems, productName, onDismiss }: CartToa
         style={styles.mainArea} 
         onPress={() => (expansion.value = expansion.value === 0 ? withSpring(1) : withSpring(0))}
       >
-        <View style={[styles.iconContainer, { backgroundColor: theme.primary }]}>
-          <Feather name="shopping-cart" size={20} color="#fff" />
-          {/* Badge dot shows when minimized */}
-          <View style={[styles.dot, { backgroundColor: theme.success }]} />
+        {/* VISUAL CHANGE: Purple gradient icon instead of green */}
+        <View style={styles.iconContainer}>
+          <Feather name="shopping-bag" size={20} color="#6366f1" />
+          <View style={styles.dot} />
         </View>
         
         <Animated.View style={[styles.textContainer, contentStyle]}>
@@ -96,8 +94,9 @@ export function CartToast({ visible, hasItems, productName, onDismiss }: CartToa
       </Pressable>
 
       <Animated.View style={contentStyle}>
-         <Pressable onPress={handleGoToCart} style={[styles.goBtn, { backgroundColor: theme.primary }]}>
-            <ThemedText style={{ color: '#fff', fontWeight: '600' }}>View</ThemedText>
+         {/* VISUAL CHANGE: Purple button instead of green */}
+         <Pressable onPress={handleGoToCart} style={styles.goBtn}>
+            <ThemedText style={styles.goBtnText}>View</ThemedText>
          </Pressable>
       </Animated.View>
     </Animated.View>
@@ -114,23 +113,28 @@ const styles = StyleSheet.create({
     padding: 10,
     zIndex: 1000,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   mainArea: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
+  // VISUAL CHANGE: Purple/white theme
   iconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#eef2ff',
   },
   textContainer: {
     marginLeft: 12,
     flex: 1,
   },
+  // VISUAL CHANGE: Purple dot instead of green
   dot: {
     position: 'absolute',
     top: 0,
@@ -138,13 +142,21 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
+    backgroundColor: '#6366f1',
     borderWidth: 2,
     borderColor: 'white'
   },
+  // VISUAL CHANGE: Purple button
   goBtn: {
+    backgroundColor: '#6366f1',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
     marginLeft: 10
+  },
+  goBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 13,
   }
 });

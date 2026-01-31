@@ -10,7 +10,7 @@ interface LanguageContextType {
 
 const LanguageContext = createContext<LanguageContextType | null>(null);
 
-const LANGUAGE_STORAGE_KEY = "@kilatgo_language";
+const LANGUAGE_STORAGE_KEY = "@ZendO_language";
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>("en");

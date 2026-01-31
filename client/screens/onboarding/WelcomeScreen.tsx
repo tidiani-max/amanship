@@ -1,15 +1,16 @@
 import React from "react";
-import { View, StyleSheet, Image, Pressable } from "react-native";
+import { View, StyleSheet, Image, Pressable, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { CommonActions } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withTiming,
   withSequence,
+  interpolate,
 } from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
 
@@ -17,66 +18,84 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing } from "@/constants/theme";
 import { OnboardingStackParamList } from "@/navigation/OnboardingNavigator";
 
 type NavigationProp = NativeStackNavigationProp<OnboardingStackParamList, "Welcome">;
+const { width } = Dimensions.get("window");
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
   const { theme } = useTheme();
-  const scale = useSharedValue(1);
+  
+  const pulse = useSharedValue(1);
 
   React.useEffect(() => {
-    scale.value = withRepeat(
+    pulse.value = withRepeat(
       withSequence(
-        withTiming(1.1, { duration: 800 }),
-        withTiming(1, { duration: 800 })
+        withTiming(1.05, { duration: 1200 }),
+        withTiming(1, { duration: 1200 })
       ),
       -1,
       true
     );
   }, []);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+  const animatedIconStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+    opacity: interpolate(pulse.value, [1, 1.05], [0.9, 1]),
   }));
 
   return (
-    <ThemedView style={[styles.container, { paddingTop: insets.top + Spacing.xl }]}>
-      <View style={styles.content}>
-        <Animated.View style={[styles.iconContainer, animatedStyle]}>
-          <View style={[styles.lightningCircle, { backgroundColor: theme.primary }]}>
-            <Feather name="zap" size={64} color={theme.buttonText} />
-          </View>
+    <ThemedView style={styles.container}>
+      {/* Background Decorative Gradients */}
+      <View style={styles.bgDecoration}>
+        <View style={[styles.circle, { backgroundColor: '#4f46e5', opacity: 0.05, top: -50, right: -50 }]} />
+        <View style={[styles.circle, { backgroundColor: '#7c3aed', opacity: 0.05, bottom: 100, left: -100 }]} />
+      </View>
+
+      <View style={[styles.content, { paddingTop: insets.top + 60 }]}>
+        <Animated.View style={[styles.iconContainer, animatedIconStyle]}>
+          <LinearGradient
+            colors={['#4f46e5', '#7c3aed']}
+            style={styles.squircleIcon}
+          >
+            <Feather name="zap" size={60} color="#FFFFFF" />
+          </LinearGradient>
+          {/* Shadow Glow */}
+          <View style={styles.glow} />
         </Animated.View>
         
-        <Image
-          source={require("../../../assets/images/icon.png")}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        
-        <ThemedText type="h1" style={styles.title}>
-          AmanShip
-        </ThemedText>
-        
-        <ThemedText type="body" style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Fresh groceries delivered to your door in 15 minutes
-        </ThemedText>
+        <View style={styles.textGroup}>
+          <ThemedText style={styles.brandTitle}>Zendo</ThemedText>
+          <ThemedText style={styles.tagline}>
+            Fresh groceries delivered to your door in <ThemedText style={styles.highlight}>15 minutes</ThemedText>
+          </ThemedText>
+        </View>
       </View>
       
-      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.xl }]}>
-        <Button onPress={() => navigation.navigate("Location")}>
-          Get Started
-        </Button>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 40 }]}>
+        <LinearGradient
+            colors={['#4f46e5', '#7c3aed']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.btnGradient}
+        >
+            <Pressable 
+                onPress={() => navigation.navigate("Location")}
+                style={styles.mainBtn}
+            >
+                <ThemedText style={styles.btnText}>Get Started</ThemedText>
+                <Feather name="arrow-right" size={20} color="#fff" />
+            </Pressable>
+        </LinearGradient>
+
         <Pressable
           onPress={() => navigation.navigate("PhoneSignup")}
-          style={styles.skipLink}
+          style={styles.loginLink}
         >
-          <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-           
+          <ThemedText style={styles.loginText}>
+            Already have an account? <ThemedText style={styles.loginHighlight}>Sign In</ThemedText>
           </ThemedText>
         </Pressable>
       </View>
@@ -87,42 +106,107 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  bgDecoration: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  circle: {
+    position: 'absolute',
+    width: 300,
+    height: 300,
+    borderRadius: 150,
   },
   content: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: 32,
   },
   iconContainer: {
-    marginBottom: Spacing.xxl,
+    marginBottom: 40,
+    position: 'relative',
   },
-  lightningCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+  squircleIcon: {
+    width: 130,
+    height: 130,
+    borderRadius: 45, // Modern Zendo Squircle
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 2,
   },
-  logo: {
-    width: 80,
-    height: 80,
-    marginBottom: Spacing.lg,
+  glow: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    backgroundColor: '#4f46e5',
+    borderRadius: 50,
+    bottom: 0,
+    alignSelf: 'center',
+    opacity: 0.3,
+    filter: 'blur(20px)', // Note: standard RN uses shadowProp, for web/expo-blur use blur
+    shadowColor: "#4f46e5",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
   },
-  title: {
+  textGroup: {
+    alignItems: 'center',
+  },
+  brandTitle: {
+    fontSize: 42,
+    fontWeight: "900",
+    color: '#1e293b',
+    letterSpacing: -1,
+  },
+  tagline: {
+    fontSize: 18,
     textAlign: "center",
-    marginBottom: Spacing.sm,
+    color: '#64748b',
+    marginTop: 12,
+    lineHeight: 26,
+    fontWeight: '600',
+    paddingHorizontal: 20,
   },
-  subtitle: {
-    textAlign: "center",
-    paddingHorizontal: Spacing.xl,
+  highlight: {
+    color: '#4f46e5',
+    fontWeight: '800',
   },
   footer: {
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: 32,
   },
-  skipLink: {
+  btnGradient: {
+    borderRadius: 22,
+    elevation: 8,
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+  },
+  mainBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 10,
+  },
+  btnText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  loginLink: {
     alignItems: "center",
-    paddingVertical: Spacing.md,
-    marginTop: Spacing.sm,
+    marginTop: 24,
+  },
+  loginText: {
+    color: '#94a3b8',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  loginHighlight: {
+    color: '#1e293b',
+    fontWeight: '800',
   },
 });

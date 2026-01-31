@@ -1,148 +1,131 @@
 import React from "react";
-import { View, StyleSheet, Pressable } from "react-native";
+import { View, StyleSheet, Platform, Pressable } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
-import { Platform } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
+import { LinearGradient } from "expo-linear-gradient"; // Ensure you have this installed
 
 import HomeStackNavigator from "@/navigation/HomeStackNavigator";
 import OrdersScreen from "@/screens/OrdersScreen";
 import AccountScreen from "@/screens/AccountScreen";
-import { useTheme } from "@/hooks/useTheme";
-import { Colors, Spacing, BorderRadius, Shadows } from "@/constants/theme";
-import { RootStackParamList } from "@/navigation/RootStackNavigator";
+import VouchersScreen from "@/screens/VouchersScreen";
 
-export type MainTabParamList = {
-  HomeTab: undefined;
-  OrdersTab: undefined;
-  AccountTab: undefined;
-};
-
-const Tab = createBottomTabNavigator<MainTabParamList>();
-
-function VoiceFAB() {
-  const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const handlePressIn = () => {
-    scale.value = withSpring(0.95);
-  };
-
-  const handlePressOut = () => {
-    scale.value = withSpring(1);
-  };
-
-  return (
-    <Animated.View
-      style={[
-        styles.fabContainer,
-        { bottom: 60 + insets.bottom + Spacing.lg },
-        animatedStyle,
-      ]}
-    >
-      <Pressable
-        onPress={() => navigation.navigate("VoiceOrderModal")}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        style={[styles.fab, { backgroundColor: theme.primary }, Shadows.fab]}
-      >
-        <Feather name="mic" size={28} color={theme.buttonText} />
-      </Pressable>
-    </Animated.View>
-  );
-}
+const Tab = createBottomTabNavigator();
 
 export default function MainTabNavigator() {
-  const { theme, isDark } = useTheme();
-
   return (
     <View style={{ flex: 1 }}>
       <Tab.Navigator
-        initialRouteName="HomeTab"
         screenOptions={{
-          tabBarActiveTintColor: theme.primary,
-          tabBarInactiveTintColor: theme.tabIconDefault,
+          headerShown: false,
+          tabBarActiveTintColor: '#3b82f6', // Bright blue for active
+          tabBarInactiveTintColor: '#64748b', // Muted slate
+          tabBarShowLabel: true,
           tabBarStyle: {
             position: "absolute",
-            backgroundColor: Platform.select({
-              ios: "transparent",
-              android: theme.backgroundRoot,
-            }),
+            bottom: 30, // Floats above the bottom
+            left: 20,
+            right: 20,
+            backgroundColor: '#111827', // Deep dark navy/black
+            borderRadius: 40, // Fully rounded pill shape
+            height: 75,
+            paddingBottom: 12,
+            paddingTop: 12,
             borderTopWidth: 0,
-            elevation: 0,
+            // Shadow for the pill
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: 0.3,
+            shadowRadius: 15,
+            elevation: 10,
           },
-          tabBarBackground: () =>
-            Platform.OS === "ios" ? (
-              <BlurView
-                intensity={100}
-                tint={isDark ? "dark" : "light"}
-                style={StyleSheet.absoluteFill}
-              />
-            ) : null,
-          headerShown: false,
+          tabBarLabelStyle: {
+            fontSize: 10,
+            fontWeight: '900',
+            letterSpacing: 1,
+            marginTop: 4,
+          },
         }}
       >
         <Tab.Screen
           name="HomeTab"
           component={HomeStackNavigator}
           options={{
-            title: "Home",
-            tabBarIcon: ({ color, size }) => (
-              <Feather name="home" size={size} color={color} />
+            tabBarLabel: "SHOP",
+            tabBarIcon: ({ color }) => <Feather name="shopping-bag" size={20} color={color} />,
+          }}
+        />
+        
+        <Tab.Screen
+          name="DealsTab"
+          component={VouchersScreen} 
+          options={{
+            tabBarLabel: "DEALS",
+            tabBarIcon: ({ color }) => <Feather name="star" size={20} color={color} />,
+          }}
+        />
+
+        {/* CENTRAL SEARCH BUTTON - CUSTOM UI */}
+        <Tab.Screen
+          name="SearchTab"
+          component={HomeStackNavigator} // Placeholder
+          options={{
+            tabBarLabel: "", // Hide label for search
+            tabBarButton: (props) => (
+              <Pressable
+                onPress={() => console.log("Search Pressed")}
+                style={styles.searchButtonContainer}
+              >
+                <LinearGradient
+                  colors={['#4f46e5', '#a855f7']} // Zendo Purple Gradient
+                  style={styles.searchButtonGradient}
+                >
+                  <Feather name="search" size={28} color="white" />
+                </LinearGradient>
+              </Pressable>
             ),
           }}
         />
+
         <Tab.Screen
-          name="OrdersTab"
+          name="HistoryTab"
           component={OrdersScreen}
           options={{
-            title: "Orders",
-            tabBarIcon: ({ color, size }) => (
-              <Feather name="shopping-bag" size={size} color={color} />
-            ),
+            tabBarLabel: "HISTORY",
+            tabBarIcon: ({ color }) => <Feather name="clock" size={20} color={color} />,
           }}
         />
+
         <Tab.Screen
           name="AccountTab"
           component={AccountScreen}
           options={{
-            title: "Account",
-            tabBarIcon: ({ color, size }) => (
-              <Feather name="user" size={size} color={color} />
-            ),
+            tabBarLabel: "PROFILE",
+            tabBarIcon: ({ color }) => <Feather name="user" size={20} color={color} />,
           }}
         />
       </Tab.Navigator>
-      <VoiceFAB />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  fabContainer: {
-    position: "absolute",
-    right: Spacing.lg,
-    zIndex: 100,
+  searchButtonContainer: {
+    top: -30, // Lifts the search button out of the bar
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  fab: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: "center",
-    justifyContent: "center",
+  searchButtonGradient: {
+    width: 65,
+    height: 65,
+    borderRadius: 22, // Squircle shape to match your theme
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: "#a855f7",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 12,
+    borderWidth: 4,
+    borderColor: '#0f172a', // Matches the tab bar background to create "cutout" look
   },
 });

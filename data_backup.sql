@@ -647,7 +647,7 @@ ea585ac6-7c31-470b-9dd3-8f8024d4fab6	Siam Grocery	123 Rama VI Rd, Thung Phaya Th
 a2e55995-abc7-4873-9ffe-872902ebd70d	Bang Phlat Market	7 Sirindhorn Rd, Bang Bumru, Bang Phlat, Bangkok 10700	13.7845000	100.4950000	\N	t	t	2026-01-01 22:25:53.675039
 6b3c15bf-2f1e-4dd2-a70d-0fd32f0428d6	Charoen Thai Mart	9 Sirindhorn Rd, Bang Bumru, Bang Phlat, Bangkok 10700	13.7850000	100.4960000	\N	t	t	2026-01-01 22:27:01.544819
 df21492b-8107-43e9-8893-8a96a8864cc0	Amanmart Malang	Jl Suarabaya no 5	-7.9575700	112.6172285	\N	t	t	2025-12-20 22:14:35.529608
-64292094-76fb-4cad-b89b-bbf1c3222e2b	KilatGo Central Jakarta	Jl. Sudirman No. 1, Central Jakarta, DKI Jakarta 10220	-7.9800000	112.6200000	\N	t	t	2025-12-20 21:53:43.744985
+64292094-76fb-4cad-b89b-bbf1c3222e2b	ZendO Central Jakarta	Jl. Sudirman No. 1, Central Jakarta, DKI Jakarta 10220	-7.9800000	112.6200000	\N	t	t	2025-12-20 21:53:43.744985
 145cc187-aad6-4693-b208-fa7c1498b5a0	Amanmart Malang	5 Soi Sirindhorn 1Khwaeng Bang Bumru, Khet Bang Phlat, Krung Thep Maha Nakhon 10700	-6.2088000	106.8456000	\N	t	t	2026-01-06 12:50:23.937137
 \.
 
@@ -661,7 +661,7 @@ demo-user	demo	demo	+62123456789	\N	\N	\N	customer	2025-12-20 21:53:43.735899	\N
 5713f1ec-89be-483a-9cb1-7f642e2eeb72	user_7890	gbhd7foj	+62+6281234567890	\N	\N	\N	customer	2025-12-21 22:00:22.070526	\N	\N	\N	\N
 e514e2e0-f0d8-44dd-b623-714972207d48	user_2674	b9e4dlni	+628371892674	\N	\N	\N	customer	2025-12-21 22:10:47.511269	\N	\N	\N	\N
 69ad7e93-a1ec-4d11-93ac-bdebea0c0f92	user_9034	vvqyte5a	+62992789034	\N	\N	\N	customer	2025-12-21 22:12:12.71486	\N	\N	\N	\N
-9cbc935c-5511-444f-8aaf-7ca048844cba	staff_1766330947230_ka03e3	placeholder_will_login_via_otp	+62874037074	amanmartmalangpicker@kilatgo.com	\N	\N	picker	2025-12-21 22:29:07.231529	\N	\N	\N	\N
+9cbc935c-5511-444f-8aaf-7ca048844cba	staff_1766330947230_ka03e3	placeholder_will_login_via_otp	+62874037074	amanmartmalangpicker@ZendO.com	\N	\N	picker	2025-12-21 22:29:07.231529	\N	\N	\N	\N
 4104e0a6-27c9-41cd-8ad4-74accc803860	user_5443	fzggvhin	+629087655443	\N	\N	\N	customer	2025-12-21 22:32:13.43038	\N	\N	\N	\N
 633a1033-965b-4d8f-87e3-569a5342cd13	user_0202	bcr6cxs8	+62903900202	\N	\N	\N	customer	2025-12-22 23:12:49.371787	\N	\N	\N	\N
 154dbc9b-de36-40cf-a34c-50dca0a11a13	user_9997	7pmgkxw6	+62356789997	\N	\N	\N	customer	2025-12-23 00:02:41.157737	\N	\N	\N	\N

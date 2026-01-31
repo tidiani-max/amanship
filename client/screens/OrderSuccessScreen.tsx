@@ -1,9 +1,10 @@
 import React, { useEffect } from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, ScrollView, ActivityIndicator, Pressable} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -16,23 +17,12 @@ import { useQuery } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Button } from "@/components/Button";
-import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useLanguage } from "@/context/LanguageContext";
-import { Spacing } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type OrderSuccessRouteProp = RouteProp<RootStackParamList, "OrderSuccess">;
-
-interface OrderData {
-  id: string;
-  orderNumber: string;
-  storeId: string;
-  storeName: string;
-  total: number;
-  estimatedDelivery: number;
-}
 
 export default function OrderSuccessScreen() {
   const insets = useSafeAreaInsets();
@@ -45,10 +35,8 @@ export default function OrderSuccessScreen() {
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
 
-  // Parse order IDs (could be comma-separated for multiple stores)
   const orderIds = orderId.includes(',') ? orderId.split(',') : [orderId];
 
-  // Fetch all orders
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["order-success", orderIds],
     queryFn: async () => {
@@ -57,7 +45,6 @@ export default function OrderSuccessScreen() {
         if (!response.ok) throw new Error("Order not found");
         const orderData = await response.json();
         
-        // Fetch store name
         const storeResponse = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/stores/${orderData.storeId}`);
         const storeData = await storeResponse.json();
         
@@ -67,10 +54,9 @@ export default function OrderSuccessScreen() {
           storeId: orderData.storeId,
           storeName: storeData.name,
           total: orderData.total,
-          estimatedDelivery: 15, // You can calculate this based on distance if needed
+          estimatedDelivery: 15,
         };
       });
-      
       return Promise.all(orderPromises);
     },
   });
@@ -96,239 +82,184 @@ export default function OrderSuccessScreen() {
   };
 
   const handleGoHome = () => {
-    navigation.reset({
-      index: 0,
-      routes: [{ name: "Main" }],
-    });
+    navigation.reset({ index: 0, routes: [{ name: "Main" }] });
   };
 
-  const formatPrice = (price: number) => {
-    return `Rp ${price.toLocaleString("id-ID")}`;
-  };
-
+  const formatPrice = (price: number) => `Rp ${price.toLocaleString("id-ID")}`;
   const totalAmount = orders.reduce((sum, order) => sum + order.total, 0);
 
   if (isLoading) {
     return (
-      <ThemedView style={[styles.container, { paddingTop: insets.top + Spacing.xl }]}>
-        <ThemedText type="body">Loading...</ThemedText>
+      <ThemedView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4f46e5" />
       </ThemedView>
     );
   }
 
   return (
-    <ThemedView
-      style={[
-        styles.container,
-        { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl },
-      ]}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.content}>
-          <Animated.View
-            style={[styles.iconContainer, { backgroundColor: theme.success }, iconAnimatedStyle]}
-          >
-            <Feather name="check" size={64} color="#FFFFFF" />
-          </Animated.View>
-          
-          <Animated.View style={[styles.textContent, contentAnimatedStyle]}>
-            <View style={[styles.lightningBadge, { backgroundColor: theme.primary }]}>
-              <Feather name="zap" size={20} color={theme.buttonText} />
-            </View>
-            
-            <ThemedText type="h1" style={styles.title}>
-              {t.orderSuccess.title}
-            </ThemedText>
-            
-            <ThemedText type="body" style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {orders.length > 1 
-                ? `${orders.length} orders confirmed from different stores`
-                : t.orderSuccess.orderConfirmed
-              }
-            </ThemedText>
+    <ThemedView style={[styles.container, { backgroundColor: '#f8fafc' }]}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 40 }]} showsVerticalScrollIndicator={false}>
+        
+        {/* Animated Celebration Icon */}
+        <Animated.View style={[styles.checkCircle, iconAnimatedStyle]}>
+          <LinearGradient colors={['#10b981', '#059669']} style={styles.gradientCircle}>
+            <Feather name="check" size={60} color="#FFFFFF" />
+          </LinearGradient>
+        </Animated.View>
+        
+        <Animated.View style={[styles.content, contentAnimatedStyle]}>
+          <ThemedText style={styles.title}>{t.orderSuccess.title}</ThemedText>
+          <ThemedText style={styles.subtitle}>
+            {orders.length > 1 ? `${orders.length} orders are being prepared!` : t.orderSuccess.orderConfirmed}
+          </ThemedText>
 
-            {/* Total Amount Summary */}
-            {orders.length > 1 && (
-              <View style={[styles.totalContainer, { backgroundColor: theme.backgroundDefault }]}>
-                <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                  Total Amount
-                </ThemedText>
-                <ThemedText type="h2" style={{ color: theme.primary }}>
-                  {formatPrice(totalAmount)}
-                </ThemedText>
+          {/* Grand Total Summary */}
+          {orders.length > 1 && (
+            <View style={styles.grandTotalCard}>
+              <ThemedText style={styles.totalLabel}>TOTAL PAID</ThemedText>
+              <ThemedText style={styles.totalValue}>{formatPrice(totalAmount)}</ThemedText>
+            </View>
+          )}
+
+          {/* Individual Store Cards */}
+          <View style={styles.ordersList}>
+            {orders.map((order) => (
+              <View key={order.id} style={styles.orderCard}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.storeIconBox}>
+                    <Feather name="shopping-bag" size={18} color="#4f46e5" />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <ThemedText style={styles.storeName}>{order.storeName}</ThemedText>
+                    <ThemedText style={styles.orderNumber}>#{order.orderNumber}</ThemedText>
+                  </View>
+                  <View style={styles.priceTag}>
+                    <ThemedText style={styles.priceText}>{formatPrice(order.total)}</ThemedText>
+                  </View>
+                </View>
+
+                <View style={styles.cardFooter}>
+                  <View style={styles.etaBox}>
+                    <Feather name="clock" size={14} color="#64748b" />
+                    <ThemedText style={styles.etaText}>Arriving in {order.estimatedDelivery} mins</ThemedText>
+                  </View>
+                  <Pressable onPress={() => handleTrackOrder(order.id)}>
+                    <LinearGradient colors={['#4f46e5', '#7c3aed']} style={styles.trackMiniBtn}>
+                      <ThemedText style={styles.trackBtnText}>Track</ThemedText>
+                    </LinearGradient>
+                  </Pressable>
+                </View>
               </View>
-            )}
-
-            {/* Individual Order Cards */}
-            <View style={styles.ordersContainer}>
-              {orders.map((order, index) => (
-                <Card key={order.id} style={styles.orderCard}>
-                  {/* Store Info */}
-                  <View style={styles.storeHeader}>
-                    <View style={[styles.storeIcon, { backgroundColor: theme.primary + "20" }]}>
-                      <Feather name="shopping-bag" size={18} color={theme.primary} />
-                    </View>
-                    <ThemedText type="body" style={{ fontWeight: "600", flex: 1 }}>
-                      {order.storeName}
-                    </ThemedText>
-                  </View>
-
-                  {/* Order Number */}
-                  <View style={styles.orderInfo}>
-                    <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                      Order Number
-                    </ThemedText>
-                    <ThemedText type="body" style={{ fontWeight: "600" }}>
-                      {order.orderNumber}
-                    </ThemedText>
-                  </View>
-
-                  {/* Amount */}
-                  <View style={styles.orderInfo}>
-                    <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                      Amount
-                    </ThemedText>
-                    <ThemedText type="body" style={{ fontWeight: "600" }}>
-                      {formatPrice(order.total)}
-                    </ThemedText>
-                  </View>
-
-                  {/* Estimated Delivery */}
-                  <View style={styles.estimateContainer}>
-                    <Feather name="clock" size={16} color={theme.primary} />
-                    <View>
-                      <ThemedText type="caption" style={{ color: theme.textSecondary }}>
-                        Estimated Delivery
-                      </ThemedText>
-                      <ThemedText type="body" style={{ fontWeight: "600", color: theme.primary }}>
-                        {order.estimatedDelivery} {t.orderSuccess.minutes}
-                      </ThemedText>
-                    </View>
-                  </View>
-
-                  {/* Track Order Button */}
-                  <Button 
-                    onPress={() => handleTrackOrder(order.id)}
-                    style={styles.trackButton}
-                  >
-                    {t.orderSuccess.trackOrder}
-                  </Button>
-                </Card>
-              ))}
-            </View>
-          </Animated.View>
-        </View>
+            ))}
+          </View>
+        </Animated.View>
       </ScrollView>
       
-      <View style={styles.footer}>
-        <Button variant="text" onPress={handleGoHome}>
-          {t.orderSuccess.backToHome}
-        </Button>
+      {/* Floating Bottom Action */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
+        <Pressable onPress={handleGoHome} style={styles.homeBtn}>
+          <ThemedText style={styles.homeBtnText}>{t.orderSuccess.backToHome}</ThemedText>
+        </Pressable>
       </View>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 100,
-  },
-  content: {
-    flex: 1,
-    alignItems: "center",
-    paddingHorizontal: Spacing.xl,
-  },
-  iconContainer: {
+  container: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingBottom: 140, alignItems: 'center' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  
+  // Celebration Icon
+  checkCircle: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.xxl,
-    marginTop: Spacing.xl,
+    marginBottom: 24,
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 10,
   },
-  textContent: {
-    alignItems: "center",
-    width: "100%",
+  gradientCircle: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  lightningBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.lg,
+
+  content: { width: '100%', alignItems: 'center' },
+  title: { fontSize: 28, fontWeight: '900', color: '#1e293b', textAlign: 'center' },
+  subtitle: { fontSize: 16, color: '#64748b', textAlign: 'center', marginTop: 8, marginBottom: 32, fontWeight: '600' },
+
+  // Grand Total Card
+  grandTotalCard: {
+    backgroundColor: '#ffffff',
+    width: '100%',
+    borderRadius: 24,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
-  title: {
-    textAlign: "center",
-    marginBottom: Spacing.sm,
-  },
-  subtitle: {
-    textAlign: "center",
-    marginBottom: Spacing.xl,
-  },
-  totalContainer: {
-    alignItems: "center",
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.xxl,
-    borderRadius: 12,
-    marginBottom: Spacing.lg,
-  },
-  ordersContainer: {
-    width: "100%",
-    gap: Spacing.md,
-  },
+  totalLabel: { fontSize: 12, fontWeight: '800', color: '#94a3b8', letterSpacing: 1 },
+  totalValue: { fontSize: 28, fontWeight: '900', color: '#4f46e5', marginTop: 4 },
+
+  // Individual Order Cards
+  ordersList: { width: '100%', gap: 16 },
   orderCard: {
-    padding: Spacing.lg,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
   },
-  storeHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-    paddingBottom: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  storeIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#f5f3ff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  storeIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  orderInfo: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.sm,
-  },
-  estimateContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.md,
-    paddingTop: Spacing.md,
+  storeName: { fontSize: 16, fontWeight: '800', color: '#1e293b' },
+  orderNumber: { fontSize: 12, color: '#94a3b8', fontWeight: '600' },
+  priceTag: { backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
+  priceText: { fontSize: 13, fontWeight: '800', color: '#1e293b' },
+
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: "#E0E0E0",
+    borderTopColor: '#f1f5f9',
   },
-  trackButton: {
-    marginTop: Spacing.sm,
+  etaBox: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  etaText: { fontSize: 13, fontWeight: '700', color: '#64748b' },
+  trackMiniBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 },
+  trackBtnText: { color: '#fff', fontSize: 13, fontWeight: '900' },
+
+  // Footer
+  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 24 },
+  homeBtn: {
+    backgroundColor: '#ffffff',
+    paddingVertical: 18,
+    borderRadius: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
   },
-  footer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-  },
+  homeBtnText: { color: '#64748b', fontWeight: '800', fontSize: 16 },
 });

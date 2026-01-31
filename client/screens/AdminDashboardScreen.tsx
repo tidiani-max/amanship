@@ -653,7 +653,7 @@ const StoreModal: React.FC<StoreModalProps> = ({ visible, store, onClose, onSubm
             <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Store Name *</ThemedText>
             <TextInput
               style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundTertiary }]}
-              placeholder="e.g. KilatGo Central Jakarta"
+              placeholder="e.g. ZendO Central Jakarta"
               placeholderTextColor={theme.textSecondary}
               value={name}
               onChangeText={setName}
@@ -1575,7 +1575,7 @@ export default function AdminDashboardScreen() {
         {/* SIDEBAR */}
         <View style={[styles.sidebar, { backgroundColor: theme.backgroundSecondary, borderRightColor: theme.border }]}>
           <View style={[styles.sidebarLogo, { borderBottomColor: theme.border }]}>
-            <ThemedText style={{ fontSize: 24, fontWeight: '700' }}>KilatGo</ThemedText>
+            <ThemedText style={{ fontSize: 24, fontWeight: '700' }}>ZendO</ThemedText>
             <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>Admin Dashboard</ThemedText>
           </View>
           

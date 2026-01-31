@@ -59,7 +59,7 @@ export default function EditAddressScreen() {
       try {
         const response = await fetch(
           `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&countrycodes=id&limit=5&addressdetails=1`,
-          { headers: { "User-Agent": "KilatGoApp" } }
+          { headers: { "User-Agent": "ZendOApp" } }
         );
         const data = await response.json();
         setPredictions(data);

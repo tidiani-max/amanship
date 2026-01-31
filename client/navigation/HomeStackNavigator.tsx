@@ -16,12 +16,13 @@ export default function HomeStackNavigator() {
   return (
     <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{
-          headerTitle: () => <HeaderTitle title="KilatGo" />,
-        }}
-      />
+  name="Home"
+  component={HomeScreen}
+  options={{
+    headerShown: false,
+  }}
+/>
+
     </Stack.Navigator>
   );
 }

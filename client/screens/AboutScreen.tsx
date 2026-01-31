@@ -70,10 +70,10 @@ export default function AboutScreen() {
             <Feather name="zap" size={40} color={theme.buttonText} />
           </View>
           <ThemedText type="h2" style={styles.appName}>
-            KilatGo
+            ZendO
           </ThemedText>
           <ThemedText type="caption" style={{ color: theme.textSecondary, textAlign: "center" }}>
-            {t.about.appDescription}
+            {t.about.description}
           </ThemedText>
         </View>
         
@@ -84,47 +84,47 @@ export default function AboutScreen() {
         </Card>
         
         <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-          {t.about.legal.toUpperCase()}
+          {"LEGAL"}
         </ThemedText>
         <Card style={styles.card}>
           <LinkRow
             icon="file-text"
             label={t.about.termsOfService}
-            onPress={() => openLink("https://kilatgo.com/terms")}
+            onPress={() => openLink("https://ZendO.com/terms")}
           />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <LinkRow
             icon="shield"
             label={t.about.privacyPolicy}
-            onPress={() => openLink("https://kilatgo.com/privacy")}
+            onPress={() => openLink("https://ZendO.com/privacy")}
           />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <LinkRow
             icon="book"
             label={t.about.licenses}
-            onPress={() => openLink("https://kilatgo.com/licenses")}
+            onPress={() => openLink("https://ZendO.com/licenses")}
           />
         </Card>
         
         <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-          {t.about.followUs.toUpperCase()}
+          {"FOLLOW US"}
         </ThemedText>
         <Card style={styles.card}>
           <LinkRow
             icon="instagram"
             label="Instagram"
-            onPress={() => openLink("https://instagram.com/kilatgo")}
+            onPress={() => openLink("https://instagram.com/ZendO")}
           />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <LinkRow
             icon="twitter"
             label="Twitter"
-            onPress={() => openLink("https://twitter.com/kilatgo")}
+            onPress={() => openLink("https://twitter.com/ZendO")}
           />
         </Card>
         
         <ThemedText type="small" style={[styles.copyright, { color: theme.textSecondary }]}>
-          2024 KilatGo. {t.about.allRightsReserved}.
+          2024 ZendO. All rights reserved.
         </ThemedText>
       </ScrollView>
     </ThemedView>

@@ -394,6 +394,15 @@ export interface TranslationKeys {
     profileUpdated: string;
     paymentSuccess: string;
   };
+    // Order Success Screen
+  orderSuccess: {
+    title: string;
+    orderConfirmed: string;
+    minutes: string;
+    trackOrder: string;
+    backToHome: string;
+  };
+
 }
 
 export const translations: Record<Language, TranslationKeys> = {
@@ -440,7 +449,7 @@ export const translations: Record<Language, TranslationKeys> = {
     },
 
     onboarding: {
-      welcome: "Welcome to KilatGo",
+      welcome: "Welcome to ZendO",
       getStarted: "Get Started",
       skip: "Skip",
       next: "Next",
@@ -697,7 +706,7 @@ export const translations: Record<Language, TranslationKeys> = {
     about: {
       title: "About",
       version: "Version",
-      description: "KilatGo - Your fastest grocery delivery service",
+      description: "ZendO - Your fastest grocery delivery service",
       developer: "Developed by",
       contact: "Contact Us",
       privacyPolicy: "Privacy Policy",
@@ -763,6 +772,14 @@ export const translations: Record<Language, TranslationKeys> = {
       profileUpdated: "Profile updated successfully",
       paymentSuccess: "Payment successful",
     },
+        orderSuccess: {
+      title: "Order Successful",
+      orderConfirmed: "Your order has been confirmed",
+      minutes: "minutes",
+      trackOrder: "Track Order",
+      backToHome: "Back to Home",
+    },
+
   },
 
   id: {
@@ -808,7 +825,7 @@ export const translations: Record<Language, TranslationKeys> = {
     },
 
     onboarding: {
-      welcome: "Selamat Datang di KilatGo",
+      welcome: "Selamat Datang di ZendO",
       getStarted: "Mulai",
       skip: "Lewati",
       next: "Lanjut",
@@ -1065,7 +1082,7 @@ export const translations: Record<Language, TranslationKeys> = {
     about: {
       title: "Tentang",
       version: "Versi",
-      description: "KilatGo - Layanan pengiriman belanja tercepat Anda",
+      description: "ZendO - Layanan pengiriman belanja tercepat Anda",
       developer: "Dikembangkan oleh",
       contact: "Hubungi Kami",
       privacyPolicy: "Kebijakan Privasi",
@@ -1131,5 +1148,13 @@ export const translations: Record<Language, TranslationKeys> = {
       profileUpdated: "Profil berhasil diperbarui",
       paymentSuccess: "Pembayaran berhasil",
     },
+        orderSuccess: {
+      title: "Pesanan Berhasil",
+      orderConfirmed: "Pesanan Anda telah dikonfirmasi",
+      minutes: "menit",
+      trackOrder: "Lacak Pesanan",
+      backToHome: "Kembali ke Beranda",
+    },
+
   },
 };

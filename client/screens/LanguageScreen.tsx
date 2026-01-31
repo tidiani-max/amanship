@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, Pressable } from "react-native";
+import { View, StyleSheet, Pressable, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 
@@ -39,7 +39,7 @@ function LanguageOptionRow({
     <Pressable style={styles.languageRow} onPress={onSelect}>
       <View style={styles.languageInfo}>
         <View style={styles.labelRow}>
-          <ThemedText type="body" style={{ fontWeight: "500" }}>
+          <ThemedText type="body" style={{ fontWeight: "500" }} noTranslate>
             {languageOption.name}
           </ThemedText>
           {isSelected ? (
@@ -50,7 +50,7 @@ function LanguageOptionRow({
             </View>
           ) : null}
         </View>
-        <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+        <ThemedText type="caption" style={{ color: theme.textSecondary }} noTranslate>
           {languageOption.nativeName}
         </ThemedText>
       </View>
@@ -76,14 +76,16 @@ export default function LanguageScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View
-        style={[
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
           styles.content,
           {
             paddingTop: Spacing.lg,
             paddingBottom: insets.bottom + Spacing.xl,
           },
         ]}
+        showsVerticalScrollIndicator={false}
       >
         <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
           {t.language.selectLanguage.toUpperCase()}
@@ -110,7 +112,7 @@ export default function LanguageScreen() {
             ? "App will use your selected language for all content."
             : "Aplikasi akan menggunakan bahasa yang Anda pilih untuk semua konten."}
         </ThemedText>
-      </View>
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -119,9 +121,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  content: {
     paddingHorizontal: Spacing.lg,
+    flexGrow: 1,
   },
   sectionTitle: {
     marginBottom: Spacing.sm,
@@ -130,19 +135,23 @@ const styles = StyleSheet.create({
   },
   card: {
     padding: 0,
+    marginBottom: Spacing.md,
   },
   languageRow: {
     flexDirection: "row",
     alignItems: "center",
     padding: Spacing.lg,
+    minHeight: 72, // Ensure consistent height
   },
   languageInfo: {
     flex: 1,
+    gap: 4,
   },
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
+    flexWrap: 'wrap', // Allow wrapping if needed
   },
   currentBadge: {
     paddingHorizontal: Spacing.sm,
@@ -155,12 +164,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    marginLeft: Spacing.sm,
   },
   emptyCircle: {
     width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
+    marginLeft: Spacing.sm,
   },
   divider: {
     height: 1,
@@ -168,7 +179,8 @@ const styles = StyleSheet.create({
   },
   note: {
     textAlign: "center",
-    marginTop: Spacing.lg,
+    marginTop: Spacing.md,
     paddingHorizontal: Spacing.lg,
+    lineHeight: 20,
   },
 });
