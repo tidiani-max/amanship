@@ -3,18 +3,20 @@ import { View, StyleSheet, TextInput, Alert, ActivityIndicator, TouchableOpacity
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { useAuth } from "@/context/AuthContext"; 
 import { useLocation } from "@/context/LocationContext";
 import { apiRequest } from "@/lib/query-client";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+const BRAND_PURPLE = "#6338f2";
+const BRAND_MINT = "#10b981";
 
 export default function EditAddressScreen() {
   const insets = useSafeAreaInsets();
@@ -32,7 +34,6 @@ export default function EditAddressScreen() {
   const [label, setLabel] = useState("");
   const [details, setDetails] = useState("");
   const [loading, setLoading] = useState(false);
-  const [usingGPS, setUsingGPS] = useState(false);
   
   // Search States
   const [searchQuery, setSearchQuery] = useState("");
@@ -42,7 +43,6 @@ export default function EditAddressScreen() {
     address: string; lat: string; lng: string;
   } | null>(null);
 
-  // Debounce Timer Ref
   const searchTimer = useRef<NodeJS.Timeout | null>(null);
 
   const searchOpenStreetMap = async (text: string) => {
@@ -79,34 +79,22 @@ export default function EditAddressScreen() {
     });
     setSearchQuery(item.display_name);
     setPredictions([]);
-    setUsingGPS(false);
   };
 
   const handleUseCurrentLocation = async () => {
     setLoading(true);
     try {
       await useCurrentLocation();
-      setUsingGPS(true);
-      setSelectedLocation(null);
-      setSearchQuery("");
       navigation.goBack();
     } catch (error) {
-      Alert.alert("Error", "Could not get your current location.");
+      Alert.alert("Error", "Could not get current location.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleApplyAddress = async () => {
-    if (!selectedLocation) {
-      Alert.alert("Required", "Please select an address from the suggestions.");
-      return;
-    }
-
-    if (!label.trim()) {
-      Alert.alert("Required", "Please enter an address label (e.g., Home, Office)");
-      return;
-    }
+    if (!selectedLocation || !label.trim()) return;
 
     setLoading(true);
     try {
@@ -129,7 +117,6 @@ export default function EditAddressScreen() {
           isDefault: true
         });
       }
-
       navigation.goBack();
     } catch (error) {
       Alert.alert("Error", "Could not save address.");
@@ -138,422 +125,263 @@ export default function EditAddressScreen() {
     }
   };
 
-  // Check if form is valid
-  const isFormValid = selectedLocation && label.trim().length > 0;
-
   return (
     <KeyboardAvoidingView 
-      style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View style={{ flex: 1 }}>
-        {/* Fixed Header */}
-        <View style={[
-          styles.header, 
-          { 
-            backgroundColor: theme.cardBackground,
-            paddingTop: insets.top + 12,
-            borderBottomColor: theme.border
-          }
-        ]}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Feather name="arrow-left" size={24} color={theme.text} />
+      {/* MODERN HEADER */}
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Feather name="chevron-left" size={28} color="#1e293b" />
+        </TouchableOpacity>
+        <ThemedText style={styles.headerTitleText}>Delivery Address</ThemedText>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+      >
+        <View style={styles.content}>
+          {/* GPS QUICK OPTION */}
+          <Pressable
+            style={[
+              styles.gpsCard,
+              !isManualLocation && { borderColor: BRAND_PURPLE, backgroundColor: BRAND_PURPLE + '05' }
+            ]}
+            onPress={handleUseCurrentLocation}
+            disabled={loading}
+          >
+            <View style={[styles.gpsIconCircle, { backgroundColor: BRAND_PURPLE + '15' }]}>
+              <MaterialCommunityIcons name="crosshairs-gps" size={24} color={BRAND_PURPLE} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={styles.gpsTitle}>Current Location</ThemedText>
+              <ThemedText style={styles.gpsSub}>Use GPS for precise delivery</ThemedText>
+            </View>
+            {!isManualLocation && <Feather name="check-circle" size={20} color={BRAND_PURPLE} />}
           </Pressable>
-          <ThemedText type="h3" style={{ flex: 1, textAlign: 'center', marginRight: 40 }}>
-            Edit Address
-          </ThemedText>
-        </View>
 
-        <ScrollView
-          style={{ flex: 1 }}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[
-            styles.scrollContent,
-            { 
-              paddingBottom: selectedLocation ? insets.bottom + 120 : insets.bottom + 24
-            }
-          ]}
-        >
-          {/* Use Current GPS Location Option */}
-          <View style={styles.section}>
-            <ThemedText type="h3" style={styles.sectionTitle}>
-              Location Options
-            </ThemedText>
-
-            <Pressable
-              style={[
-                styles.locationOption,
-                {
-                  backgroundColor: theme.cardBackground,
-                  borderColor: !isManualLocation ? theme.primary : theme.border,
-                  borderWidth: !isManualLocation ? 2 : 1,
-                },
-              ]}
-              onPress={handleUseCurrentLocation}
-              disabled={loading}
-              android_ripple={{ color: theme.primary + '20' }}
-            >
-              <View style={[styles.optionIcon, { backgroundColor: theme.primary + "20" }]}>
-                <Feather name="navigation" size={20} color={theme.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <ThemedText type="body" style={{ fontWeight: "600" }}>
-                  Use Current GPS Location
-                </ThemedText>
-                <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 2 }}>
-                  Automatically detect my location
-                </ThemedText>
-              </View>
-              {!isManualLocation && (
-                <Feather name="check-circle" size={20} color={theme.primary} />
-              )}
-            </Pressable>
+          <View style={styles.dividerRow}>
+            <View style={styles.line} /><ThemedText style={styles.orText}>OR SEARCH</ThemedText><View style={styles.line} />
           </View>
 
-          {/* Manual Address Search */}
+          {/* SEARCH SECTION */}
           <View style={styles.section}>
-            <ThemedText type="h3" style={styles.sectionTitle}>
-              Or Enter New Address
-            </ThemedText>
-
-            <View style={styles.inputGroup}>
-              <ThemedText type="caption" style={[styles.label, { color: theme.textSecondary }]}>
-                SEARCH ADDRESS
-              </ThemedText>
-              <View style={[
-                styles.searchContainer, 
-                { 
-                  backgroundColor: theme.backgroundDefault, 
-                  borderColor: theme.border 
-                }
-              ]}>
-                <Feather name="search" size={18} color={theme.textSecondary} />
-                <TextInput
-                  style={[styles.searchInput, { color: theme.text }]}
-                  placeholder="Type street, area, or landmark..."
-                  placeholderTextColor={theme.textSecondary}
-                  value={searchQuery}
-                  onChangeText={searchOpenStreetMap}
-                  returnKeyType="search"
-                />
-                {isSearching && (
-                  <ActivityIndicator size="small" color={theme.primary} />
-                )}
-              </View>
-
-              {predictions.length > 0 && (
-                <View style={[
-                  styles.resultsContainer, 
-                  { 
-                    backgroundColor: theme.backgroundDefault, 
-                    borderColor: theme.border 
-                  }
-                ]}>
-                  {predictions.map((item, index) => (
-                    <TouchableOpacity 
-                      key={index} 
-                      style={[
-                        styles.resultItem, 
-                        { borderBottomColor: theme.border },
-                        index === predictions.length - 1 && { borderBottomWidth: 0 }
-                      ]}
-                      onPress={() => selectPlace(item)}
-                      activeOpacity={0.7}
-                    >
-                      <Feather name="map-pin" size={16} color={theme.textSecondary} />
-                      <ThemedText numberOfLines={2} style={{ fontSize: 14, flex: 1, marginLeft: 10 }}>
-                        {item.display_name}
-                      </ThemedText>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
+            <View style={styles.searchWrapper}>
+              <Feather name="search" size={18} color="#94a3b8" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search area, street or landmark..."
+                placeholderTextColor="#94a3b8"
+                value={searchQuery}
+                onChangeText={searchOpenStreetMap}
+              />
+              {isSearching && <ActivityIndicator size="small" color={BRAND_PURPLE} />}
             </View>
 
-            {selectedLocation && (
-              <View style={[
-                styles.selectedAddress, 
-                { 
-                  backgroundColor: theme.primary + "10", 
-                  borderColor: theme.primary 
-                }
-              ]}>
-                <Feather name="check-circle" size={16} color={theme.primary} />
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <ThemedText type="caption" style={{ color: theme.primary, marginBottom: 4 }}>
-                    Selected Address
-                  </ThemedText>
-                  <ThemedText type="body" numberOfLines={3}>
-                    {selectedLocation.address}
-                  </ThemedText>
-                </View>
+            {predictions.length > 0 && (
+              <View style={styles.predictionsBox}>
+                {predictions.map((item, index) => (
+                  <TouchableOpacity 
+                    key={index} 
+                    style={styles.predictionItem}
+                    onPress={() => selectPlace(item)}
+                  >
+                    <View style={styles.pinCircle}><Feather name="map-pin" size={14} color="#64748b" /></View>
+                    <ThemedText numberOfLines={2} style={styles.predictionText}>{item.display_name}</ThemedText>
+                  </TouchableOpacity>
+                ))}
               </View>
-            )}
-
-            {selectedLocation && (
-              <>
-                {/* Address Label */}
-                <View style={styles.inputGroup}>
-                  <ThemedText type="caption" style={[styles.label, { color: theme.textSecondary }]}>
-                    ADDRESS LABEL <ThemedText style={{ color: theme.error }}>*</ThemedText>
-                  </ThemedText>
-                  <TextInput
-                    style={[
-                      styles.input, 
-                      { 
-                        backgroundColor: theme.backgroundDefault, 
-                        borderColor: label.trim() ? theme.border : theme.error, 
-                        color: theme.text 
-                      }
-                    ]}
-                    value={label}
-                    onChangeText={setLabel}
-                    placeholder="e.g. Home, Office, Apartment 5B"
-                    placeholderTextColor={theme.textSecondary}
-                    returnKeyType="next"
-                  />
-                  {!label.trim() && (
-                    <ThemedText type="small" style={{ color: theme.error, marginTop: 6 }}>
-                      This field is required for drivers to find you
-                    </ThemedText>
-                  )}
-                </View>
-
-                {/* Additional Details */}
-                <View style={styles.inputGroup}>
-                  <ThemedText type="caption" style={[styles.label, { color: theme.textSecondary }]}>
-                    ADDITIONAL DETAILS (OPTIONAL)
-                  </ThemedText>
-                  <TextInput
-                    style={[
-                      styles.input, 
-                      styles.multilineInput, 
-                      { 
-                        backgroundColor: theme.backgroundDefault, 
-                        borderColor: theme.border, 
-                        color: theme.text 
-                      }
-                    ]}
-                    value={details}
-                    onChangeText={setDetails}
-                    multiline
-                    numberOfLines={3}
-                    placeholder="e.g. Blue door, 2nd floor, Building A, Gate code: 1234"
-                    placeholderTextColor={theme.textSecondary}
-                    textAlignVertical="top"
-                    returnKeyType="done"
-                  />
-                </View>
-              </>
             )}
           </View>
 
-          {/* Current Manual Location Display */}
-          {isManualLocation && manualAddress && !selectedLocation && (
-            <View style={[
-              styles.currentAddress, 
-              { 
-                backgroundColor: theme.backgroundDefault, 
-                borderColor: theme.success 
-              }
-            ]}>
-              <Feather name="check-circle" size={20} color={theme.success} />
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <ThemedText type="caption" style={{ color: theme.success, marginBottom: 4 }}>
-                  Current Delivery Address
+          {/* FORM SECTION (Only if address selected) */}
+          {selectedLocation && (
+            <View style={styles.formSection}>
+              <View style={styles.selectedIndicator}>
+                <View style={styles.mintDot} />
+                <ThemedText style={styles.selectedAddressText} numberOfLines={2}>
+                  {selectedLocation.address}
                 </ThemedText>
-                {currentAddressLabel && (
-                  <ThemedText type="h3" style={{ marginBottom: 6 }}>
-                    {currentAddressLabel}
-                  </ThemedText>
-                )}
-                <ThemedText type="body" numberOfLines={3} style={{ color: theme.textSecondary }}>
-                  {manualAddress}
-                </ThemedText>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <ThemedText style={styles.fieldLabel}>Label This Place</ThemedText>
+                <TextInput
+                  style={styles.textInput}
+                  value={label}
+                  onChangeText={setLabel}
+                  placeholder="e.g. Home, My Office, Mom's House"
+                  placeholderTextColor="#cbd5e1"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <ThemedText style={styles.fieldLabel}>Note for Driver (Optional)</ThemedText>
+                <TextInput
+                  style={[styles.textInput, styles.areaInput]}
+                  value={details}
+                  onChangeText={setDetails}
+                  multiline
+                  placeholder="Gate code, building color, floor number..."
+                  placeholderTextColor="#cbd5e1"
+                />
               </View>
             </View>
           )}
-        </ScrollView>
 
-        {/* Fixed Footer Button */}
-        {selectedLocation && (
-          <View
-            style={[
-              styles.footer,
-              {
-                backgroundColor: theme.backgroundRoot,
-                paddingBottom: insets.bottom + 16,
-                borderTopColor: theme.border
-              }
-            ]}
+          {/* CURRENT ADDRESS PREVIEW */}
+          {isManualLocation && manualAddress && !selectedLocation && (
+            <View style={styles.activeCard}>
+              <View style={[styles.gpsIconCircle, { backgroundColor: BRAND_MINT + '15' }]}>
+                <Feather name="map-pin" size={20} color={BRAND_MINT} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.activeLabel}>{currentAddressLabel || "Saved Address"}</ThemedText>
+                <ThemedText style={styles.activeAddress} numberOfLines={2}>{manualAddress}</ThemedText>
+              </View>
+              <MaterialCommunityIcons name="check-decagram" size={22} color={BRAND_MINT} />
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* FLOATING ACTION BUTTON */}
+      {selectedLocation && (
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+          <TouchableOpacity 
+            style={[styles.submitBtn, (!label.trim() || loading) && styles.btnDisabled]}
+            onPress={handleApplyAddress}
+            disabled={loading || !label.trim()}
           >
-            <Button 
-              onPress={handleApplyAddress} 
-              disabled={loading || !isFormValid}
-            >
-              {loading ? <ActivityIndicator color="#fff" /> : "Apply This Address"}
-            </Button>
-          </View>
-        )}
-      </View>
+            {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.submitBtnText}>Confirm Delivery Address</ThemedText>}
+          </TouchableOpacity>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F8F9FE' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 15,
+    backgroundColor: 'white',
     borderBottomWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-    zIndex: 1000,
+    borderBottomColor: '#f1f5f9',
   },
-  backButton: {
-    padding: 4,
-  },
-  scrollContent: { 
-    flexGrow: 1, 
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  
-  section: {
-    marginBottom: 24,
-  },
-
-  sectionTitle: {
-    marginBottom: 12,
-    fontWeight: '700',
-  },
-
-  locationOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    borderRadius: 12,
-    gap: 12,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2
-  },
-
-  optionIcon: {
-    width: 40,
-    height: 40,
+  backBtn: { padding: 4 },
+  headerTitleText: { fontSize: 18, fontWeight: '800', color: '#1e293b' },
+  content: { padding: 20 },
+  gpsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: 'white',
     borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: '#f1f5f9',
+    gap: 15,
+    marginBottom: 20
   },
-
-  inputGroup: { 
-    marginBottom: 18
-  },
-  
-  label: { 
-    marginBottom: 8, 
-    textTransform: "uppercase", 
-    fontSize: 11, 
-    letterSpacing: 0.5,
-    fontWeight: '600'
-  },
-  
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 50,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    gap: 10,
-  },
-
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    paddingVertical: 12,
-  },
-
-  input: { 
-    minHeight: 50, 
-    borderRadius: 12, 
-    borderWidth: 1, 
-    paddingHorizontal: 16, 
-    fontSize: 15,
-    paddingVertical: 14
-  },
-  
-  multilineInput: { 
-    minHeight: 100,
-    paddingTop: 14,
-    textAlignVertical: 'top',
-  },
-  
-  resultsContainer: {
-    marginTop: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
-    maxHeight: 300
-  },
-  
-  resultItem: { 
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14, 
-    borderBottomWidth: 1 
-  },
-
-  selectedAddress: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    padding: 14,
-    borderRadius: 12,
-    gap: 10,
-    borderWidth: 2,
-    marginBottom: 18,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2
-  },
-
-  currentAddress: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    padding: 14,
-    borderRadius: 12,
-    gap: 10,
-    borderWidth: 2,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2
-  },
-  
-  footer: {
+  gpsIconCircle: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  gpsTitle: { fontSize: 16, fontWeight: '800', color: '#1e293b' },
+  gpsSub: { fontSize: 13, color: '#64748b', marginTop: 2 },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
+  line: { flex: 1, height: 1, backgroundColor: '#e2e8f0' },
+  orText: { fontSize: 10, fontWeight: '800', color: '#94a3b8', letterSpacing: 1 },
+  section: { marginBottom: 20 },
+  searchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 18,
     paddingHorizontal: 16,
-    paddingTop: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 8,
-    borderTopWidth: 1
-  }
+    height: 56,
+    borderWidth: 1,
+    borderColor: '#e2e8f0'
+  },
+  searchIcon: { marginRight: 12 },
+  searchInput: { flex: 1, fontSize: 15, color: '#1e293b', fontWeight: '500' },
+  predictionsBox: {
+    backgroundColor: 'white',
+    borderRadius: 18,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10
+  },
+  predictionItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  pinCircle: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  predictionText: { flex: 1, fontSize: 14, color: '#334155', lineHeight: 20 },
+  formSection: { gap: 20 },
+  selectedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: BRAND_MINT + '10',
+    padding: 15,
+    borderRadius: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: BRAND_MINT + '20'
+  },
+  mintDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: BRAND_MINT },
+  selectedAddressText: { flex: 1, fontSize: 13, color: '#065f46', fontWeight: '600' },
+  inputGroup: { gap: 8 },
+  fieldLabel: { fontSize: 12, fontWeight: '800', color: '#64748b', marginLeft: 4 },
+  textInput: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 16,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    color: '#1e293b'
+  },
+  areaInput: { height: 100, textAlignVertical: 'top' },
+  activeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: BRAND_MINT + '20',
+    gap: 15
+  },
+  activeLabel: { fontSize: 14, fontWeight: '800', color: '#1e293b' },
+  activeAddress: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  footer: {
+    position: 'absolute',
+    bottom: 0, left: 0, right: 0,
+    backgroundColor: 'white',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9'
+  },
+  submitBtn: {
+    backgroundColor: BRAND_PURPLE,
+    height: 56,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: BRAND_PURPLE,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }
+  },
+  btnDisabled: { backgroundColor: '#cbd5e1', shadowOpacity: 0, elevation: 0 },
+  submitBtnText: { color: 'white', fontSize: 16, fontWeight: '800' }
 });
