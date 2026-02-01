@@ -28,6 +28,11 @@ import { CartToast } from "@/components/CartToast";
 
 const { width } = Dimensions.get("window");
 
+// Brand Colors from screenshots
+const BRAND_PURPLE = "#6338f2"; 
+const BRAND_MINT_BG = "#e6fffa";
+const BRAND_MINT_TEXT = "#00bfa5";
+
 // ===== RESPONSIVE BREAKPOINTS =====
 const getResponsiveColumns = (screenWidth: number) => {
   if (screenWidth >= 1400) return 6;
@@ -206,14 +211,13 @@ const renderProduct = ({ item }: { item: UIProduct }) => {
       <View style={styles.productInfo}>
         <View style={styles.deliveryInfoRow}>
           <View style={styles.storeBadge}>
-            <Feather name="map-pin" size={9} color="#059669" />
+            <Feather name="map-pin" size={9} color="#64748b" />
             <ThemedText style={styles.storeText} numberOfLines={1}>
               {String(item.storeName || "Store.name")}
-              
             </ThemedText>
           </View>
           <View style={styles.timeBadge}>
-            <Feather name="clock" size={9} color="#10b981" />
+            <Feather name="zap" size={9} color={BRAND_MINT_TEXT} />
             <ThemedText style={styles.timeText}>
               {String(item.deliveryMinutes || 15)} min
             </ThemedText>
@@ -244,7 +248,7 @@ const renderProduct = ({ item }: { item: UIProduct }) => {
             disabled={!item.inStock}
             style={[
               styles.addButton,
-              { backgroundColor: item.inStock ? theme.primary : '#e5e7eb' }
+              { backgroundColor: item.inStock ? BRAND_PURPLE : '#e5e7eb' }
             ]}
             onPress={(e) => {
               e.stopPropagation();
@@ -262,7 +266,7 @@ const renderProduct = ({ item }: { item: UIProduct }) => {
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.backgroundRoot }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
+        <ActivityIndicator size="large" color={BRAND_PURPLE} />
         <ThemedText style={{ color: theme.textSecondary, marginTop: 12 }}>
           Loading products...
         </ThemedText>
@@ -296,8 +300,8 @@ const renderProduct = ({ item }: { item: UIProduct }) => {
 
       {/* ===== CATEGORY BANNER ===== */}
       <View style={[styles.bannerSection, { paddingHorizontal: responsivePadding + containerPadding }]}>
-        <View style={[styles.categoryBanner, { backgroundColor: category.color + "15" }]}>
-          <View style={[styles.categoryIconLarge, { backgroundColor: category.color + "20" }]}>
+        <View style={[styles.categoryBanner, { backgroundColor: BRAND_PURPLE }]}>
+          <View style={[styles.categoryIconLarge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
             {category.image ? (
               <Image
                 source={{ uri: getImageUrl(category.image) }}
@@ -305,21 +309,18 @@ const renderProduct = ({ item }: { item: UIProduct }) => {
                 resizeMode="cover"
               />
             ) : (
-              <Feather name={category.icon as any} size={40} color={category.color} />
+              <Feather name={category.icon as any} size={32} color="white" />
             )}
           </View>
           
           <View style={{ flex: 1 }}>
-            <ThemedText type="h2" style={styles.categoryTitle}>
-  {String(category.name || 'Category')}
-</ThemedText>
-<ThemedText style={styles.productCount}>
-  {String(products.length)} {products.length === 1 ? 'product' : 'products'}
-</ThemedText>
-            <ThemedText style={styles.productCount}>
-              {products.length} {products.length === 1 ? 'product' : 'products'}
+            <ThemedText type="h2" style={[styles.categoryTitle, { color: 'white' }]}>
+              {String(category.name || 'Category')}
             </ThemedText>
           </View>
+
+          {/* Optional: Add a subtle arrow or decoration like in the "Special Offers" card */}
+          <Feather name="chevron-right" size={20} color="rgba(255,255,255,0.5)" />
         </View>
       </View>
 
@@ -353,7 +354,7 @@ const renderProduct = ({ item }: { item: UIProduct }) => {
      
         <CartToast
         visible={toastVisible}
-        hasItems={items.length > 0} // <--- Pass this now!
+        hasItems={items.length > 0} 
         productName={lastAddedProduct}
         onDismiss={() => setToastVisible(false)}
       />
@@ -467,7 +468,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#f1f5f9',
     paddingHorizontal: 7,
     paddingVertical: 4,
     borderRadius: 7,
@@ -476,7 +477,7 @@ const styles = StyleSheet.create({
   storeText: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#065f46',
+    color: '#475569',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
@@ -484,7 +485,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#d1fae5',
+    backgroundColor: BRAND_MINT_BG,
     paddingHorizontal: 7,
     paddingVertical: 4,
     borderRadius: 7,
@@ -492,7 +493,7 @@ const styles = StyleSheet.create({
   timeText: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#065f46',
+    color: BRAND_MINT_TEXT,
   },
   productName: {
     marginBottom: 4,

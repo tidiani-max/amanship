@@ -50,7 +50,7 @@ export default function VouchersScreen() {
 
   const formatDate = (date: string | Date) => {
     const dateObj = typeof date === 'string' ? new Date(date) : date;
-    return dateObj.toLocaleDateString("id-ID", {
+    return dateObj.toLocaleDateString("en-US", {
       day: "numeric",
       month: "short",
       year: "numeric",
@@ -58,131 +58,87 @@ export default function VouchersScreen() {
   };
 
   const formatDiscount = (item: any) => {
+    const value = item.discount || item.discountValue || 0;
     if (item.discountType === "percentage" || item.type === "percentage") {
-      const value = item.discount || item.discountValue;
       return `${value}% OFF`;
     }
-    const value = item.discount || item.discountValue;
-    return `Rp ${value.toLocaleString("id-ID")}`;
+    return `€${value}`;
   };
 
   const handleCopyVoucherCode = (voucher: any) => {
     Clipboard.setString(voucher.code);
-    Alert.alert(
-      'Copied! 🎉',
-      `Voucher code "${voucher.code}" copied to clipboard.\n\nUse it at checkout to get ${formatDiscount(voucher)} off!`
-    );
+    Alert.alert('Success', 'Code copied to clipboard!');
   };
 
   const renderVoucher = ({ item }: { item: any }) => (
-    <Pressable onPress={() => handleCopyVoucherCode(item)}>
-      <Card style={styles.voucherCard}>
-        <View style={styles.voucherContent}>
-          <View style={[styles.voucherBadge, { backgroundColor: item.color || theme.primary }]}>
-            <Feather name={item.icon || "tag"} size={24} color={theme.buttonText} />
-          </View>
-          <View style={styles.voucherDetails}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <ThemedText type="h3" style={{ color: item.color || theme.primary }}>
+    <Card style={styles.voucherCard}>
+      <View style={styles.voucherContent}>
+        {/* Icon Container with subtle background tint */}
+        <View style={[styles.iconContainer, { backgroundColor: theme.primary + '10' }]}>
+          <Feather name="tag" size={24} color={theme.primary} />
+        </View>
+
+        <View style={styles.voucherDetails}>
+          <View style={styles.headerRow}>
+            <View>
+              <ThemedText type="h3" style={styles.voucherTitle}>
                 {formatDiscount(item)}
               </ThemedText>
-              {item.isRamadanSpecial && (
-                <View style={styles.ramadanBadge}>
-                  <ThemedText style={{ fontSize: 10, color: '#f59e0b', fontWeight: '700' }}>
-                    🌙 RAMADAN
-                  </ThemedText>
-                </View>
-              )}
-            </View>
-            <ThemedText type="body" style={{ marginVertical: Spacing.xs }}>
-              {item.description}
-            </ThemedText>
-            <ThemedText type="small" style={{ color: theme.textSecondary }}>
-              Min. order Rp {item.minOrder.toLocaleString("id-ID")}
-            </ThemedText>
-            <View style={styles.voucherFooter}>
-              <View style={[styles.codeContainer, { backgroundColor: theme.backgroundDefault }]}>
-                <ThemedText type="caption" style={{ fontWeight: "600" }}>
-                  {item.code}
-                </ThemedText>
-                <Feather name="copy" size={12} color={theme.textSecondary} style={{ marginLeft: 6 }} />
-              </View>
-              <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                Valid until {formatDate(item.validUntil)}
+              <ThemedText style={styles.descriptionText}>
+                {item.description}
               </ThemedText>
             </View>
-            {item.usageLimit && (
-              <View style={styles.usageInfo}>
-                <Feather name="users" size={12} color="#6b7280" />
-                <ThemedText type="small" style={{ color: '#6b7280', fontSize: 11 }}>
-                  {item.usageLimit - item.usedCount} left • Max {item.userLimit} per user
-                </ThemedText>
-              </View>
-            )}
+            <Pressable onPress={() => handleCopyVoucherCode(item)} style={styles.copyBtn}>
+              <ThemedText style={[styles.copyText, { color: theme.primary }]}>COPY</ThemedText>
+            </Pressable>
           </View>
+
+          <View style={styles.metaRow}>
+            <View style={styles.storeTag}>
+              <Feather name="shopping-bag" size={10} color="#065f46" />
+              <ThemedText style={styles.storeTagText}>OFFICIAL STORE</ThemedText>
+            </View>
+            <ThemedText style={styles.expiryText}>
+              Ends {formatDate(item.validUntil)}
+            </ThemedText>
+          </View>
+
+          <View style={styles.usageBarContainer}>
+             <View style={[styles.usageBar, { width: '40%', backgroundColor: theme.primary }]} />
+          </View>
+          <ThemedText style={styles.minSpendText}>
+            Min. spend €{item.minOrder || 0}
+          </ThemedText>
         </View>
-      </Card>
-    </Pressable>
+      </View>
+    </Card>
   );
 
   const renderPromotion = ({ item }: { item: any }) => (
     <Card style={styles.voucherCard}>
       <View style={styles.voucherContent}>
-        <View style={[styles.voucherBadge, { backgroundColor: item.color || theme.primary }]}>
-          <Feather name={item.icon || "gift"} size={24} color={theme.buttonText} />
+        <View style={[styles.iconContainer, { backgroundColor: '#ecfdf5' }]}>
+          <Feather name="gift" size={24} color="#059669" />
         </View>
         <View style={styles.voucherDetails}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <ThemedText type="h3" style={{ color: item.color || theme.primary }}>
-              {item.title}
-            </ThemedText>
-            {item.isRamadanSpecial && (
-              <View style={styles.ramadanBadge}>
-                <ThemedText style={{ fontSize: 10, color: '#f59e0b', fontWeight: '700' }}>
-                  🌙 RAMADAN
-                </ThemedText>
-              </View>
-            )}
-          </View>
-          
-          <ThemedText type="body" style={{ marginVertical: Spacing.xs }}>
-            {item.description}
-          </ThemedText>
-          
-          {/* Discount info */}
-          {item.discountValue && (
-            <ThemedText type="small" style={{ color: theme.primary, fontWeight: '700' }}>
-              {formatDiscount(item)}
-            </ThemedText>
-          )}
-          
-          <ThemedText type="small" style={{ color: theme.textSecondary }}>
-            Min. order Rp {item.minOrder.toLocaleString("id-ID")}
-          </ThemedText>
-
-          {/* Store tag for store-specific promotions */}
-          {item.storeName && (
-            <View style={styles.storeTag}>
-              <Feather name="map-pin" size={10} color="#059669" />
-              <ThemedText style={styles.storeTagText}>
-                {item.storeName}
-              </ThemedText>
+          <View style={styles.headerRow}>
+            <ThemedText type="h3" style={styles.voucherTitle}>{item.title}</ThemedText>
+            <View style={styles.claimedBadge}>
+              <Feather name="check-circle" size={12} color="#059669" />
+              <ThemedText style={styles.claimedBadgeText}>Claimed</ThemedText>
             </View>
-          )}
-
-          {/* Claimed date */}
-          <View style={styles.claimedBadge}>
-            <Feather name="check-circle" size={14} color="#065f46" />
-            <ThemedText style={styles.claimedText}>
-              Claimed on {formatDate(item.claimedAt)}
-            </ThemedText>
+          </View>
+          
+          <ThemedText style={styles.descriptionText}>{item.description}</ThemedText>
+          
+          <View style={styles.storeTag}>
+            <Feather name="zap" size={10} color="#065f46" />
+            <ThemedText style={styles.storeTagText}>{item.storeName || 'PLATFORM WIDE'}</ThemedText>
           </View>
 
-          <View style={styles.voucherFooter}>
-            <ThemedText type="small" style={{ color: theme.textSecondary }}>
-              Valid until {formatDate(item.validUntil)}
-            </ThemedText>
-          </View>
+          <ThemedText style={[styles.expiryText, { marginTop: 8 }]}>
+            Used on {formatDate(item.claimedAt)}
+          </ThemedText>
         </View>
       </View>
     </Card>
@@ -192,106 +148,41 @@ export default function VouchersScreen() {
   const data = activeTab === "vouchers" ? vouchersData : claimedPromotions;
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-      {/* Tab Switcher */}
-      <View style={[styles.tabContainer, { paddingTop: headerHeight + Spacing.md }]}>
-        <Pressable
-          style={[
-            styles.tab,
-            activeTab === "vouchers" && { backgroundColor: theme.primary }
-          ]}
-          onPress={() => setActiveTab("vouchers")}
-        >
-          <Feather 
-            name="tag" 
-            size={20} 
-            color={activeTab === "vouchers" ? "white" : theme.textSecondary} 
-          />
-          <ThemedText 
-            style={[
-              styles.tabText,
-              { color: activeTab === "vouchers" ? "white" : theme.textSecondary }
-            ]}
+    <View style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+      {/* Header Tabs */}
+      <View style={[styles.tabOuterContainer, { paddingTop: headerHeight + Spacing.sm }]}>
+        <View style={styles.tabWrapper}>
+          <Pressable
+            style={[styles.tab, activeTab === "vouchers" && styles.activeTab]}
+            onPress={() => setActiveTab("vouchers")}
           >
-            Vouchers
-          </ThemedText>
-        </Pressable>
-
-        <Pressable
-          style={[
-            styles.tab,
-            activeTab === "promotions" && { backgroundColor: theme.primary }
-          ]}
-          onPress={() => setActiveTab("promotions")}
-        >
-          <Feather 
-            name="gift" 
-            size={20} 
-            color={activeTab === "promotions" ? "white" : theme.textSecondary} 
-          />
-          <ThemedText 
-            style={[
-              styles.tabText,
-              { color: activeTab === "promotions" ? "white" : theme.textSecondary }
-            ]}
+            <ThemedText style={[styles.tabLabel, activeTab === "vouchers" && styles.activeTabLabel]}>
+              Available
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.tab, activeTab === "promotions" && styles.activeTab]}
+            onPress={() => setActiveTab("promotions")}
           >
-            My Promotions
-          </ThemedText>
-        </Pressable>
+            <ThemedText style={[styles.tabLabel, activeTab === "promotions" && styles.activeTabLabel]}>
+              Claimed
+            </ThemedText>
+          </Pressable>
+        </View>
       </View>
 
-      {/* Content */}
       <FlatList
         data={data}
         renderItem={activeTab === "vouchers" ? renderVoucher : renderPromotion}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          styles.listContent,
-          {
-            paddingBottom: insets.bottom + Spacing.xl,
-          },
-        ]}
+        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          isLoading ? (
-            <View style={styles.emptyState}>
-              <ThemedText type="body" style={{ color: theme.textSecondary }}>
-                Loading...
-              </ThemedText>
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <Feather 
-                name={activeTab === "vouchers" ? "tag" : "gift"} 
-                size={48} 
-                color={theme.textSecondary} 
-              />
-              <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
-                {activeTab === "vouchers" 
-                  ? "No vouchers available" 
-                  : "No claimed promotions yet"}
-              </ThemedText>
-              <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: Spacing.xs, textAlign: 'center', paddingHorizontal: Spacing.xl }}>
-                {activeTab === "vouchers"
-                  ? "Check back later for special offers and discounts!"
-                  : "Go to the home page and claim promotions to see them here!"}
-              </ThemedText>
-            </View>
-          )
-        }
-        ListHeaderComponent={
-          data.length > 0 ? (
-            <View style={styles.headerInfo}>
-              <ThemedText type="h3" style={{ marginBottom: Spacing.xs }}>
-                {activeTab === "vouchers" ? "Available Vouchers" : "My Claimed Promotions"}
-              </ThemedText>
-              <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                {activeTab === "vouchers"
-                  ? "Tap any voucher to copy the code, then paste it at checkout"
-                  : "These promotions will automatically apply at checkout when conditions are met"}
-              </ThemedText>
-            </View>
-          ) : null
+          <View style={styles.emptyState}>
+            <Feather name="pocket" size={64} color="#D1D5DB" />
+            <ThemedText style={styles.emptyTitle}>No rewards found</ThemedText>
+            <ThemedText style={styles.emptySub}>Check back later for new deals!</ThemedText>
+          </View>
         }
       />
     </View>
@@ -299,73 +190,99 @@ export default function VouchersScreen() {
 }
 
 const styles = StyleSheet.create({
-  tabContainer: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
+  tabOuterContainer: {
+    backgroundColor: '#FFF',
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  tabWrapper: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 25,
+    padding: 4,
   },
   tab: {
     flex: 1,
-    flexDirection: 'row',
+    paddingVertical: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.xs,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-    backgroundColor: '#f3f4f6',
+    borderRadius: 21,
   },
-  tabText: {
+  activeTab: {
+    backgroundColor: '#FFF',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  tabLabel: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  activeTabLabel: {
+    color: '#000',
   },
   listContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  headerInfo: {
-    marginBottom: Spacing.lg,
+    padding: Spacing.lg,
   },
   voucherCard: {
-    marginBottom: Spacing.md,
+    backgroundColor: '#FFF',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    elevation: 0,
   },
   voucherContent: {
-    flexDirection: "row",
+    flexDirection: 'row',
   },
-  voucherBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
+  iconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   voucherDetails: {
     flex: 1,
-    marginLeft: Spacing.md,
+    marginLeft: 16,
   },
-  voucherFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: Spacing.md,
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
-  codeContainer: {
+  voucherTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  descriptionText: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 20,
+  },
+  copyBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  copyText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.xs,
-  },
-  usageInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: Spacing.xs,
-  },
-  ramadanBadge: {
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    justifyContent: 'space-between',
+    marginTop: 12,
   },
   storeTag: {
     flexDirection: 'row',
@@ -375,33 +292,61 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginTop: 4,
   },
   storeTagText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#065f46',
+    letterSpacing: 0.5,
+  },
+  expiryText: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  usageBarContainer: {
+    height: 4,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 2,
+    marginTop: 12,
+    overflow: 'hidden',
+  },
+  usageBar: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  minSpendText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 6,
+    fontWeight: '500',
   },
   claimedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#d1fae5',
+    gap: 4,
+    backgroundColor: '#ecfdf5',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginTop: Spacing.sm,
+    borderRadius: 12,
   },
-  claimedText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#065f46',
+  claimedBadgeText: {
+    color: '#059669',
+    fontSize: 12,
+    fontWeight: '700',
   },
   emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: Spacing.xxl * 2,
+    alignItems: 'center',
+    marginTop: 100,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 16,
+    color: '#1E293B',
+  },
+  emptySub: {
+    fontSize: 14,
+    color: '#64748B',
+    marginTop: 4,
   },
 });

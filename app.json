@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.jpeg",
     "scheme": "zendo",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "notification": {
       "color": "#4F46E5",
       "iosDisplayInForeground": true,
@@ -40,13 +39,12 @@
     },
     "web": {
       "output": "single",
-      "favicon": "./assets/images/favicon.jpeg"
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.jpeg",
           "imageWidth": 180,
           "resizeMode": "contain",
           "backgroundColor": "#4F46E5",

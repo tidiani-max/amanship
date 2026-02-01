@@ -3,7 +3,7 @@ import { View, StyleSheet, FlatList, Pressable, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 
 // Components & Hooks
@@ -11,17 +11,21 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { useLanguage } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
+
+// BRAND COLORS
+const BRAND_PURPLE = "#6338f2"; 
+const BRAND_MINT_TEXT = "#00bfa5";
+const STATUS_BLUE = "#3b82f6";
+const STATUS_ORANGE = "#f59e0b";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function OrdersScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { t } = useLanguage();
   const { user } = useAuth();
   const navigation = useNavigation<NavigationProp>();
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
@@ -32,10 +36,7 @@ export default function OrdersScreen() {
     queryKey: ["orders", userId], 
     queryFn: async () => {
       if (!userId) return [];
-      
-      const response = await fetch(
-       `${process.env.EXPO_PUBLIC_DOMAIN}/api/orders?userId=${userId}&role=customer`
-      );
+      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders?userId=${userId}&role=customer`);
       if (!response.ok) throw new Error("Network response was not ok");
       return response.json();
     },
@@ -46,71 +47,39 @@ export default function OrdersScreen() {
   const activeOrders = allOrders.filter((o: any) => 
     ["pending", "picking", "packing", "packed", "delivering", "created", "confirmed"].includes(o.status?.toLowerCase())
   );
-  
-  const completedOrders = allOrders.filter((o: any) => 
-    o.status === "delivered"
-  );
-
+  const completedOrders = allOrders.filter((o: any) => o.status === "delivered");
   const orders = activeTab === "active" ? activeOrders : completedOrders;
 
-  const formatPrice = (price: any) => {
-    const num = Number(price) || 0;
-    return `Rp ${num.toLocaleString("id-ID")}`;
-  };
+  const formatPrice = (price: any) => `Rp ${(Number(price) || 0).toLocaleString("id-ID")}`;
 
   const formatDate = (dateInput: Date | string) => {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-    return date.toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return date.toLocaleDateString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
+  const getStatusTheme = (status: string) => {
+    const s = status?.toLowerCase();
+    switch (s) {
       case "pending": 
-      case "confirmed": return theme.success;
-      case "picking": return theme.secondary;
-      case "packing": return theme.secondary;
-      case "packed": return theme.warning;
-      case "delivering": return theme.primary;
-      case "delivered": return theme.success;
-      default: return theme.textSecondary;
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "pending": return "PENDING";
-      case "confirmed": return "CONFIRMED";
-      case "picking": return "PICKING";
-      case "packing": return "PACKING";
-      case "packed": return "PACKED";
-      case "delivering": return "ON THE WAY";
-      case "delivered": return "DELIVERED";
-      default: return status.toUpperCase();
-    }
-  };
-
-  const handleOrderPress = (order: any) => {
-    // Only go to order detail if delivered, otherwise go to tracking
-    if (order.status === "delivered") {
-      navigation.navigate("OrderDetail", { order });
-    } else {
-      navigation.navigate("OrderTracking", { orderId: order.id });
+      case "created": return { color: "#94a3b8", icon: "clock-outline", label: "PENDING", progress: 0.2 };
+      case "confirmed": return { color: BRAND_PURPLE, icon: "check-circle-outline", label: "PREPARING", progress: 0.4 };
+      case "picking": 
+      case "packing": return { color: STATUS_BLUE, icon: "package-variant", label: "PACKING", progress: 0.6 };
+      case "packed": return { color: STATUS_ORANGE, icon: "package-variant-closed", label: "READY TO GO", progress: 0.8 };
+      case "delivering": return { color: BRAND_MINT_TEXT, icon: "flash", label: "ON THE WAY", progress: 0.95 };
+      case "delivered": return { color: "#059669", icon: "check-decagram", label: "DELIVERED", progress: 1 };
+      default: return { color: BRAND_PURPLE, icon: "dots-horizontal", label: status.toUpperCase(), progress: 0.1 };
     }
   };
 
   const renderOrder = ({ item }: { item: any }) => {
     const firstItem = item.items?.[0];
     const isActiveOrder = item.status !== "delivered";
+    const statusTheme = getStatusTheme(item.status);
 
     return (
       <Card style={styles.orderCard} onPress={() => handleOrderPress(item)}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
-          {/* IMAGE CONTAINER */}
           <View style={styles.imageContainer}>
             {firstItem?.productImage ? (
               <Image source={{ uri: firstItem.productImage }} style={styles.productImage} />
@@ -119,102 +88,50 @@ export default function OrdersScreen() {
             )}
           </View>
 
-          {/* INFO CONTAINER */}
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <ThemedText style={{ fontWeight: "700", flex: 1, marginRight: 8 }}>
-                {firstItem?.productName || "Order"}
-                {item.items?.length > 1 ? ` (+${item.items.length - 1})` : ""}
+              <ThemedText style={{ fontWeight: "800", flex: 1, marginRight: 8, fontSize: 15 }}>
+                {firstItem?.productName || "Order"}{item.items?.length > 1 ? ` (+${item.items.length - 1})` : ""}
               </ThemedText>
-              <View style={{
-                backgroundColor: getStatusColor(item.status) + '20',
-                paddingHorizontal: 8,
-                paddingVertical: 4,
-                borderRadius: 6,
-              }}>
-                <ThemedText style={{ 
-                  color: getStatusColor(item.status), 
-                  fontWeight: 'bold', 
-                  fontSize: 10 
-                }}>
-                  {getStatusLabel(item.status)}
-                </ThemedText>
+              <View style={[styles.statusBadge, { backgroundColor: statusTheme.color + '15' }]}>
+                <ThemedText style={[styles.statusBadgeText, { color: statusTheme.color }]}>{statusTheme.label}</ThemedText>
               </View>
             </View>
             
-            <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 4 }}>
-              {formatDate(item.createdAt)}
-            </ThemedText>
+            <ThemedText type="caption" style={{ color: "#94a3b8", marginTop: 4, fontWeight: "600" }}>{formatDate(item.createdAt)}</ThemedText>
             
-            {/* Status indicator for active orders */}
             {isActiveOrder && (
-              <View style={{ 
-                flexDirection: 'row', 
-                alignItems: 'center', 
-                gap: 6,
-                marginTop: 8,
-                backgroundColor: theme.primary + '10',
-                paddingHorizontal: 8,
-                paddingVertical: 6,
-                borderRadius: 6,
-                alignSelf: 'flex-start',
-              }}>
-                <Feather name="clock" size={12} color={theme.primary} />
-                <ThemedText type="small" style={{ color: theme.primary, fontWeight: '600' }}>
-                  {item.status === "confirmed" && "Getting ready..."}
-                  {item.status === "picking" && "Picking items..."}
-                  {item.status === "packing" && "Packing..."}
-                  {item.status === "packed" && "Waiting for driver"}
-                  {item.status === "delivering" && "On the way"}
-                </ThemedText>
-              </View>
-            )}
-            
-            {/* Delivery PIN Badge - Only show when delivering */}
-            {item.status === "delivering" && item.deliveryPin && (
-              <View style={{ 
-                backgroundColor: theme.warning + "20", 
-                paddingHorizontal: 10, 
-                paddingVertical: 6, 
-                borderRadius: 8,
-                marginTop: 8,
-                alignSelf: 'flex-start',
-                borderWidth: 1,
-                borderColor: theme.warning + '40',
-              }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Feather name="shield" size={12} color={theme.warning} />
-                  <ThemedText type="small" style={{ color: theme.warning, fontWeight: "bold" }}>
-                    PIN: {item.deliveryPin}
+              <View style={{ marginTop: 12 }}>
+                {/* PROGRESS BAR */}
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressBar, { width: `${statusTheme.progress * 100}%`, backgroundColor: statusTheme.color }]} />
+                </View>
+                <View style={[styles.activeIndicator, { backgroundColor: statusTheme.color + '10', marginTop: 8 }]}>
+                  <MaterialCommunityIcons name={statusTheme.icon as any} size={12} color={statusTheme.color} />
+                  <ThemedText type="small" style={{ color: statusTheme.color, fontWeight: '800', fontSize: 11 }}>
+                    {item.status === "delivering" ? "ARRIVING SOON" : "TRACKING STATUS"}
                   </ThemedText>
                 </View>
               </View>
             )}
             
-            <ThemedText style={{ fontWeight: "700", marginTop: 8, fontSize: 16 }}>
-              {formatPrice(item.total)}
-            </ThemedText>
+            {/* <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 12 }}>
+              <ThemedText style={{ fontWeight: "900", fontSize: 16, color: '#1e293b' }}>{formatPrice(item.total)}</ThemedText>
+              {!isActiveOrder && (
+                 <Pressable style={styles.reorderBtn}>
+                    <Feather name="rotate-ccw" size={12} color={BRAND_PURPLE} />
+                    <ThemedText style={styles.reorderText}>Reorder</ThemedText>
+                 </Pressable>
+              )}
+            </View> */}
           </View>
         </View>
 
-        {/* Track Order Button for active orders */}
         {isActiveOrder && (
-          <View style={{ 
-            marginTop: 12, 
-            paddingTop: 12, 
-            borderTopWidth: 1, 
-            borderTopColor: theme.border 
-          }}>
-            <View style={{ 
-              flexDirection: 'row', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              gap: 6,
-            }}>
-              <Feather name="navigation" size={14} color={theme.primary} />
-              <ThemedText style={{ color: theme.primary, fontWeight: '600', fontSize: 13 }}>
-                Track Order
-              </ThemedText>
+          <View style={styles.trackButtonContainer}>
+            <View style={styles.trackButtonInner}>
+              <Feather name="navigation" size={14} color={BRAND_PURPLE} />
+              <ThemedText style={{ color: BRAND_PURPLE, fontWeight: '800', fontSize: 13 }}>Track Order</ThemedText>
             </View>
           </View>
         )}
@@ -222,34 +139,22 @@ export default function OrdersScreen() {
     );
   };
 
+  const handleOrderPress = (order: any) => {
+    order.status === "delivered" ? navigation.navigate("OrderDetail", { order }) : navigation.navigate("OrderTracking", { orderId: order.id });
+  };
+
   return (
-    <ThemedView style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + Spacing.lg }]}>
-        <ThemedText type="h2">My Orders</ThemedText>
+    <ThemedView style={[styles.container, { backgroundColor: '#F8F9FB' }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
+        <ThemedText style={styles.headerTitle}>My Orders</ThemedText>
       </View>
       
       <View style={styles.tabsContainer}>
-        <Pressable
-          style={[styles.tab, activeTab === "active" && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
-          onPress={() => setActiveTab("active")}
-        >
-          <ThemedText type="body" style={{ 
-            fontWeight: activeTab === "active" ? "600" : "400", 
-            color: activeTab === "active" ? theme.primary : theme.textSecondary 
-          }}>
-            Active ({activeOrders.length})
-          </ThemedText>
+        <Pressable style={[styles.tab, activeTab === "active" && styles.activeTabBorder]} onPress={() => setActiveTab("active")}>
+          <ThemedText style={[styles.tabText, activeTab === "active" ? styles.activeTabText : { color: '#94a3b8' }]}>Active ({activeOrders.length})</ThemedText>
         </Pressable>
-        <Pressable
-          style={[styles.tab, activeTab === "completed" && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
-          onPress={() => setActiveTab("completed")}
-        >
-          <ThemedText type="body" style={{ 
-            fontWeight: activeTab === "completed" ? "600" : "400", 
-            color: activeTab === "completed" ? theme.primary : theme.textSecondary 
-          }}>
-            History ({completedOrders.length})
-          </ThemedText>
+        <Pressable style={[styles.tab, activeTab === "completed" && styles.activeTabBorder]} onPress={() => setActiveTab("completed")}>
+          <ThemedText style={[styles.tabText, activeTab === "completed" ? styles.activeTabText : { color: '#94a3b8' }]}>History ({completedOrders.length})</ThemedText>
         </Pressable>
       </View>
       
@@ -260,23 +165,6 @@ export default function OrdersScreen() {
         refreshing={isLoading}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 100 }]}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Feather 
-              name={activeTab === "active" ? "shopping-bag" : "check-circle"} 
-              size={48} 
-              color={theme.textSecondary} 
-            />
-            <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
-              {activeTab === "active" ? "No active orders" : "No order history"}
-            </ThemedText>
-            <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 8 }}>
-              {activeTab === "active" 
-                ? "Start shopping to see your orders here" 
-                : "Completed orders will appear here"}
-            </ThemedText>
-          </View>
-        }
       />
     </ThemedView>
   );
@@ -284,25 +172,24 @@ export default function OrdersScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md },
-  tabsContainer: { flexDirection: "row", paddingHorizontal: Spacing.lg, marginBottom: Spacing.lg },
-  tab: { flex: 1, alignItems: "center", paddingVertical: Spacing.md },
-  listContent: { paddingHorizontal: Spacing.lg, gap: Spacing.md },
-  orderCard: { marginBottom: Spacing.sm, padding: Spacing.md },
-  imageContainer: { 
-    width: 60, 
-    height: 60, 
-    borderRadius: 8, 
-    backgroundColor: '#f0f0f0', 
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
+  header: { paddingHorizontal: 24, paddingBottom: 16, backgroundColor: '#fff' },
+  headerTitle: { fontSize: 24, fontWeight: '900', color: '#1e293b' },
+  tabsContainer: { flexDirection: "row", paddingHorizontal: 24, backgroundColor: '#fff', marginBottom: 12 },
+  tab: { flex: 1, alignItems: "center", paddingVertical: 16 },
+  activeTabBorder: { borderBottomColor: BRAND_PURPLE, borderBottomWidth: 3 },
+  tabText: { fontSize: 14, fontWeight: '700' },
+  activeTabText: { color: BRAND_PURPLE },
+  listContent: { paddingHorizontal: 16, gap: 12 },
+  orderCard: { borderRadius: 24, padding: 16, backgroundColor: '#fff', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
+  imageContainer: { width: 70, height: 70, borderRadius: 18, backgroundColor: '#f1f5f9', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   productImage: { width: '100%', height: '100%' },
-  emptyState: { 
-    alignItems: "center", 
-    justifyContent: "center", 
-    marginTop: 100,
-    paddingHorizontal: 40,
-  },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  statusBadgeText: { fontWeight: '900', fontSize: 10 },
+  progressTrack: { height: 6, backgroundColor: '#f1f5f9', borderRadius: 3, overflow: 'hidden' },
+  progressBar: { height: '100%', borderRadius: 3 },
+  activeIndicator: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' },
+  trackButtonContainer: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  trackButtonInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  reorderBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND_PURPLE + '10', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
+  reorderText: { color: BRAND_PURPLE, fontSize: 12, fontWeight: '800' }
 });
