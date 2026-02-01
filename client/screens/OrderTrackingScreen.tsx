@@ -10,6 +10,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
+
 const BRAND_PURPLE = "#6338f2";
 
 type OrderTrackingRouteProp = RouteProp<RootStackParamList, "OrderTracking">;
