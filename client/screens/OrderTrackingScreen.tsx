@@ -1,40 +1,20 @@
 import React, { useEffect, useState, useRef } from "react";
-import { View, StyleSheet, ScrollView, ActivityIndicator, Linking, Pressable, Alert, Dimensions } from "react-native";
+import { View, StyleSheet, ScrollView, ActivityIndicator, Linking, Pressable, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { WebView } from 'react-native-webview';
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
-import { useTheme } from "@/hooks/useTheme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
-// BRAND COLORS
 const BRAND_PURPLE = "#6338f2"; 
-const BRAND_MINT_TEXT = "#00bfa5";
-const STATUS_BLUE = "#3b82f6";
-const STATUS_ORANGE = "#f59e0b";
+const BRAND_MINT = "#00bfa5";
 
 type OrderTrackingRouteProp = RouteProp<RootStackParamList, "OrderTracking">;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
-
-// Consistent Status Mapping with safety checks
-const getStatusTheme = (status?: string) => {
-  const s = status?.toLowerCase() || "pending";
-  switch (s) {
-    case "pending": 
-    case "created": return { color: "#94a3b8", icon: "clock-outline", label: "PENDING", progress: 0.2 };
-    case "confirmed": return { color: BRAND_PURPLE, icon: "check-circle-outline", label: "PREPARING", progress: 0.4 };
-    case "picking": 
-    case "packing": return { color: STATUS_BLUE, icon: "package-variant", label: "PACKING", progress: 0.6 };
-    case "packed": return { color: STATUS_ORANGE, icon: "package-variant-closed", label: "READY TO GO", progress: 0.8 };
-    case "delivering": return { color: BRAND_MINT_TEXT, icon: "flash", label: "ON THE WAY", progress: 0.95 };
-    case "delivered": return { color: "#059669", icon: "check-decagram", label: "DELIVERED", progress: 1 };
-    default: return { color: BRAND_PURPLE, icon: "dots-horizontal", label: s.toUpperCase(), progress: 0.1 };
-  }
-};
 
 export default function OrderTrackingScreen() {
   const insets = useSafeAreaInsets();
@@ -52,22 +32,23 @@ export default function OrderTrackingScreen() {
     refetchInterval: 3000,
   });
 
-  const statusTheme = getStatusTheme(order?.status);
+  const isSearching = !order?.driverId && (order?.status === "pending" || order?.status === "created");
+  const isOnTheWay = order?.status === "delivering";
 
   useEffect(() => {
-    if (webViewRef.current && order?.status === 'delivering') {
-      // Logic for driver movement
+    if (webViewRef.current && isOnTheWay) {
+      // Mock driver movement toward the customer lat/lng
       const driverPos = { lat: 13.7548, lng: 100.4990 }; 
       webViewRef.current.injectJavaScript(`
         if(window.updateDriverLocation) updateDriverLocation(${driverPos.lat}, ${driverPos.lng}, 45);
         true;
       `);
     }
-  }, [order?.status]);
+  }, [isOnTheWay]);
 
   if (isLoading && !order) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={BRAND_PURPLE} />
       </View>
     );
@@ -75,15 +56,14 @@ export default function OrderTrackingScreen() {
 
   return (
     <View style={styles.container}>
-      {/* PROFESSIONAL MAP SECTION */}
-      <View style={{ height: '50%', backgroundColor: '#e5e7eb' }}>
+      {/* MAP SECTION */}
+      <View style={{ height: '55%', backgroundColor: '#e5e7eb' }}>
         <WebView
           ref={webViewRef}
-          source={{ html: MAP_HTML_TEMPLATE(13.7563, 100.5018) }}
+          source={{ html: MAP_HTML_TEMPLATE(13.7563, 100.5018, isSearching) }}
           style={{ flex: 1 }}
           scrollEnabled={false}
         />
-        
         <Pressable 
           onPress={() => navigation.goBack()}
           style={[styles.backButton, { top: insets.top + 10 }]}
@@ -92,108 +72,161 @@ export default function OrderTrackingScreen() {
         </Pressable>
       </View>
 
-      {/* DRIVER INFO & STATUS SHEET */}
+      {/* BOTTOM INFO SHEET */}
       <ScrollView
         style={styles.bottomSheet}
         contentContainerStyle={{ paddingBottom: insets.bottom + 20, paddingHorizontal: 20 }}
-        showsVerticalScrollIndicator={false}
       >
         <View style={styles.handle} />
 
-        <View style={styles.headerRow}>
-           <View>
-              <ThemedText style={styles.etaText}>
-                {order?.status === 'delivering' ? '11 mins' : 'Preparing...'}
-              </ThemedText>
-              <ThemedText style={styles.subText}>Estimated arrival time</ThemedText>
-           </View>
-           <View style={[styles.statusPill, { backgroundColor: (statusTheme.color || BRAND_PURPLE) + '15' }]}>
-              <ThemedText style={{ color: statusTheme.color, fontWeight: '800', fontSize: 11 }}>
-                {statusTheme.label || "LOADING"}
-              </ThemedText>
-           </View>
-        </View>
-
-        {/* PROGRESS BAR */}
-        <View style={styles.progressContainer}>
-          <View style={styles.track}>
-            <View style={[styles.fill, { width: `${(statusTheme.progress || 0.1) * 100}%`, backgroundColor: statusTheme.color }]} />
+        {isSearching ? (
+          <View style={styles.searchingContainer}>
+            <ActivityIndicator color={BRAND_PURPLE} size="small" />
+            <ThemedText style={styles.searchingText}>Finding the nearest driver...</ThemedText>
           </View>
-        </View>
-
-        {/* DRIVER CARD */}
-        <Card style={styles.driverCard}>
-          <View style={styles.driverInfo}>
-            <View style={[styles.avatar, { backgroundColor: statusTheme.color }]}>
-              <MaterialCommunityIcons name={"motorcycle" as any} size={26} color="white" />
+        ) : (
+          <View style={styles.statusHeader}>
+            <View>
+              <ThemedText style={styles.etaText}>{isOnTheWay ? '11 mins' : 'Preparing'}</ThemedText>
+              <ThemedText style={styles.subText}>Order PIN: <ThemedText style={styles.pinText}>{order?.pin || '1234'}</ThemedText></ThemedText>
             </View>
-            <View style={{ flex: 1 }}>
-              <ThemedText style={styles.driverName}>{order?.driverName || "Zendo Courier"}</ThemedText>
-              <View style={styles.ratingRow}>
-                <Feather name="star" size={12} color="#f59e0b" fill="#f59e0b" />
-                <ThemedText style={styles.ratingText}>4.9 • Honda Vario (B 1234 ABC)</ThemedText>
-              </View>
-            </View>
-            <View style={styles.actionRow}>
-              <Pressable style={styles.circleBtn} onPress={() => order?.driverPhone && Linking.openURL(`tel:${order.driverPhone}`)}>
-                <Feather name="phone" size={20} color={BRAND_PURPLE} />
-              </Pressable>
-              <Pressable style={[styles.circleBtn, { backgroundColor: BRAND_PURPLE }]} onPress={() => navigation.navigate("Chat", { orderId: order?.id })}>
-                <Feather name="message-circle" size={20} color="white" />
-              </Pressable>
+            <View style={styles.statusBadge}>
+              <ThemedText style={styles.statusLabel}>{order?.status?.toUpperCase() || 'PENDING'}</ThemedText>
             </View>
           </View>
-        </Card>
+        )}
 
-        {/* ORDER LIST PREVIEW */}
-        <View style={styles.orderSummary}>
-            <ThemedText style={styles.sectionTitle}>Order Summary</ThemedText>
-            <ThemedText style={styles.orderIdText}>
-                Order #{order?.id ? order.id.slice(-8).toUpperCase() : '-------'}
-            </ThemedText>
-            <View style={styles.divider} />
-            {order?.items?.map((item: any, idx: number) => (
-              <View key={idx} style={styles.itemRow}>
-                <ThemedText style={styles.itemQty}>{item.quantity}x</ThemedText>
-                <ThemedText style={styles.itemName}>{item.productName}</ThemedText>
-                <ThemedText style={styles.itemPrice}>Rp {item.price?.toLocaleString() || '0'}</ThemedText>
+        {/* DRIVER INFO (Only if assigned) */}
+        {!isSearching && (
+          <Card style={styles.driverCard}>
+            <View style={styles.driverRow}>
+              <View style={styles.driverAvatar}>
+                <FontAwesome5 name="motorcycle" size={20} color="white" />
               </View>
-            ))}
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.driverName}>{order?.driverName || "Zendo Partner"}</ThemedText>
+                <ThemedText style={styles.vehicleInfo}>Honda Vario • B 1234 ABC</ThemedText>
+              </View>
+              <View style={styles.contactActions}>
+                <Pressable style={styles.iconBtn} onPress={() => Linking.openURL(`tel:${order?.driverPhone}`)}>
+                  <Feather name="phone" size={18} color={BRAND_PURPLE} />
+                </Pressable>
+                <Pressable style={[styles.iconBtn, { backgroundColor: BRAND_PURPLE }]} onPress={() => navigation.navigate("Chat", { orderId })}>
+                  <Feather name="message-circle" size={18} color="white" />
+                </Pressable>
+              </View>
+            </View>
+          </Card>
+        )}
+
+        {/* ORDER SUMMARY PRICES */}
+        <View style={styles.summarySection}>
+          <ThemedText style={styles.sectionTitle}>Order Details</ThemedText>
+          <View style={styles.priceRow}>
+            <ThemedText style={styles.priceLabel}>Subtotal</ThemedText>
+            <ThemedText style={styles.priceValue}>Rp {order?.subtotal?.toLocaleString() || '0'}</ThemedText>
+          </View>
+          <View style={styles.priceRow}>
+            <ThemedText style={styles.priceLabel}>Delivery Fee</ThemedText>
+            <ThemedText style={styles.priceValue}>Rp {order?.deliveryFee?.toLocaleString() || '10.000'}</ThemedText>
+          </View>
+          <View style={[styles.priceRow, styles.totalRow]}>
+            <ThemedText style={styles.totalLabel}>Total Amount</ThemedText>
+            <ThemedText style={styles.totalValue}>Rp {order?.totalAmount?.toLocaleString() || '0'}</ThemedText>
+          </View>
         </View>
       </ScrollView>
     </View>
   );
 }
 
-// Map template remains the same but with added safety in the update function
-const MAP_HTML_TEMPLATE = (lat: number, lng: number) => `...`; // Same as previous modern version
+const MAP_HTML_TEMPLATE = (lat: number, lng: number, isSearching: boolean) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { width: 100%; height: 100vh; }
+    .leaflet-tile-pane { filter: grayscale(100%) brightness(105%) contrast(85%); }
+    .searching-pulse {
+      width: 100px; height: 100px; background: rgba(99, 56, 242, 0.2);
+      border: 2px solid #6338f2; border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.5); opacity: 1; }
+      100% { transform: scale(2.5); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${lat}, ${lng}], 15);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
+
+    const destIcon = L.divIcon({
+      html: '<div style="background:#6338f2; width:12px; height:12px; border-radius:50%; border:3px solid white;"></div>',
+      className: ''
+    });
+    L.marker([${lat}, ${lng}], { icon: destIcon }).addTo(map);
+
+    let driverMarker = null;
+
+    if (${isSearching}) {
+      L.marker([${lat}, ${lng}], {
+        icon: L.divIcon({ html: '<div class="searching-pulse"></div>', className: '', iconSize:[100,100], iconAnchor:[50,50] })
+      }).addTo(map);
+    }
+
+    window.updateDriverLocation = (dLat, dLng, heading) => {
+      const pos = [dLat, dLng];
+      if (!driverMarker) {
+        const bikeIcon = L.divIcon({
+          html: '<img src="https://cdn-icons-png.flaticon.com/512/713/713437.png" style="width:35px; transform:rotate('+heading+'deg)"/>',
+          className: '', iconSize: [35, 35], iconAnchor: [17, 17]
+        });
+        driverMarker = L.marker(pos, { icon: bikeIcon }).addTo(map);
+      } else {
+        driverMarker.setLatLng(pos);
+      }
+      map.panTo(pos, { animate: true });
+    };
+  </script>
+</body>
+</html>
+`;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'white' },
-  backButton: { position: 'absolute', left: 20, width: 45, height: 45, backgroundColor: 'white', borderRadius: 15, justifyContent: 'center', alignItems: 'center', elevation: 10, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10 },
-  bottomSheet: { flex: 1, backgroundColor: 'white', borderTopLeftRadius: 35, borderTopRightRadius: 35, marginTop: -35, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 20, elevation: 5 },
-  handle: { width: 40, height: 5, backgroundColor: '#f1f5f9', borderRadius: 10, alignSelf: 'center', marginTop: 15 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 25, paddingHorizontal: 5 },
-  etaText: { fontSize: 28, fontWeight: '900', color: '#1e293b' },
-  subText: { color: '#94a3b8', fontSize: 14, fontWeight: '500' },
-  statusPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  progressContainer: { marginVertical: 20 },
-  track: { height: 6, backgroundColor: '#f1f5f9', borderRadius: 10 },
-  fill: { height: '100%', borderRadius: 10 },
-  driverCard: { padding: 16, borderRadius: 24, backgroundColor: '#fff', borderWidth: 1, borderColor: '#f8fafc' },
-  driverInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatar: { width: 50, height: 50, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  driverName: { fontSize: 16, fontWeight: '800', color: '#1e293b' },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  ratingText: { fontSize: 12, color: '#64748b', fontWeight: '600' },
-  actionRow: { flexDirection: 'row', gap: 10 },
-  circleBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#f5f3ff', justifyContent: 'center', alignItems: 'center' },
-  orderSummary: { marginTop: 25, paddingHorizontal: 5 },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#1e293b' },
-  orderIdText: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
-  divider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 15 },
-  itemRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  itemQty: { width: 25, color: BRAND_PURPLE, fontWeight: '800' },
-  itemName: { flex: 1, color: '#475569', fontWeight: '600' },
-  itemPrice: { fontWeight: '700', color: '#1e293b' }
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  backButton: { position: 'absolute', left: 15, width: 40, height: 40, backgroundColor: 'white', borderRadius: 20, justifyContent: 'center', alignItems: 'center', elevation: 5 },
+  bottomSheet: { flex: 1, backgroundColor: 'white', borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -30 },
+  handle: { width: 40, height: 4, backgroundColor: '#e2e8f0', borderRadius: 2, alignSelf: 'center', marginTop: 10 },
+  searchingContainer: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 25 },
+  searchingText: { fontSize: 16, fontWeight: '600', color: '#64748b' },
+  statusHeader: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },
+  etaText: { fontSize: 24, fontWeight: '800', color: '#1e293b' },
+  subText: { color: '#94a3b8', fontSize: 13 },
+  pinText: { color: BRAND_PURPLE, fontWeight: 'bold' },
+  statusBadge: { backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, height: 30 },
+  statusLabel: { fontSize: 10, fontWeight: '800', color: '#475569' },
+  driverCard: { marginTop: 20, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: '#f1f5f9' },
+  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  driverAvatar: { width: 45, height: 45, borderRadius: 12, backgroundColor: BRAND_PURPLE, justifyContent: 'center', alignItems: 'center' },
+  driverName: { fontSize: 15, fontWeight: '700' },
+  vehicleInfo: { fontSize: 12, color: '#94a3b8' },
+  contactActions: { flexDirection: 'row', gap: 8 },
+  iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#f5f3ff', justifyContent: 'center', alignItems: 'center' },
+  summarySection: { marginTop: 25 },
+  sectionTitle: { fontSize: 16, fontWeight: '800', marginBottom: 15 },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  priceLabel: { color: '#64748b' },
+  priceValue: { fontWeight: '600' },
+  totalRow: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  totalLabel: { fontSize: 16, fontWeight: '800' },
+  totalValue: { fontSize: 16, fontWeight: '800', color: BRAND_PURPLE }
 });
