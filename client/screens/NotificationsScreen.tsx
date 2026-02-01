@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { View, StyleSheet, Switch, Alert, Platform, ScrollView, Pressable, ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from 'expo-notifications';
 
@@ -11,11 +11,10 @@ import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
-import { apiRequest } from "@/lib/query-client";
 import { Spacing } from "@/constants/theme";
 import { useNotifications } from "../hooks/useNotification";
 
-
+const BRAND_PURPLE = "#6338f2";
 const NOTIFICATIONS_KEY = "@ZendO_notifications";
 
 interface NotificationSettings {
@@ -49,22 +48,19 @@ function SettingRow({
   
   return (
     <View style={styles.settingRow}>
-      <View style={[styles.iconContainer, { backgroundColor: theme.backgroundDefault }]}>
-        <Feather name={icon as any} size={20} color={theme.primary} />
+      <View style={[styles.iconCircle, { backgroundColor: BRAND_PURPLE + '10' }]}>
+        <Feather name={icon as any} size={18} color={BRAND_PURPLE} />
       </View>
       <View style={styles.settingInfo}>
-        <ThemedText type="body" style={{ fontWeight: "500" }}>
-          {title}
-        </ThemedText>
-        <ThemedText type="small" style={{ color: theme.textSecondary }}>
-          {description}
-        </ThemedText>
+        <ThemedText style={styles.settingTitle}>{title}</ThemedText>
+        <ThemedText style={styles.settingDescription}>{description}</ThemedText>
       </View>
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: theme.border, true: theme.primary + "80" }}
-        thumbColor={value ? theme.primary : theme.backgroundTertiary}
+        trackColor={{ false: '#e2e8f0', true: BRAND_PURPLE + '50' }}
+        thumbColor={value ? BRAND_PURPLE : '#f8fafc'}
+        ios_backgroundColor="#e2e8f0"
       />
     </View>
   );
@@ -78,7 +74,6 @@ export default function NotificationsScreen() {
   const { registerForPushNotifications } = useNotifications();
   const [settings, setSettings] = useState<NotificationSettings>(defaultSettings);
   const [permissionStatus, setPermissionStatus] = useState<string>("unknown");
-  const [pushToken, setPushToken] = useState<string | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -88,273 +83,122 @@ export default function NotificationsScreen() {
   const checkPermissionStatus = async () => {
     const { status } = await Notifications.getPermissionsAsync();
     setPermissionStatus(status);
-
-    if (status === 'granted') {
-      try {
-        const tokenData = await Notifications.getExpoPushTokenAsync({
-          projectId: '113ea7fa-db9e-4380-b05f-dd63a05e5632',
-        });
-        setPushToken(tokenData.data);
-      } catch (error) {
-        console.error("Failed to get push token:", error);
-      }
-    }
   };
 
   const loadSettings = async () => {
-    try {
-      const stored = await AsyncStorage.getItem(NOTIFICATIONS_KEY);
-      if (stored) {
-        setSettings(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error("Failed to load notification settings:", error);
-    }
+    const stored = await AsyncStorage.getItem(NOTIFICATIONS_KEY);
+    if (stored) setSettings(JSON.parse(stored));
   };
 
   const updateSetting = async (key: keyof NotificationSettings, value: boolean) => {
     if (value && permissionStatus !== 'granted') {
-      Alert.alert(
-        "Enable Notifications",
-        "To receive notifications, we need your permission.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Enable",
-            onPress: async () => {
-              await registerForPushNotifications();
-              await checkPermissionStatus();
-              await saveSetting(key, value);
-            },
-          },
-        ]
-      );
+      Alert.alert("Enable Access", "Please allow notifications in settings first.", [
+        { text: "Cancel" },
+        { text: "Enable", onPress: async () => {
+            await registerForPushNotifications();
+            await checkPermissionStatus();
+          }
+        }
+      ]);
       return;
     }
-
-    await saveSetting(key, value);
-  };
-
-  const saveSetting = async (key: keyof NotificationSettings, value: boolean) => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
-    
-    try {
-      await AsyncStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(newSettings));
-    } catch (error) {
-      console.error("Failed to save notification settings:", error);
-    }
-  };
-
-  const requestPermissions = async () => {
-    const { status } = await Notifications.requestPermissionsAsync();
-    setPermissionStatus(status);
-
-    if (status !== 'granted') {
-      Alert.alert(
-        "Permission Denied",
-        "You've denied notification permissions. You can enable them in your device settings.",
-        [
-          { text: "OK", style: "default" },
-          {
-            text: "Open Settings",
-            onPress: () => {
-              if (Platform.OS === 'ios') {
-                Notifications.requestPermissionsAsync();
-              }
-            },
-          },
-        ]
-      );
-    } else {
-      await registerForPushNotifications();
-      await checkPermissionStatus();
-      Alert.alert("Success", "Push notifications enabled!");
-    }
-  };
-
-  const testNotification = async () => {
-    if (permissionStatus !== 'granted') {
-      Alert.alert("Error", "Please enable notifications first");
-      return;
-    }
-
-    try {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "Test Notification 📬",
-          body: "Your notifications are working correctly!",
-          data: { test: true },
-        },
-        trigger: { 
-          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-          seconds: 2 
-        },
-      });
-
-      Alert.alert("Success", "Test notification will appear in 2 seconds");
-    } catch (error) {
-      console.error("Failed to send test notification:", error);
-      Alert.alert("Error", "Failed to send test notification");
-    }
-  };
-
-  const getStatusCardStyle = (): ViewStyle => {
-    return {
-      padding: Spacing.lg,
-      marginBottom: Spacing.md,
-      backgroundColor: permissionStatus === 'granted' 
-        ? theme.success + '15' 
-        : theme.warning + '15'
-    };
-  };
-
-  const getInfoCardStyle = (): ViewStyle => {
-    return {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: Spacing.md,
-      marginBottom: Spacing.md,
-      backgroundColor: theme.primary + '10'
-    };
+    await AsyncStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(newSettings));
   };
 
   return (
-    <ThemedView style={styles.container}>
-      {/* Header with Back Button */}
-      <View style={[styles.header, { paddingTop: insets.top + Spacing.md, borderBottomColor: theme.border }]}>
-        <Pressable 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Feather name="arrow-left" size={24} color={theme.text} />
+    <ThemedView style={[styles.container, { backgroundColor: '#F8F9FE' }]}>
+      {/* MODERN HEADER */}
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Feather name="chevron-left" size={28} color="#1e293b" />
         </Pressable>
-        <ThemedText type="h2" style={styles.headerTitle}>
-          Notifications
-        </ThemedText>
-        <View style={styles.headerRight} />
+        <ThemedText style={styles.headerTitleText}>Notification Settings</ThemedText>
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: Spacing.lg,
-            paddingBottom: insets.bottom + Spacing.xl,
-          },
-        ]}
-      >
-        {/* Permission Status Card */}
-        <Card style={getStatusCardStyle()}>
-          <View style={styles.statusRow}>
-            <Feather 
-              name={permissionStatus === 'granted' ? "check-circle" : "alert-circle"} 
-              size={24} 
-              color={permissionStatus === 'granted' ? theme.success : theme.warning}
-            />
-            <View style={{ flex: 1, marginLeft: Spacing.md }}>
-              <ThemedText type="body" style={{ fontWeight: '600' }}>
-                {permissionStatus === 'granted' ? "Notifications Enabled" : "Notifications Disabled"}
-              </ThemedText>
-              <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 4 }}>
-                {permissionStatus === 'granted' 
-                  ? "You'll receive updates about your orders"
-                  : "Enable to receive order and delivery updates"
-                }
-              </ThemedText>
-            </View>
+      <ScrollView style={styles.scrollView} contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 20 }}>
+        
+        {/* STATUS CARD */}
+        <Card 
+  style={StyleSheet.flatten([
+    styles.statusCard, 
+    { borderColor: permissionStatus === 'granted' ? '#10b98120' : '#f59e0b20' }
+  ])}
+>
+          <View style={styles.statusIconContainer}>
+             <MaterialCommunityIcons 
+                name={permissionStatus === 'granted' ? "bell-check" : "bell-off-outline"} 
+                size={32} 
+                color={permissionStatus === 'granted' ? "#10b981" : "#f59e0b"} 
+             />
           </View>
-
+          <View style={{ flex: 1 }}>
+            <ThemedText style={styles.statusTitle}>
+                {permissionStatus === 'granted' ? "Push Notifications On" : "Notifications are Off"}
+            </ThemedText>
+            <ThemedText style={styles.statusSub}>
+                {permissionStatus === 'granted' 
+                  ? "You're getting all order & chat updates." 
+                  : "Enable access to get real-time delivery alerts."}
+            </ThemedText>
+          </View>
           {permissionStatus !== 'granted' && (
-            <Pressable 
-              style={[styles.enableButton, { backgroundColor: theme.primary }]}
-              onPress={requestPermissions}
-            >
-              <ThemedText style={{ color: 'white', fontWeight: '600' }}>
-                Enable Notifications
-              </ThemedText>
+            <Pressable style={styles.miniEnableBtn} onPress={() => registerForPushNotifications()}>
+              <ThemedText style={styles.miniEnableText}>Fix</ThemedText>
             </Pressable>
           )}
         </Card>
 
-        {/* Role-Specific Info */}
-        {user?.role && ['picker', 'driver'].includes(user.role) && (
-          <Card style={getInfoCardStyle()}>
-            <Feather name="info" size={20} color={theme.primary} />
-            <ThemedText type="small" style={{ marginLeft: Spacing.sm, flex: 1, color: theme.textSecondary }}>
-              As a {user.role}, you'll receive instant notifications for new {user.role === 'picker' ? 'orders' : 'deliveries'}
-            </ThemedText>
-          </Card>
-        )}
-
-        {/* Settings Card */}
-        <Card style={styles.card}>
+        <ThemedText style={styles.sectionLabel}>PREFERENCES</ThemedText>
+        
+        <Card style={styles.settingsCard}>
           {user?.role === 'customer' && (
-            <>
-              <SettingRow
-                icon="package"
-                title="Order Updates"
-                description="Get notified when your order status changes"
-                value={settings.orderUpdates}
-                onValueChange={(value) => updateSetting("orderUpdates", value)}
-              />
-              <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            </>
+            <SettingRow
+              icon="package"
+              title="Order Updates"
+              description="Status changes and delivery progress"
+              value={settings.orderUpdates}
+              onValueChange={(v) => updateSetting("orderUpdates", v)}
+            />
           )}
-
-          <SettingRow
-            icon="truck"
-            title="Delivery Alerts"
-            description={user?.role === 'driver' ? "New deliveries available" : "Track your delivery in real-time"}
-            value={settings.deliveryAlerts}
-            onValueChange={(value) => updateSetting("deliveryAlerts", value)}
-          />
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
           <SettingRow
             icon="message-circle"
             title="Chat Messages"
-            description="Notifications for new messages"
+            description="Alerts for new messages from your driver"
             value={settings.chatMessages}
-            onValueChange={(value) => updateSetting("chatMessages", value)}
+            onValueChange={(v) => updateSetting("chatMessages", v)}
+          />
+
+          <SettingRow
+            icon="truck"
+            title="Delivery Alerts"
+            description={user?.role === 'driver' ? "New delivery opportunities" : "Real-time location updates"}
+            value={settings.deliveryAlerts}
+            onValueChange={(v) => updateSetting("deliveryAlerts", v)}
           />
 
           {user?.role === 'customer' && (
-            <>
-              <View style={[styles.divider, { backgroundColor: theme.border }]} />
-              <SettingRow
-                icon="tag"
-                title="Promotions"
-                description="Special offers and discounts"
-                value={settings.promotions}
-                onValueChange={(value) => updateSetting("promotions", value)}
-              />
-            </>
+            <SettingRow
+              icon="percent"
+              title="Promotions"
+              description="Special offers and exclusive discounts"
+              value={settings.promotions}
+              onValueChange={(v) => updateSetting("promotions", v)}
+            />
           )}
         </Card>
 
-        {/* Test Notification Button */}
-        {permissionStatus === 'granted' && __DEV__ && (
-          <Pressable 
-            style={[styles.testButton, { borderColor: theme.border }]}
-            onPress={testNotification}
-          >
-            <Feather name="send" size={18} color={theme.primary} />
-            <ThemedText style={{ marginLeft: Spacing.sm, color: theme.primary }}>
-              Send Test Notification
-            </ThemedText>
-          </Pressable>
-        )}
+        {/* INFO PILL */}
+        <View style={[styles.infoPill, { backgroundColor: BRAND_PURPLE + '08' }]}>
+           <Feather name="info" size={14} color={BRAND_PURPLE} />
+           <ThemedText style={styles.infoPillText}>
+              System alerts regarding account security cannot be disabled.
+           </ThemedText>
+        </View>
 
-        {/* Token Display (Dev Only) */}
-        {__DEV__ && pushToken && (
-          <Card style={styles.debugCard}>
-            <ThemedText type="small" style={{ color: theme.textSecondary, fontFamily: 'monospace' }}>
-              Token: {pushToken.substring(0, 30)}...
-            </ThemedText>
-          </Card>
-        )}
       </ScrollView>
     </ThemedView>
   );
@@ -366,59 +210,47 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
+    paddingHorizontal: 16,
+    paddingBottom: 15,
+    backgroundColor: 'white',
     borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
   },
-  backButton: {
-    padding: Spacing.xs,
-    marginLeft: -Spacing.xs,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  headerRight: {
-    width: 24,
-  },
+  backBtn: { padding: 4 },
+  headerTitleText: { fontSize: 18, fontWeight: '800', color: '#1e293b' },
   scrollView: { flex: 1 },
-  content: { paddingHorizontal: Spacing.lg },
-  statusRow: { flexDirection: 'row', alignItems: 'center' },
-  enableButton: { 
-    marginTop: Spacing.md, 
-    padding: Spacing.md, 
-    borderRadius: 8, 
-    alignItems: 'center' 
+  statusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: 'white',
+    borderRadius: 24,
+    marginBottom: 25,
+    borderWidth: 1,
   },
-  card: { padding: 0, marginBottom: Spacing.md },
+  statusIconContainer: { marginRight: 15 },
+  statusTitle: { fontSize: 16, fontWeight: '800', color: '#1e293b' },
+  statusSub: { fontSize: 13, color: '#64748b', marginTop: 2 },
+  miniEnableBtn: { backgroundColor: BRAND_PURPLE, paddingHorizontal: 15, paddingVertical: 8, borderRadius: 12 },
+  miniEnableText: { color: 'white', fontWeight: '800', fontSize: 12 },
+  sectionLabel: { fontSize: 12, fontWeight: '800', color: '#94a3b8', marginBottom: 12, marginLeft: 5, letterSpacing: 1 },
+  settingsCard: { padding: 5, borderRadius: 28, backgroundColor: 'white' },
   settingRow: { 
     flexDirection: "row", 
     alignItems: "center", 
-    padding: Spacing.lg 
+    padding: 15,
   },
-  iconContainer: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    alignItems: "center", 
-    justifyContent: "center", 
-    marginRight: Spacing.md 
+  iconCircle: { 
+    width: 40, height: 40, borderRadius: 14, 
+    alignItems: "center", justifyContent: "center", marginRight: 15 
   },
-  settingInfo: { flex: 1, marginRight: Spacing.md },
-  divider: { height: 1, marginHorizontal: Spacing.lg },
-  testButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderRadius: 8,
-    marginTop: Spacing.md,
+  settingInfo: { flex: 1 },
+  settingTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b' },
+  settingDescription: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
+  infoPill: { 
+    flexDirection: 'row', alignItems: 'center', 
+    padding: 12, borderRadius: 15, marginTop: 20, 
+    gap: 8, borderStyle: 'dashed', borderWidth: 1, borderColor: BRAND_PURPLE + '30' 
   },
-  debugCard: { 
-    padding: Spacing.sm, 
-    marginTop: Spacing.md, 
-    backgroundColor: '#f5f5f5' 
-  },
+  infoPillText: { fontSize: 11, color: BRAND_PURPLE, fontWeight: '600', flex: 1 }
 });
