@@ -8,12 +8,14 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/hooks/useTheme';
 import { useCart } from '@/context/CartContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Message {
   id: string;
@@ -41,6 +43,8 @@ interface GroceryChatBotProps {
 export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryChatBotProps) {
   const { theme } = useTheme();
   const { addToCart } = useCart();
+  const insets = useSafeAreaInsets();
+  
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -54,7 +58,9 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
 
   useEffect(() => {
     if (visible) {
-      scrollRef.current?.scrollToEnd({ animated: true });
+      setTimeout(() => {
+        scrollRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     }
   }, [messages, visible]);
 
@@ -167,118 +173,139 @@ Rules:
     });
   };
 
-  if (!visible) return null;
-
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={100}
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
     >
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.cardBackground }]}>
-        <LinearGradient colors={['#6366f1', '#8b5cf6']} style={styles.headerIcon}>
-          <Feather name="message-circle" size={20} color="white" />
-        </LinearGradient>
-        <ThemedText style={styles.headerTitle}>AI Grocery Assistant</ThemedText>
-        <Pressable onPress={onClose} style={styles.closeBtn}>
-          <Feather name="x" size={24} color={theme.text} />
-        </Pressable>
-      </View>
-
-      {/* Messages */}
-      <ScrollView
-        ref={scrollRef}
-        style={styles.messages}
-        contentContainerStyle={styles.messagesContent}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
       >
-        {messages.map((msg) => (
-          <View
-            key={msg.id}
-            style={[
-              styles.messageBubble,
-              msg.role === 'user' ? styles.userBubble : styles.aiBubble,
-            ]}
-          >
-            <ThemedText
+        {/* Header */}
+        <View 
+          style={[
+            styles.header, 
+            { 
+              backgroundColor: theme.cardBackground,
+              paddingTop: insets.top + 16,
+            }
+          ]}
+        >
+          <LinearGradient colors={['#6366f1', '#8b5cf6']} style={styles.headerIcon}>
+            <Feather name="message-circle" size={20} color="white" />
+          </LinearGradient>
+          <ThemedText style={styles.headerTitle}>AI Grocery Assistant</ThemedText>
+          <Pressable onPress={onClose} style={styles.closeBtn}>
+            <Feather name="x" size={24} color={theme.text} />
+          </Pressable>
+        </View>
+
+        {/* Messages */}
+        <ScrollView
+          ref={scrollRef}
+          style={styles.messages}
+          contentContainerStyle={styles.messagesContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {messages.map((msg) => (
+            <View
+              key={msg.id}
               style={[
-                styles.messageText,
-                msg.role === 'user' && { color: 'white' },
+                styles.messageBubble,
+                msg.role === 'user' ? styles.userBubble : styles.aiBubble,
               ]}
             >
-              {msg.content}
-            </ThemedText>
-
-            {/* Add to Cart Button */}
-            {msg.products && msg.products.length > 0 && (
-              <Pressable
-                style={styles.addToCartBtn}
-                onPress={() => handleAddProducts(msg.products!)}
+              <ThemedText
+                style={[
+                  styles.messageText,
+                  msg.role === 'user' && { color: 'white' },
+                ]}
               >
-                <LinearGradient
-                  colors={['#10b981', '#059669']}
-                  style={styles.addToCartGradient}
+                {msg.content}
+              </ThemedText>
+
+              {/* Add to Cart Button */}
+              {msg.products && msg.products.length > 0 && (
+                <Pressable
+                  style={styles.addToCartBtn}
+                  onPress={() => handleAddProducts(msg.products!)}
                 >
-                  <Feather name="shopping-cart" size={16} color="white" />
-                  <ThemedText style={styles.addToCartText}>
-                    Add {msg.products.length} items to cart
-                  </ThemedText>
-                </LinearGradient>
-              </Pressable>
-            )}
-          </View>
-        ))}
+                  <LinearGradient
+                    colors={['#10b981', '#059669']}
+                    style={styles.addToCartGradient}
+                  >
+                    <Feather name="shopping-cart" size={16} color="white" />
+                    <ThemedText style={styles.addToCartText}>
+                      Add {msg.products.length} items to cart
+                    </ThemedText>
+                  </LinearGradient>
+                </Pressable>
+              )}
+            </View>
+          ))}
 
-        {loading && (
-          <View style={styles.loadingBubble}>
-            <ActivityIndicator color="#6366f1" />
-            <ThemedText style={styles.loadingText}>AI is thinking...</ThemedText>
-          </View>
-        )}
-      </ScrollView>
+          {loading && (
+            <View style={styles.loadingBubble}>
+              <ActivityIndicator color="#6366f1" />
+              <ThemedText style={styles.loadingText}>AI is thinking...</ThemedText>
+            </View>
+          )}
+        </ScrollView>
 
-      {/* Input */}
-      <View style={[styles.inputContainer, { backgroundColor: theme.cardBackground }]}>
-        <TextInput
-          style={[styles.input, { color: theme.text }]}
-          placeholder="What do you want to cook?"
-          placeholderTextColor={theme.textSecondary}
-          value={input}
-          onChangeText={setInput}
-          multiline
-          maxLength={200}
-        />
-        <Pressable
-          onPress={handleSend}
-          disabled={loading || !input.trim()}
-          style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]}
+        {/* Input - Fixed to bottom with safe area */}
+        <View 
+          style={[
+            styles.inputContainer, 
+            { 
+              backgroundColor: theme.cardBackground,
+              paddingBottom: insets.bottom > 0 ? insets.bottom : 16,
+            }
+          ]}
         >
-          <LinearGradient colors={['#6366f1', '#8b5cf6']} style={styles.sendBtnGradient}>
-            <Feather name="send" size={18} color="white" />
-          </LinearGradient>
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
+          <TextInput
+            style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundDefault }]}
+            placeholder="What do you want to cook?"
+            placeholderTextColor={theme.textSecondary}
+            value={input}
+            onChangeText={setInput}
+            multiline
+            maxLength={200}
+          />
+          <Pressable
+            onPress={handleSend}
+            disabled={loading || !input.trim()}
+            style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]}
+          >
+            <LinearGradient colors={['#6366f1', '#8b5cf6']} style={styles.sendBtnGradient}>
+              <Feather name="send" size={18} color="white" />
+            </LinearGradient>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 9999,
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 3,
   },
   headerIcon: {
     width: 36,
@@ -294,19 +321,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   closeBtn: {
-    padding: 4,
+    padding: 8,
+    borderRadius: 20,
   },
   messages: {
     flex: 1,
   },
   messagesContent: {
     padding: 16,
-    gap: 12,
+    paddingBottom: 24,
   },
   messageBubble: {
     maxWidth: '80%',
-    padding: 12,
-    borderRadius: 16,
+    padding: 14,
+    borderRadius: 18,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   userBubble: {
     alignSelf: 'flex-end',
@@ -317,64 +351,87 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
   },
   messageText: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 22,
   },
   addToCartBtn: {
     marginTop: 12,
     borderRadius: 12,
     overflow: 'hidden',
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   addToCartGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
   },
   addToCartText: {
     color: 'white',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
   loadingBubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     alignSelf: 'flex-start',
     backgroundColor: '#f3f4f6',
-    padding: 12,
-    borderRadius: 16,
+    padding: 14,
+    borderRadius: 18,
+    marginBottom: 12,
   },
   loadingText: {
     fontSize: 14,
     color: '#6b7280',
+    fontWeight: '500',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
     gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 5,
   },
   input: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
+    minHeight: 44,
     maxHeight: 100,
-    paddingVertical: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   sendBtn: {
-    borderRadius: 20,
+    borderRadius: 22,
     overflow: 'hidden',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sendBtnDisabled: {
     opacity: 0.5,
   },
   sendBtnGradient: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
