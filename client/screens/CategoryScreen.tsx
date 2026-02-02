@@ -337,6 +337,7 @@ const renderProduct = ({ item }: { item: UIProduct }) => {
             paddingTop: Spacing.md,
             paddingBottom: insets.bottom + Spacing.xl + 80,
           }}
+          
           columnWrapperStyle={{ gap: Spacing.md }}
           ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
           showsVerticalScrollIndicator={false}

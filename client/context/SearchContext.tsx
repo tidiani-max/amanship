@@ -1,66 +1,72 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { useDebounce } from '@/hooks/useDebounce';
+import React, { createContext, useContext, useState, useRef } from 'react';
 
-export type SearchScope = 'global' | 'history' | 'cart' | 'deals';
+export type SearchScope = 'global' | 'category' | 'history' | 'deals' | 'profile';
 
-export interface SearchContextType {
-  globalQuery: string;
-  setGlobalQuery: (query: string) => void;
-  debouncedQuery: string;
-  clearSearch: () => void;
+interface SearchContextType {
+  // Search state
   isSearchActive: boolean;
   setIsSearchActive: (active: boolean) => void;
+  
+  // Search scope (which page we're searching from)
   searchScope: SearchScope;
   setSearchScope: (scope: SearchScope) => void;
+  
+  // Search query
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  
+  // Reference to home screen search input (for auto-focus)
+  homeSearchRef: React.RefObject<any> | null;
+  setHomeSearchRef: (ref: React.RefObject<any> | null) => void;
+  
+  // Category-specific search context
+  activeCategoryId: string | null;
+  setActiveCategoryId: (id: string | null) => void;
+  
+  // Methods
+  triggerSearch: () => void;
+  clearSearch: () => void;
 }
 
 const SearchContext = createContext<SearchContextType | undefined>(undefined);
 
-interface SearchProviderProps {
-  children: ReactNode;
-}
-
-export function SearchProvider({ children }: SearchProviderProps) {
-  const [globalQuery, setGlobalQuery] = useState<string>('');
-  const [isSearchActive, setIsSearchActive] = useState<boolean>(false);
+export function SearchProvider({ children }: { children: React.ReactNode }) {
+  const [isSearchActive, setIsSearchActive] = useState(false);
   const [searchScope, setSearchScope] = useState<SearchScope>('global');
-  
-  // Debounce the search query by 300ms
-  const debouncedQuery = useDebounce(globalQuery, 300);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [homeSearchRef, setHomeSearchRef] = useState<React.RefObject<any> | null>(null);
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
 
-  const clearSearch = useCallback(() => {
-    setGlobalQuery('');
+  const triggerSearch = () => {
+    setIsSearchActive(true);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
     setIsSearchActive(false);
-  }, []);
-
-  // Auto-clear search when changing scopes
-  useEffect(() => {
-    if (searchScope !== 'global') {
-      setGlobalQuery('');
-    }
-  }, [searchScope]);
+  };
 
   const value: SearchContextType = {
-    globalQuery,
-    setGlobalQuery,
-    debouncedQuery,
-    clearSearch,
     isSearchActive,
     setIsSearchActive,
     searchScope,
     setSearchScope,
+    searchQuery,
+    setSearchQuery,
+    homeSearchRef,
+    setHomeSearchRef,
+    activeCategoryId,
+    setActiveCategoryId,
+    triggerSearch,
+    clearSearch,
   };
 
-  return (
-    <SearchContext.Provider value={value}>
-      {children}
-    </SearchContext.Provider>
-  );
+  return <SearchContext.Provider value={value}>{children}</SearchContext.Provider>;
 }
 
-export function useSearch(): SearchContextType {
+export function useSearch() {
   const context = useContext(SearchContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useSearch must be used within SearchProvider');
   }
   return context;

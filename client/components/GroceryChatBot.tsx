@@ -78,53 +78,32 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
     setLoading(true);
 
     try {
-      // Build product catalog for Claude
+      // Build product catalog for AI
       const productCatalog = availableProducts
         .map((p) => `${p.name} (${p.brand}) - ${p.category} - ID: ${p.id}`)
         .join('\n');
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [
-            {
-              role: 'user',
-              content: `You are a helpful grocery shopping assistant. The user wants to cook something.
+      // ✅ FIXED: Call YOUR backend API instead of Anthropic directly
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/chatbot/grocery-assistant`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userMessage: userMessage.content,
+            productCatalog: productCatalog,
+          }),
+        }
+      );
 
-Available products in store:
-${productCatalog}
-
-User request: "${userMessage.content}"
-
-Your task:
-1. Understand what they want to cook
-2. Find matching products from the available list
-3. Respond in a friendly, helpful way
-4. At the end, provide a JSON list of products to add to cart
-
-Format your response like this:
-[Your friendly message here]
-
-PRODUCTS_TO_ADD:
-[{"id": "product-id", "name": "Product Name", "quantity": 1}]
-
-Rules:
-- Only suggest products that exist in the available list
-- Be realistic about quantities (e.g., 1 milk, 2 eggs means 2 cartons)
-- If a product isn't available, suggest alternatives
-- Keep quantities reasonable for one recipe`,
-            },
-          ],
-        }),
-      });
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
 
       const data = await response.json();
-      const aiResponse = data.content?.[0]?.text || 'Sorry, I had trouble understanding that.';
+      const aiResponse = data.content || 'Sorry, I had trouble understanding that.';
 
       // Parse products from response
       let productsToAdd: Array<{ id: string; name: string; quantity: number }> = [];

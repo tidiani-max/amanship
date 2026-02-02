@@ -64,7 +64,6 @@ export default function RootStackNavigator() {
   const { isAuthenticated, user } = useAuth(); 
   const Stack = createNativeStackNavigator<RootStackParamList>();
 
-
   if (isLoading) return null;
 
   return (
@@ -78,41 +77,23 @@ export default function RootStackNavigator() {
           {() => <PhoneSignupScreen onComplete={() => {}} />}
         </Stack.Screen>
       ) : (
-        /* PHASE 3: ROLE-BASED PROTECTED APP */
         <>
-          {/* --- ADMIN STACK --- */}
+          {/* --- ADMIN / PICKER / DRIVER STACKS --- */}
           {user?.role === 'admin' && (
-            <Stack.Screen 
-              name="AdminDashboard" 
-              component={AdminDashboardScreen}
-              options={{ headerShown: false }}
-            />
+            <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} options={{ headerShown: false }} />
           )}
-
-          {/* --- PICKER STACK --- */}
           {user?.role === 'picker' && (
-            <Stack.Screen 
-              name="PickerDashboard" 
-              component={PickerDashboardScreen}
-              options={{ headerShown: false }}
-            />
+            <Stack.Screen name="PickerDashboard" component={PickerDashboardScreen} options={{ headerShown: false }} />
           )}
-
-          {/* --- DRIVER STACK --- */}
           {user?.role === 'driver' && (
-            <Stack.Screen 
-              name="DriverDashboard" 
-              component={DriverDashboardScreen}
-              options={{ headerShown: false }}
-            />
+            <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} options={{ headerShown: false }} />
           )}
 
           {/* --- REGULAR USER STACK --- */}
           {(!user?.role || user?.role === 'user' || user?.role === 'customer') && (
             <>
               <Stack.Screen name="Main" component={MainTabNavigator} options={{ headerShown: false }} />
-              <Stack.Screen name="Category" component={CategoryScreen} />
-              <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+              {/* REMOVED: Category and ProductDetail from here */}
               <Stack.Screen name="Cart" component={CartScreen} />
               <Stack.Screen name="Checkout" component={CheckoutScreen} />
               <Stack.Screen name="OrderSuccess" component={OrderSuccessScreen} options={{ headerShown: false }} />
@@ -123,23 +104,11 @@ export default function RootStackNavigator() {
             </>
           )}
 
-          {/* --- SHARED SCREENS (Available to ALL roles) --- */}
-          <Stack.Screen 
-            name="Chat" 
-            component={ChatScreen} 
-            options={{ headerTitle: "Chat with Rider" }} 
-          />
-          
+          {/* --- SHARED SCREENS --- */}
+          <Stack.Screen name="Chat" component={ChatScreen} options={{ headerTitle: "Chat with Rider" }} />
           <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
           <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
-          
-          {/* ✅ FIX: Hide header for Notifications screen */}
-          <Stack.Screen 
-            name="Notifications" 
-            component={NotificationsScreen}
-            options={{ headerShown: false }}
-          />
-          
+          <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ headerShown: false }} />
           <Stack.Screen name="Language" component={LanguageScreen} />
           <Stack.Screen name="About" component={AboutScreen} />
           <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />

@@ -3,7 +3,7 @@ import { View, StyleSheet, Pressable } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useNavigation, NavigationState } from "@react-navigation/native";
+import { useNavigation, NavigationState, getFocusedRouteNameFromRoute } from "@react-navigation/native";
 
 import HomeStackNavigator from "@/navigation/HomeStackNavigator";
 import OrdersScreen from "@/screens/OrdersScreen";
@@ -13,43 +13,68 @@ import { useSearch, SearchScope } from "@/context/SearchContext";
 
 const Tab = createBottomTabNavigator();
 
-// Type guard to safely get route name
-function getCurrentRouteName(state: NavigationState | undefined): string {
-  if (!state) return 'HomeTab';
+// Helper to get the deepest active route name in navigation state
+function getActiveRouteName(state: NavigationState | undefined): string {
+  if (!state) return 'Home';
   
   const route = state.routes[state.index];
-  if (!route) return 'HomeTab';
+  if (!route) return 'Home';
   
-  return route.name || 'HomeTab';
+  // If this route has nested state, recurse
+  if (route.state) {
+    return getActiveRouteName(route.state as NavigationState);
+  }
+  
+  return route.name;
 }
 
 export default function MainTabNavigator() {
   const navigation = useNavigation();
-  const { setIsSearchActive, setSearchScope } = useSearch();
+  const { 
+    setIsSearchActive, 
+    setSearchScope, 
+    homeSearchRef,
+    setActiveCategoryId,
+    searchScope,
+  } = useSearch();
 
   const handleSearchPress = () => {
-    // Get current route name safely
     const state = navigation.getState();
-    const routeName = getCurrentRouteName(state);
+    const activeRouteName = getActiveRouteName(state);
 
-    console.log("🔍 Search pressed from:", routeName);
+    console.log("🔍 Search pressed from route:", activeRouteName);
 
-    // Map route names to search scopes
+    // HOME SCREEN BEHAVIOR - Focus existing search bar
+    if (activeRouteName === 'Home') {
+      if (homeSearchRef?.current) {
+        console.log("✅ Focusing home search bar");
+        homeSearchRef.current.focus();
+      } else {
+        console.warn('⚠️ Home search ref not available');
+      }
+      return;
+    }
+
+    // CATEGORY SCREEN BEHAVIOR - Search within category
+    if (activeRouteName === 'Category') {
+      setSearchScope('category');
+      setIsSearchActive(true);
+      return;
+    }
+
+    // OTHER SCREENS BEHAVIOR - Show overlay with appropriate scope
     const scopeMap: Record<string, SearchScope> = {
-      'HomeTab': 'global',
       'HistoryTab': 'history',
       'DealsTab': 'deals',
+      'AccountTab': 'profile',
     };
 
-    // Get scope or default to global
-    const scope = scopeMap[routeName] || 'global';
-    
-    // Set search state
+    const scope = scopeMap[activeRouteName] || 'global';
     setSearchScope(scope);
     setIsSearchActive(true);
 
     // Navigate to home if on unsupported screen
-    if (!scopeMap[routeName]) {
+    if (!scopeMap[activeRouteName] && activeRouteName !== 'Home' && activeRouteName !== 'Category') {
       navigation.navigate("HomeTab" as never);
     }
   };
