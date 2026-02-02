@@ -26,6 +26,11 @@ export interface TranslationKeys {
     yes: string;
     no: string;
     ok: string;
+    add: string;
+    remove: string;
+    update: string;
+    submit: string;
+    proceed: string;
   };
 
   // Account Screen
@@ -100,6 +105,9 @@ export interface TranslationKeys {
     snacks: string;
     household: string;
     personal: string;
+    searchPlaceholder: string;
+    noResults: string;
+    noResultsDescription: string;
   };
 
   // Products
@@ -114,6 +122,14 @@ export interface TranslationKeys {
     reviews: string;
     rating: string;
     noReviews: string;
+    addToBasket: string;
+    totalPrice: string;
+    currentLocation: string;
+    nutritionFacts: string;
+    labelThisPlace: string;
+    noteForDriver: string;
+    premiumSelection: string;
+    stockAvailable: string;
   };
 
   // Cart
@@ -163,6 +179,9 @@ export interface TranslationKeys {
     reorder: string;
     noOrders: string;
     noOrdersDescription: string;
+    history: string;
+    trackingStatus: string;
+    arrivingSoon: string;
     
     status: {
       pending: string;
@@ -172,6 +191,13 @@ export interface TranslationKeys {
       outForDelivery: string;
       delivered: string;
       cancelled: string;
+      created: string;
+      picking: string;
+      packing: string;
+      packed: string;
+      delivering: string;
+      readyToGo: string;
+      onTheWay: string;
     };
   };
 
@@ -189,6 +215,17 @@ export interface TranslationKeys {
     beingPrepared: string;
     outForDelivery: string;
     delivered: string;
+    pickingItems: string;
+    readyForPickup: string;
+    onTheWay: string;
+    searchingForDriver: string;
+    yourDeliveryLocation: string;
+    driverAt: string;
+    orderSummary: string;
+    totalPayment: string;
+    kmAway: string;
+    arrivingSoon: string;
+    pin: string;
   };
 
   // Profile
@@ -228,6 +265,27 @@ export interface TranslationKeys {
     orderUpdate: string;
     promotion: string;
     system: string;
+    settings: string;
+    orderUpdates: string;
+    orderUpdatesDesc: string;
+    chatMessages: string;
+    chatMessagesDesc: string;
+    chatMessagesDescDriver: string;
+    deliveryAlerts: string;
+    deliveryAlertsDesc: string;
+    deliveryAlertsDescDriver: string;
+    promotions: string;
+    promotionsDesc: string;
+    pushNotificationsOn: string;
+    notificationsOff: string;
+    pushStatusOn: string;
+    pushStatusOff: string;
+    enableAccess: string;
+    enableAccessMessage: string;
+    enable: string;
+    fix: string;
+    preferences: string;
+    securityNote: string;
   };
 
   // Language Settings
@@ -258,6 +316,18 @@ export interface TranslationKeys {
     country: string;
     saveAddress: string;
     deleteConfirm: string;
+    deliveryAddress: string;
+    currentLocation: string;
+    useGPS: string;
+    useGPSDesc: string;
+    orSearch: string;
+    searchPlaceholder: string;
+    labelPlace: string;
+    labelPlaceholder: string;
+    noteForDriver: string;
+    noteForDriverPlaceholder: string;
+    savedAddress: string;
+    confirmDeliveryAddress: string;
   };
 
   // Voice Order
@@ -272,6 +342,12 @@ export interface TranslationKeys {
     confirm: string;
     tryAgain: string;
     cancel: string;
+    itemsDetected: string;
+    reviewAndEdit: string;
+    noItems: string;
+    goBack: string;
+    totalValue: string;
+    addAllToCart: string;
   };
 
   // Vouchers
@@ -289,6 +365,12 @@ export interface TranslationKeys {
     minPurchase: string;
     termsAndConditions: string;
     noVouchers: string;
+    myRewards: string;
+    history: string;
+    copy: string;
+    copied: string;
+    voucherReady: string;
+    noVouchersFound: string;
   };
 
   // Help Center
@@ -357,6 +439,20 @@ export interface TranslationKeys {
     markComplete: string;
     itemsList: string;
     scanBarcode: string;
+    inventory: string;
+    realTimeSync: string;
+    addProduct: string;
+    editProduct: string;
+    newProduct: string;
+    productName: string;
+    productNamePlaceholder: string;
+    pricePlaceholder: string;
+    tapToUpload: string;
+    saveProduct: string;
+    discardChanges: string;
+    noProductsFound: string;
+    productAdded: string;
+    productUpdated: string;
   };
 
   // Driver Dashboard
@@ -383,6 +479,10 @@ export interface TranslationKeys {
     sessionExpired: string;
     tryAgain: string;
     somethingWrong: string;
+    couldNotAddToCart: string;
+    couldNotGetLocation: string;
+    couldNotSaveAddress: string;
+    saveFailed: string;
   };
 
   // Success Messages
@@ -394,7 +494,8 @@ export interface TranslationKeys {
     profileUpdated: string;
     paymentSuccess: string;
   };
-    // Order Success Screen
+
+  // Order Success Screen
   orderSuccess: {
     title: string;
     orderConfirmed: string;
@@ -403,6 +504,29 @@ export interface TranslationKeys {
     backToHome: string;
   };
 
+  // Order Receipt
+  receipt: {
+    printReceipt: string;
+    orderInformation: string;
+    orderNumber: string;
+    orderId: string;
+    date: string;
+    store: string;
+    customerDetails: string;
+    name: string;
+    phone: string;
+    email: string;
+    orderItems: string;
+    product: string;
+    quantity: string;
+    subtotal: string;
+    deliveryFee: string;
+    total: string;
+    thankYou: string;
+    trustedService: string;
+    printFailed: string;
+    sharingNotAvailable: string;
+  };
 }
 
 export const translations: Record<Language, TranslationKeys> = {
@@ -428,6 +552,11 @@ export const translations: Record<Language, TranslationKeys> = {
       yes: "Yes",
       no: "No",
       ok: "OK",
+      add: "Add",
+      remove: "Remove",
+      update: "Update",
+      submit: "Submit",
+      proceed: "Proceed",
     },
 
     account: {
@@ -497,6 +626,9 @@ export const translations: Record<Language, TranslationKeys> = {
       snacks: "Snacks",
       household: "Household",
       personal: "Personal Care",
+      searchPlaceholder: "Search categories...",
+      noResults: "No results found",
+      noResultsDescription: "Try a different search term",
     },
 
     products: {
@@ -510,6 +642,14 @@ export const translations: Record<Language, TranslationKeys> = {
       reviews: "Reviews",
       rating: "Rating",
       noReviews: "No reviews yet",
+      addToBasket: "Add to Basket",
+      totalPrice: "Total Price",
+      currentLocation: "Current Location",
+      nutritionFacts: "Nutrition Facts",
+      labelThisPlace: "Label This Place",
+      noteForDriver: "Note for Driver (Optional)",
+      premiumSelection: "Premium Selection",
+      stockAvailable: "IN STOCK",
     },
 
     cart: {
@@ -556,15 +696,25 @@ export const translations: Record<Language, TranslationKeys> = {
       reorder: "Reorder",
       noOrders: "No orders yet",
       noOrdersDescription: "Your orders will appear here",
+      history: "History",
+      trackingStatus: "TRACKING STATUS",
+      arrivingSoon: "ARRIVING SOON",
       
       status: {
-        pending: "Pending",
-        confirmed: "Confirmed",
-        preparing: "Preparing",
+        pending: "PENDING",
+        confirmed: "PREPARING",
+        preparing: "PREPARING",
         ready: "Ready for Pickup",
         outForDelivery: "Out for Delivery",
-        delivered: "Delivered",
+        delivered: "DELIVERED",
         cancelled: "Cancelled",
+        created: "PENDING",
+        picking: "PACKING",
+        packing: "PACKING",
+        packed: "READY TO GO",
+        delivering: "ON THE WAY",
+        readyToGo: "READY TO GO",
+        onTheWay: "ON THE WAY",
       },
     },
 
@@ -581,6 +731,17 @@ export const translations: Record<Language, TranslationKeys> = {
       beingPrepared: "Being Prepared",
       outForDelivery: "Out for Delivery",
       delivered: "Delivered",
+      pickingItems: "Picking Items",
+      readyForPickup: "Ready for Pickup",
+      onTheWay: "On the Way",
+      searchingForDriver: "Searching for driver...",
+      yourDeliveryLocation: "Your delivery location",
+      driverAt: "Driver at:",
+      orderSummary: "Order Summary",
+      totalPayment: "Total Payment",
+      kmAway: "km away",
+      arrivingSoon: "Arriving Soon",
+      pin: "PIN",
     },
 
     profile: {
@@ -618,6 +779,27 @@ export const translations: Record<Language, TranslationKeys> = {
       orderUpdate: "Order Update",
       promotion: "Promotion",
       system: "System",
+      settings: "Notification Settings",
+      orderUpdates: "Order Updates",
+      orderUpdatesDesc: "Status changes and delivery progress",
+      chatMessages: "Chat Messages",
+      chatMessagesDesc: "Alerts for new messages from your driver",
+      chatMessagesDescDriver: "Alerts for new messages from customers",
+      deliveryAlerts: "Delivery Alerts",
+      deliveryAlertsDesc: "Real-time location updates",
+      deliveryAlertsDescDriver: "New delivery opportunities",
+      promotions: "Promotions",
+      promotionsDesc: "Special offers and exclusive discounts",
+      pushNotificationsOn: "Push Notifications On",
+      notificationsOff: "Notifications are Off",
+      pushStatusOn: "You're getting all order & chat updates.",
+      pushStatusOff: "Enable access to get real-time delivery alerts.",
+      enableAccess: "Enable Access",
+      enableAccessMessage: "Please allow notifications in settings first.",
+      enable: "Enable",
+      fix: "Fix",
+      preferences: "PREFERENCES",
+      securityNote: "System alerts regarding account security cannot be disabled.",
     },
 
     language: {
@@ -646,6 +828,18 @@ export const translations: Record<Language, TranslationKeys> = {
       country: "Country",
       saveAddress: "Save Address",
       deleteConfirm: "Are you sure you want to delete this address?",
+      deliveryAddress: "Delivery Address",
+      currentLocation: "Current Location",
+      useGPS: "Use GPS for precise delivery",
+      useGPSDesc: "Use GPS for precise delivery",
+      orSearch: "OR SEARCH",
+      searchPlaceholder: "Search area, street or landmark...",
+      labelPlace: "Label This Place",
+      labelPlaceholder: "e.g. Home, My Office, Mom's House",
+      noteForDriver: "Note for Driver (Optional)",
+      noteForDriverPlaceholder: "Gate code, building color, floor number...",
+      savedAddress: "Saved Address",
+      confirmDeliveryAddress: "Confirm Delivery Address",
     },
 
     voiceOrder: {
@@ -659,6 +853,12 @@ export const translations: Record<Language, TranslationKeys> = {
       confirm: "Confirm Order",
       tryAgain: "Try Again",
       cancel: "Cancel",
+      itemsDetected: "Items Detected",
+      reviewAndEdit: "Review and edit before adding to cart.",
+      noItems: "No items in this voice order.",
+      goBack: "Go Back",
+      totalValue: "Total Value",
+      addAllToCart: "Add All to Cart",
     },
 
     vouchers: {
@@ -675,6 +875,12 @@ export const translations: Record<Language, TranslationKeys> = {
       minPurchase: "Minimum Purchase",
       termsAndConditions: "Terms & Conditions",
       noVouchers: "No vouchers available",
+      myRewards: "My Rewards",
+      history: "History",
+      copy: "COPY",
+      copied: "Copied",
+      voucherReady: "Voucher code ready to use!",
+      noVouchersFound: "No vouchers found",
     },
 
     help: {
@@ -738,6 +944,20 @@ export const translations: Record<Language, TranslationKeys> = {
       markComplete: "Mark Complete",
       itemsList: "Items List",
       scanBarcode: "Scan Barcode",
+      inventory: "Inventory",
+      realTimeSync: "Real-time Sync Active",
+      addProduct: "Add",
+      editProduct: "Edit",
+      newProduct: "New Product",
+      productName: "Product Name",
+      productNamePlaceholder: "e.g. Indomie Goreng",
+      pricePlaceholder: "e.g. 3500",
+      tapToUpload: "Tap to upload photo",
+      saveProduct: "Save Product",
+      discardChanges: "Discard Changes",
+      noProductsFound: "No products found",
+      productAdded: "Product Added",
+      productUpdated: "Product Updated",
     },
 
     driver: {
@@ -762,6 +982,10 @@ export const translations: Record<Language, TranslationKeys> = {
       sessionExpired: "Session expired. Please sign in again.",
       tryAgain: "Please try again",
       somethingWrong: "Something went wrong",
+      couldNotAddToCart: "Could not add to cart",
+      couldNotGetLocation: "Could not get current location.",
+      couldNotSaveAddress: "Could not save address.",
+      saveFailed: "Save failed",
     },
 
     success: {
@@ -772,7 +996,8 @@ export const translations: Record<Language, TranslationKeys> = {
       profileUpdated: "Profile updated successfully",
       paymentSuccess: "Payment successful",
     },
-        orderSuccess: {
+
+    orderSuccess: {
       title: "Order Successful",
       orderConfirmed: "Your order has been confirmed",
       minutes: "minutes",
@@ -780,6 +1005,28 @@ export const translations: Record<Language, TranslationKeys> = {
       backToHome: "Back to Home",
     },
 
+    receipt: {
+      printReceipt: "🖨️ Print Receipt",
+      orderInformation: "Order Information",
+      orderNumber: "Order Number",
+      orderId: "Order ID",
+      date: "Date",
+      store: "Store",
+      customerDetails: "Customer Details",
+      name: "Name",
+      phone: "Phone",
+      email: "Email",
+      orderItems: "Order Items",
+      product: "Product",
+      quantity: "Qty",
+      subtotal: "Subtotal",
+      deliveryFee: "Delivery Fee",
+      total: "TOTAL",
+      thankYou: "Thank you for your order!",
+      trustedService: "AmanMart - Your trusted quick delivery service",
+      printFailed: "Failed to print receipt",
+      sharingNotAvailable: "Sharing is not available on this device",
+    },
   },
 
   id: {
@@ -804,6 +1051,11 @@ export const translations: Record<Language, TranslationKeys> = {
       yes: "Ya",
       no: "Tidak",
       ok: "OK",
+      add: "Tambah",
+      remove: "Hapus",
+      update: "Perbarui",
+      submit: "Kirim",
+      proceed: "Lanjutkan",
     },
 
     account: {
@@ -873,6 +1125,9 @@ export const translations: Record<Language, TranslationKeys> = {
       snacks: "Camilan",
       household: "Rumah Tangga",
       personal: "Perawatan Pribadi",
+      searchPlaceholder: "Cari kategori...",
+      noResults: "Tidak ada hasil",
+      noResultsDescription: "Coba kata kunci lain",
     },
 
     products: {
@@ -886,6 +1141,14 @@ export const translations: Record<Language, TranslationKeys> = {
       reviews: "Ulasan",
       rating: "Rating",
       noReviews: "Belum ada ulasan",
+      addToBasket: "Tambah ke Keranjang",
+      totalPrice: "Total Harga",
+      currentLocation: "Lokasi Saat Ini",
+      nutritionFacts: "Informasi Nutrisi",
+      labelThisPlace: "Beri Label Tempat Ini",
+      noteForDriver: "Catatan untuk Pengemudi (Opsional)",
+      premiumSelection: "Pilihan Premium",
+      stockAvailable: "TERSEDIA",
     },
 
     cart: {
@@ -932,15 +1195,25 @@ export const translations: Record<Language, TranslationKeys> = {
       reorder: "Pesan Lagi",
       noOrders: "Belum ada pesanan",
       noOrdersDescription: "Pesanan Anda akan muncul di sini",
+      history: "Riwayat",
+      trackingStatus: "STATUS PELACAKAN",
+      arrivingSoon: "SEGERA TIBA",
       
       status: {
-        pending: "Menunggu",
-        confirmed: "Dikonfirmasi",
-        preparing: "Sedang Disiapkan",
+        pending: "MENUNGGU",
+        confirmed: "MENYIAPKAN",
+        preparing: "MENYIAPKAN",
         ready: "Siap Diambil",
         outForDelivery: "Sedang Dikirim",
-        delivered: "Terkirim",
+        delivered: "TERKIRIM",
         cancelled: "Dibatalkan",
+        created: "MENUNGGU",
+        picking: "MENGEMAS",
+        packing: "MENGEMAS",
+        packed: "SIAP DIKIRIM",
+        delivering: "DALAM PERJALANAN",
+        readyToGo: "SIAP DIKIRIM",
+        onTheWay: "DALAM PERJALANAN",
       },
     },
 
@@ -957,6 +1230,17 @@ export const translations: Record<Language, TranslationKeys> = {
       beingPrepared: "Sedang Disiapkan",
       outForDelivery: "Sedang Dikirim",
       delivered: "Terkirim",
+      pickingItems: "Mengambil Item",
+      readyForPickup: "Siap untuk Dijemput",
+      onTheWay: "Dalam Perjalanan",
+      searchingForDriver: "Mencari pengemudi...",
+      yourDeliveryLocation: "Lokasi pengiriman Anda",
+      driverAt: "Pengemudi di:",
+      orderSummary: "Ringkasan Pesanan",
+      totalPayment: "Total Pembayaran",
+      kmAway: "km jauhnya",
+      arrivingSoon: "Segera Tiba",
+      pin: "PIN",
     },
 
     profile: {
@@ -994,6 +1278,27 @@ export const translations: Record<Language, TranslationKeys> = {
       orderUpdate: "Update Pesanan",
       promotion: "Promosi",
       system: "Sistem",
+      settings: "Pengaturan Notifikasi",
+      orderUpdates: "Update Pesanan",
+      orderUpdatesDesc: "Perubahan status dan progres pengiriman",
+      chatMessages: "Pesan Chat",
+      chatMessagesDesc: "Peringatan untuk pesan baru dari pengemudi Anda",
+      chatMessagesDescDriver: "Peringatan untuk pesan baru dari pelanggan",
+      deliveryAlerts: "Peringatan Pengiriman",
+      deliveryAlertsDesc: "Update lokasi real-time",
+      deliveryAlertsDescDriver: "Peluang pengiriman baru",
+      promotions: "Promosi",
+      promotionsDesc: "Penawaran khusus dan diskon eksklusif",
+      pushNotificationsOn: "Notifikasi Push Aktif",
+      notificationsOff: "Notifikasi Dinonaktifkan",
+      pushStatusOn: "Anda menerima semua update pesanan & chat.",
+      pushStatusOff: "Aktifkan akses untuk mendapat peringatan pengiriman real-time.",
+      enableAccess: "Aktifkan Akses",
+      enableAccessMessage: "Silakan izinkan notifikasi di pengaturan terlebih dahulu.",
+      enable: "Aktifkan",
+      fix: "Perbaiki",
+      preferences: "PREFERENSI",
+      securityNote: "Peringatan sistem terkait keamanan akun tidak dapat dinonaktifkan.",
     },
 
     language: {
@@ -1022,6 +1327,18 @@ export const translations: Record<Language, TranslationKeys> = {
       country: "Negara",
       saveAddress: "Simpan Alamat",
       deleteConfirm: "Apakah Anda yakin ingin menghapus alamat ini?",
+      deliveryAddress: "Alamat Pengiriman",
+      currentLocation: "Lokasi Saat Ini",
+      useGPS: "Gunakan GPS untuk pengiriman yang presisi",
+      useGPSDesc: "Gunakan GPS untuk pengiriman yang presisi",
+      orSearch: "ATAU CARI",
+      searchPlaceholder: "Cari area, jalan atau landmark...",
+      labelPlace: "Beri Label Tempat Ini",
+      labelPlaceholder: "mis. Rumah, Kantor Saya, Rumah Ibu",
+      noteForDriver: "Catatan untuk Pengemudi (Opsional)",
+      noteForDriverPlaceholder: "Kode gerbang, warna bangunan, nomor lantai...",
+      savedAddress: "Alamat Tersimpan",
+      confirmDeliveryAddress: "Konfirmasi Alamat Pengiriman",
     },
 
     voiceOrder: {
@@ -1035,6 +1352,12 @@ export const translations: Record<Language, TranslationKeys> = {
       confirm: "Konfirmasi Pesanan",
       tryAgain: "Coba Lagi",
       cancel: "Batal",
+      itemsDetected: "Item Terdeteksi",
+      reviewAndEdit: "Tinjau dan edit sebelum menambahkan ke keranjang.",
+      noItems: "Tidak ada item dalam pesanan suara ini.",
+      goBack: "Kembali",
+      totalValue: "Total Nilai",
+      addAllToCart: "Tambahkan Semua ke Keranjang",
     },
 
     vouchers: {
@@ -1051,6 +1374,12 @@ export const translations: Record<Language, TranslationKeys> = {
       minPurchase: "Pembelian Minimum",
       termsAndConditions: "Syarat & Ketentuan",
       noVouchers: "Tidak ada voucher tersedia",
+      myRewards: "Hadiah Saya",
+      history: "Riwayat",
+      copy: "SALIN",
+      copied: "Disalin",
+      voucherReady: "Kode voucher siap digunakan!",
+      noVouchersFound: "Tidak ada voucher ditemukan",
     },
 
     help: {
@@ -1114,6 +1443,20 @@ export const translations: Record<Language, TranslationKeys> = {
       markComplete: "Tandai Selesai",
       itemsList: "Daftar Item",
       scanBarcode: "Pindai Barcode",
+      inventory: "Inventaris",
+      realTimeSync: "Sinkronisasi Real-time Aktif",
+      addProduct: "Tambah",
+      editProduct: "Edit",
+      newProduct: "Produk Baru",
+      productName: "Nama Produk",
+      productNamePlaceholder: "mis. Indomie Goreng",
+      pricePlaceholder: "mis. 3500",
+      tapToUpload: "Ketuk untuk unggah foto",
+      saveProduct: "Simpan Produk",
+      discardChanges: "Buang Perubahan",
+      noProductsFound: "Tidak ada produk ditemukan",
+      productAdded: "Produk Ditambahkan",
+      productUpdated: "Produk Diperbarui",
     },
 
     driver: {
@@ -1138,6 +1481,10 @@ export const translations: Record<Language, TranslationKeys> = {
       sessionExpired: "Sesi berakhir. Silakan masuk lagi.",
       tryAgain: "Silakan coba lagi",
       somethingWrong: "Terjadi kesalahan",
+      couldNotAddToCart: "Tidak dapat menambahkan ke keranjang",
+      couldNotGetLocation: "Tidak dapat mendapatkan lokasi saat ini.",
+      couldNotSaveAddress: "Tidak dapat menyimpan alamat.",
+      saveFailed: "Penyimpanan gagal",
     },
 
     success: {
@@ -1148,7 +1495,8 @@ export const translations: Record<Language, TranslationKeys> = {
       profileUpdated: "Profil berhasil diperbarui",
       paymentSuccess: "Pembayaran berhasil",
     },
-        orderSuccess: {
+
+    orderSuccess: {
       title: "Pesanan Berhasil",
       orderConfirmed: "Pesanan Anda telah dikonfirmasi",
       minutes: "menit",
@@ -1156,5 +1504,27 @@ export const translations: Record<Language, TranslationKeys> = {
       backToHome: "Kembali ke Beranda",
     },
 
+    receipt: {
+      printReceipt: "🖨️ Cetak Struk",
+      orderInformation: "Informasi Pesanan",
+      orderNumber: "Nomor Pesanan",
+      orderId: "ID Pesanan",
+      date: "Tanggal",
+      store: "Toko",
+      customerDetails: "Detail Pelanggan",
+      name: "Nama",
+      phone: "Telepon",
+      email: "Email",
+      orderItems: "Item Pesanan",
+      product: "Produk",
+      quantity: "Jml",
+      subtotal: "Subtotal",
+      deliveryFee: "Biaya Pengiriman",
+      total: "TOTAL",
+      thankYou: "Terima kasih atas pesanan Anda!",
+      trustedService: "AmanMart - Layanan pengiriman cepat terpercaya Anda",
+      printFailed: "Gagal mencetak struk",
+      sharingNotAvailable: "Berbagi tidak tersedia di perangkat ini",
+    },
   },
 };
