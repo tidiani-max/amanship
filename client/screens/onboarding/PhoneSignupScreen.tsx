@@ -16,9 +16,9 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Brand Colors
-const ZENDO_PURPLE = '#7c3aed';
-const ZENDO_LIGHT_PURPLE = '#f5f3ff';
+// Updated Brand Colors for QIKLY
+const QIKLY_BLUE = '#3a7bd5';
+const QIKLY_LIGHT_BLUE = '#f0f7ff';
 
 // ========================================
 // ALERT MODAL COMPONENT
@@ -45,7 +45,7 @@ function AlertModal({ visible, title, message, onClose, theme }: {
           <ThemedText type="body" style={{ color: theme.textSecondary, marginTop: Spacing.md }}>
             {message}
           </ThemedText>
-          <Button onPress={onClose} style={{ marginTop: Spacing.lg, backgroundColor: ZENDO_PURPLE }}>
+          <Button onPress={onClose} style={{ marginTop: Spacing.lg, backgroundColor: QIKLY_BLUE }}>
             Got it
           </Button>
         </View>
@@ -153,7 +153,8 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
       const result = await checkPhone(fullPhone);
       setIsLoading(false);
       if (!result.exists) {
-        showAlert("Account Not Found", result.message || "No account found with this number. Please sign up.");
+        showAlert("Account Not Found", result.message || "No account found. Let's create one!");
+        setMode("signup");
         return;
       }
       if (result.requiresPasswordReset) {
@@ -258,24 +259,6 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
     }
   };
 
-  const handleAppleSignIn = async () => {
-    try {
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME, 
-          AppleAuthentication.AppleAuthenticationScope.EMAIL
-        ],
-      });
-      setIsLoading(true);
-      const result = await loginWithApple(credential.user, credential.email || undefined);
-      setIsLoading(false);
-      if (result.success) onComplete();
-      else showAlert("Error", result.error || "Apple Sign-In failed");
-    } catch (e: any) {
-      if (e.code !== "ERR_REQUEST_CANCELED") showAlert("Error", "Apple Sign-In failed");
-    }
-  };
-
   if (step === "resetPassword") {
     return (
       <KeyboardAwareScrollViewCompat
@@ -284,13 +267,13 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
       >
         <View style={styles.centerWrapper}>
           <View style={styles.content}>
-            <View style={{ marginBottom: Spacing.lg, padding: Spacing.lg, backgroundColor: ZENDO_LIGHT_PURPLE, borderRadius: BorderRadius.sm }}>
-              <Feather name="lock" size={32} color={ZENDO_PURPLE} style={{ alignSelf: 'center', marginBottom: Spacing.md }} />
+            <View style={{ marginBottom: Spacing.lg, padding: Spacing.lg, backgroundColor: QIKLY_LIGHT_BLUE, borderRadius: BorderRadius.sm }}>
+              <Feather name="lock" size={32} color={QIKLY_BLUE} style={{ alignSelf: 'center', marginBottom: Spacing.md }} />
               <ThemedText type="h2" style={{ textAlign: 'center', marginBottom: Spacing.sm }}>Set Your Password</ThemedText>
             </View>
             <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]} placeholder="New Password" placeholderTextColor={theme.textSecondary} secureTextEntry value={newPassword} onChangeText={setNewPassword} />
             <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.sm }]} placeholder="Confirm Password" placeholderTextColor={theme.textSecondary} secureTextEntry value={confirmPassword} onChangeText={setConfirmPassword} />
-            <Button onPress={handleResetPassword} disabled={isLoading || !newPassword || !confirmPassword} style={{ marginTop: Spacing.lg, backgroundColor: ZENDO_PURPLE }}>
+            <Button onPress={handleResetPassword} disabled={isLoading || !newPassword || !confirmPassword} style={{ marginTop: Spacing.lg, backgroundColor: QIKLY_BLUE }}>
               {isLoading ? "Updating..." : "Set Password"}
             </Button>
           </View>
@@ -309,24 +292,24 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
         <View style={styles.content}>
           {step === "phone" && (
             <View style={styles.tabContainer}>
-              <Pressable onPress={() => { setMode("signup"); setStep("phone"); }} style={[styles.tab, mode === "signup" && { borderBottomColor: ZENDO_PURPLE }]}>
-                <ThemedText style={{ color: mode === "signup" ? ZENDO_PURPLE : theme.textSecondary, fontWeight: '600' }}>Signup</ThemedText>
+              <Pressable onPress={() => { setMode("signup"); setStep("phone"); }} style={[styles.tab, mode === "signup" && { borderBottomColor: QIKLY_BLUE }]}>
+                <ThemedText style={{ color: mode === "signup" ? QIKLY_BLUE : theme.textSecondary, fontWeight: '600' }}>Signup</ThemedText>
               </Pressable>
-              <Pressable onPress={() => { setMode("login"); setStep("phone"); }} style={[styles.tab, mode === "login" && { borderBottomColor: ZENDO_PURPLE }]}>
-                <ThemedText style={{ color: mode === "login" ? ZENDO_PURPLE : theme.textSecondary, fontWeight: '600' }}>Login</ThemedText>
+              <Pressable onPress={() => { setMode("login"); setStep("phone"); }} style={[styles.tab, mode === "login" && { borderBottomColor: QIKLY_BLUE }]}>
+                <ThemedText style={{ color: mode === "login" ? QIKLY_BLUE : theme.textSecondary, fontWeight: '600' }}>Login</ThemedText>
               </Pressable>
             </View>
           )}
 
           <ThemedText type="h2" style={styles.title}>
-            {step === "phone" && (mode === "signup" ? "Create Account" : mode === "forgot" ? "Reset Password" : "Welcome Back")}
-            {step === "password" && "Enter Password"}
-            {step === "otp" && (mode === "forgot" ? "Verify & Set Password" : "Verify Code")}
+            {step === "phone" && (mode === "signup" ? "Join Qikly" : mode === "forgot" ? "Reset Password" : "Welcome Back")}
+            {step === "password" && "Security Check"}
+            {step === "otp" && (mode === "forgot" ? "New Password" : "Verify Qikly Account")}
           </ThemedText>
 
           {sentCode && step === "otp" && (
-            <View style={[styles.codeHint, { backgroundColor: ZENDO_LIGHT_PURPLE }]}>
-              <ThemedText type="caption" style={{ color: ZENDO_PURPLE, fontWeight: '700' }}>Demo OTP: {sentCode}</ThemedText>
+            <View style={[styles.codeHint, { backgroundColor: QIKLY_LIGHT_BLUE }]}>
+              <ThemedText type="caption" style={{ color: QIKLY_BLUE, fontWeight: '700' }}>Demo OTP: {sentCode}</ThemedText>
             </View>
           )}
 
@@ -335,7 +318,7 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
               {mode === "signup" && (
                 <>
                   <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text }]} placeholder="Full Name" placeholderTextColor={theme.textSecondary} value={name} onChangeText={setName} />
-                  <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.sm }]} placeholder="Email" placeholderTextColor={theme.textSecondary} value={email} onChangeText={setEmail} keyboardType="email-address" />
+                  <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.sm }]} placeholder="Email Address" placeholderTextColor={theme.textSecondary} value={email} onChangeText={setEmail} keyboardType="email-address" />
                   <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.sm }]} placeholder="Password" placeholderTextColor={theme.textSecondary} secureTextEntry value={password} onChangeText={setPassword} />
                 </>
               )}
@@ -347,10 +330,10 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
               </View>
               {mode === "login" && (
                 <Pressable onPress={() => setMode("forgot")} style={{ alignSelf: 'flex-end', marginTop: Spacing.sm }}>
-                  <ThemedText type="caption" style={{ color: ZENDO_PURPLE }}>Forgot Password?</ThemedText>
+                  <ThemedText type="caption" style={{ color: QIKLY_BLUE }}>Forgot Password?</ThemedText>
                 </Pressable>
               )}
-              <Button onPress={handlePhoneSubmit} disabled={isLoading || phone.length < 9 || (mode === "signup" && (!name || !email || !password))} style={{ marginTop: Spacing.lg, backgroundColor: ZENDO_PURPLE }}>
+              <Button onPress={handlePhoneSubmit} disabled={isLoading || phone.length < 9 || (mode === "signup" && (!name || !email || !password))} style={{ marginTop: Spacing.lg, backgroundColor: QIKLY_BLUE }}>
                 {isLoading ? "Processing..." : "Continue"}
               </Button>
             </>
@@ -360,11 +343,11 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
             <>
               <View style={[styles.phoneDisplay, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
                 <ThemedText type="body">{fullPhone}</ThemedText>
-                <Pressable onPress={() => setStep("phone")}><Feather name="edit-2" size={16} color={ZENDO_PURPLE} /></Pressable>
+                <Pressable onPress={() => setStep("phone")}><Feather name="edit-2" size={16} color={QIKLY_BLUE} /></Pressable>
               </View>
-              <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.md }]} placeholder="Password" placeholderTextColor={theme.textSecondary} secureTextEntry value={password} onChangeText={setPassword} autoFocus />
-              <Button onPress={handlePasswordSubmit} disabled={isLoading || password.length < 4} style={{ marginTop: Spacing.lg, backgroundColor: ZENDO_PURPLE }}>
-                {isLoading ? "Logging in..." : "Login"}
+              <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginTop: Spacing.md }]} placeholder="Enter Password" placeholderTextColor={theme.textSecondary} secureTextEntry value={password} onChangeText={setPassword} autoFocus />
+              <Button onPress={handlePasswordSubmit} disabled={isLoading || password.length < 4} style={{ marginTop: Spacing.lg, backgroundColor: QIKLY_BLUE }}>
+                {isLoading ? "Signing in..." : "Sign In"}
               </Button>
             </>
           )}
@@ -375,8 +358,8 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
               {mode === "forgot" && (
                 <TextInput style={[styles.input, { backgroundColor: theme.backgroundDefault, borderColor: theme.border, color: theme.text, marginBottom: Spacing.md }]} placeholder="New Password" placeholderTextColor={theme.textSecondary} secureTextEntry value={password} onChangeText={setPassword} />
               )}
-              <Button onPress={handleVerifyOTP} disabled={otpCode.length !== 6 || isLoading || (mode === "forgot" && password.length < 4)} style={{ backgroundColor: ZENDO_PURPLE }}>
-                {isLoading ? "Verifying..." : mode === "forgot" ? "Reset Password" : "Confirm OTP"}
+              <Button onPress={handleVerifyOTP} disabled={otpCode.length !== 6 || isLoading || (mode === "forgot" && password.length < 4)} style={{ backgroundColor: QIKLY_BLUE }}>
+                {isLoading ? "Verifying..." : "Confirm & Continue"}
               </Button>
             </>
           )}
@@ -385,7 +368,7 @@ export default function PhoneSignupScreen({ onComplete }: { onComplete: () => vo
             <>
               <View style={styles.dividerContainer}>
                 <View style={[styles.divider, { backgroundColor: theme.border }]} />
-                <ThemedText type="caption" style={[styles.dividerText, { color: theme.textSecondary }]}>Or continue with</ThemedText>
+                <ThemedText type="caption" style={[styles.dividerText, { color: theme.textSecondary }]}>Or connect with</ThemedText>
                 <View style={[styles.divider, { backgroundColor: theme.border }]} />
               </View>
               <View style={styles.socialButtons}>

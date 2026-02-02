@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { View, StyleSheet, Image, Pressable, Dimensions } from "react-native";
+import { View, StyleSheet, Image, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -20,7 +20,9 @@ import { OnboardingStackParamList } from "@/navigation/OnboardingNavigator";
 
 type NavigationProp = NativeStackNavigationProp<OnboardingStackParamList, "Welcome">;
 
-const ZENDO_PURPLE = ['#4f46e5', '#7c3aed'] as const;
+// Updated to match the Qikly Logo Gradient (Cyan to Deep Blue/Purple)
+const QIKLY_GRADIENT = ['#00d2ff', '#3a7bd5'] as const;
+const BRAND_PRIMARY = '#3a7bd5';
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
@@ -45,28 +47,27 @@ export default function WelcomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* CONTENT AREA */}
       <View style={styles.centerWrapper}>
         
-        {/* LOGO POSITIONED LOWER */}
+        {/* LOGO AREA */}
         <Animated.View style={[styles.logoWrapper, animatedStyle]}>
           <View style={styles.logoOuterBorder}>
              <Image 
-                source={require("../../../assets/images/icon.jpeg")} 
+                source={require("../../../assets/images/icon.png")} 
                 style={styles.logoImage} 
-                resizeMode="cover" 
+                resizeMode="contain" 
               />
           </View>
         </Animated.View>
         
-        {/* TEXT CONTAINER WITH MORE TOP SPACING */}
+        {/* TEXT CONTENT */}
         <View style={styles.textContainer}>
             <ThemedText style={styles.tagline}>
-                send order online by Aman Mart
+                Quick Groceries by Aman Mart
             </ThemedText>
             
             <ThemedText style={[styles.description, { color: theme.textSecondary }]}>
-                Fresh groceries and essentials delivered{"\n"}to your doorstep in minutes.
+                Fresh essentials delivered from Indonesia's{"\n"}trusted shops to your door in minutes.
             </ThemedText>
         </View>
       </View>
@@ -75,7 +76,7 @@ export default function WelcomeScreen() {
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.xl }]}>
         <Pressable onPress={() => navigation.navigate("Location")}>
             <LinearGradient
-                colors={ZENDO_PURPLE}
+                colors={QIKLY_GRADIENT}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.mainBtn}
@@ -89,7 +90,7 @@ export default function WelcomeScreen() {
           style={styles.skipLink}
         >
           <ThemedText style={{ color: theme.textSecondary, fontWeight: '600' }}>
-             Already have an account? <ThemedText style={{ color: '#4f46e5', fontWeight: 'bold' }}>Login</ThemedText>
+             Already have an account? <ThemedText style={{ color: BRAND_PRIMARY, fontWeight: 'bold' }}>Login</ThemedText>
           </ThemedText>
         </Pressable>
       </View>
@@ -100,33 +101,30 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#ffffff', // Clean white background to make the logo pop
   },
   centerWrapper: {
     flex: 1,
     justifyContent: 'center', 
     alignItems: 'center',
     paddingHorizontal: Spacing.xl,
-    // Moving the whole group slightly down to avoid looking "top-heavy"
     paddingTop: 40, 
   },
   logoWrapper: {
-    // Large bottom margin to create breathing room between logo and text
     marginBottom: 60, 
   },
   logoOuterBorder: {
-    width: 180,               
-    height: 180,
-    borderRadius: 60,
+    width: 200,               
+    height: 200,
+    borderRadius: 40,
     backgroundColor: '#fff',
     overflow: 'hidden',
-    shadowColor: '#4f46e5',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.15,
-    shadowRadius: 30,
-    elevation: 15,
-    borderWidth: 6,
-    borderColor: '#fff',
+    // Shadow color updated to match blue brand
+    shadowColor: BRAND_PRIMARY,
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.1,
+    shadowRadius: 25,
+    elevation: 10,
   },
   logoImage: {
     width: '100%',
@@ -138,17 +136,17 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#4f46e5',
+    color: BRAND_PRIMARY,
     marginBottom: 15,
     textTransform: 'uppercase',
-    letterSpacing: 1.5, // Increased letter spacing for a modern look
+    letterSpacing: 2, 
     textAlign: 'center',
   },
   description: {
     textAlign: "center",
     fontSize: 16,
     lineHeight: 24,
-    paddingHorizontal: 30,
+    paddingHorizontal: 20,
     fontWeight: '500',
   },
   footer: {
@@ -156,20 +154,20 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   mainBtn: { 
-    height: 65, 
-    borderRadius: 22, 
+    height: 60, 
+    borderRadius: 18, 
     alignItems: 'center', 
     justifyContent: 'center',
-    shadowColor: '#4f46e5',
+    shadowColor: BRAND_PRIMARY,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 5,
   },
   btnText: { 
     color: '#fff', 
     fontSize: 18, 
-    fontWeight: '800' 
+    fontWeight: '700' 
   },
   skipLink: {
     alignItems: "center",

@@ -563,102 +563,102 @@ const renderProductCard = (product: UIProduct) => {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-      {/* ===== HEADER - ZENDO (CONSISTENT) ===== */}
-      <View
-        style={[
-          styles.headerContainer,
-          {
-            backgroundColor: theme.cardBackground,
-            paddingTop: insets.top + 16, 
-            paddingBottom: 20,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.08,
-            shadowRadius: 10,
-            elevation: 5,
-            zIndex: 100,
-          },
-        ]}
+    {/* ===== HEADER - QIKLY (CONSISTENT) ===== */}
+<View
+  style={[
+    styles.headerContainer,
+    {
+      backgroundColor: theme.cardBackground,
+      paddingTop: insets.top + 16, 
+      paddingBottom: 20,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 10,
+      elevation: 5,
+      zIndex: 100,
+    },
+  ]}
+>
+  <View 
+    style={{ 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      justifyContent: 'space-between', 
+      paddingHorizontal: responsivePadding 
+    }}
+  >
+    
+    {/* LEFT: Qikly LOGO (Enhanced Contrast) */}
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <LinearGradient
+        colors={['#00d2ff', '#3a7bd5']} // Qikly Gradient
+        style={{ 
+          width: 42, 
+          height: 42, 
+          borderRadius: 14, 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          marginRight: 10,
+          borderWidth: 1,
+          borderColor: 'rgba(255,255,255,0.2)'
+        }}
       >
-        <View 
-          style={{ 
-            flexDirection: 'row', 
-            alignItems: 'center', 
-            justifyContent: 'space-between', 
-            paddingHorizontal: responsivePadding 
-          }}
-        >
-          
-          {/* LEFT: ZendO LOGO (Enhanced Contrast) */}
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <LinearGradient
-              colors={['#4f46e5', '#9333ea']}
-              style={{ 
-                width: 42, 
-                height: 42, 
-                borderRadius: 14, 
-                justifyContent: 'center', 
-                alignItems: 'center', 
-                marginRight: 10,
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.2)'
-              }}
-            >
-              <ThemedText style={{ color: 'white', fontWeight: '900', fontSize: 24 }}>z</ThemedText>
-            </LinearGradient>
-            <ThemedText style={{ fontSize: 26, fontWeight: '900', letterSpacing: -0.8, color: '#1e293b' }}>
-              Zend<ThemedText style={{ fontSize: 26, fontWeight: '900', color: '#7c3aed' }}>O</ThemedText>
-            </ThemedText>
-          </View>
+        <ThemedText style={{ color: 'white', fontWeight: '900', fontSize: 24 }}>Q</ThemedText>
+      </LinearGradient>
+      <ThemedText style={{ fontSize: 26, fontWeight: '900', letterSpacing: -0.8, color: '#0f172a' }}>
+        Qikly
+      </ThemedText>
+    </View>
 
-          {/* RIGHT: LOCATION SELECTOR (High Visibility) */}
-          <Pressable 
-            style={{ 
-              flexDirection: 'row', 
-              alignItems: 'center', 
-              flexShrink: 1, 
-              marginLeft: 12,
-              backgroundColor: '#f8fafc',
-              padding: 6,
-              borderRadius: 16,
-            }} 
-            onPress={() => navigation.navigate("EditAddress")}
+    {/* RIGHT: LOCATION SELECTOR (High Visibility) */}
+    <Pressable 
+      style={{ 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        flexShrink: 1, 
+        marginLeft: 12,
+        backgroundColor: '#f1f5f9', // Slightly deeper gray for better contrast on white
+        padding: 6,
+        borderRadius: 16,
+      }} 
+      onPress={() => navigation.navigate("EditAddress")}
+    >
+      <View style={{ alignItems: 'flex-end', marginRight: 10, paddingLeft: 4 }}>
+        <ThemedText style={{ color: '#64748b', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>
+          DELIVERING TO
+        </ThemedText>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <ThemedText 
+            numberOfLines={1} 
+            style={{ fontWeight: "800", fontSize: 15, color: '#0f172a' }}
           >
-            <View style={{ alignItems: 'flex-end', marginRight: 10, paddingLeft: 4 }}>
-              <ThemedText style={{ color: '#64748b', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>
-                DELIVERING TO
-              </ThemedText>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <ThemedText 
-                  numberOfLines={1} 
-                  style={{ fontWeight: "800", fontSize: 15, color: '#0f172a' }}
-                >
-                  {getLocationDisplayName() || "Home Office"}
-                </ThemedText>
-                <Feather name="chevron-down" size={16} color="#475569" style={{ marginLeft: 2 }} />
-              </View>
-            </View>
-
-            <LinearGradient
-              colors={['#0284c7', '#3b82f6']}
-              style={{ 
-                width: 40, 
-                height: 40, 
-                borderRadius: 14, 
-                justifyContent: 'center', 
-                alignItems: 'center',
-                shadowColor: "#3b82f6",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 6,
-              }}
-            >
-              <Feather name="map-pin" size={18} color="white" />
-            </LinearGradient>
-          </Pressable>
-
+            {getLocationDisplayName() || "Home Office"}
+          </ThemedText>
+          <Feather name="chevron-down" size={16} color="#3a7bd5" style={{ marginLeft: 2 }} />
         </View>
       </View>
+
+      <LinearGradient
+        colors={['#00d2ff', '#3a7bd5']} // Consistent with brand logo
+        style={{ 
+          width: 40, 
+          height: 40, 
+          borderRadius: 14, 
+          justifyContent: 'center', 
+          alignItems: 'center',
+          shadowColor: "#3a7bd5",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 6,
+        }}
+      >
+        <Feather name="map-pin" size={18} color="white" />
+      </LinearGradient>
+    </Pressable>
+
+  </View>
+</View>
 
 
       <Animated.ScrollView

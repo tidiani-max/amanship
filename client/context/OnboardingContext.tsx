@@ -10,7 +10,8 @@ interface OnboardingContextType {
 
 const OnboardingContext = createContext<OnboardingContextType | null>(null);
 
-const ONBOARDING_STORAGE_KEY = "@kilatgo_onboarding_completed";
+// Updated key to trigger a fresh start for Qikly branding
+const ONBOARDING_STORAGE_KEY = "@qikly_onboarding_v1_completed";
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);

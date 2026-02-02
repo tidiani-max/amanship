@@ -1,30 +1,30 @@
 {
   "expo": {
-    "name": "Zendo",
-    "slug": "zendo-app",
+    "name": "Qikly",
+    "slug": "qikly-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.jpeg",
-    "scheme": "zendo",
+    "icon": "./assets/images/icon.png",
+    "scheme": "qikly",
     "userInterfaceStyle": "automatic",
     "notification": {
-      "color": "#4F46E5",
+      "color": "#3a7bd5",
       "iosDisplayInForeground": true,
       "androidMode": "default",
       "androidCollapsedTitle": "{{unread_count}} new notifications"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.zendo.app",
+      "bundleIdentifier": "com.amanmart.qikly",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Zendo needs access to your microphone for voice commands and support.",
-        "NSSpeechRecognitionUsageDescription": "Zendo uses speech recognition to help you find groceries faster.",
+        "NSMicrophoneUsageDescription": "Qikly needs access to your microphone for voice commands and support.",
+        "NSSpeechRecognitionUsageDescription": "Qikly uses speech recognition to help you find groceries faster.",
         "NSUserNotificationsUsageDescription": "We'll send you real-time updates on your delivery status.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.zendo.app",
+      "package": "com.amanmart.qikly",
       "predictiveBackGestureEnabled": true,
       "permissions": [
         "RECORD_AUDIO",
@@ -33,8 +33,8 @@
         "VIBRATE"
       ],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.jpeg",
-        "backgroundColor": "#4F46E5"
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#ffffff"
       }
     },
     "web": {
@@ -47,7 +47,7 @@
         {
           "imageWidth": 180,
           "resizeMode": "contain",
-          "backgroundColor": "#4F46E5",
+          "backgroundColor": "#ffffff",
           "dark": {
             "backgroundColor": "#0F172A"
           }
@@ -58,7 +58,7 @@
       [
         "expo-notifications",
         {
-          "color": "#4F46E5"
+          "color": "#3a7bd5"
         }
       ],
       [

@@ -14,8 +14,9 @@ import { OnboardingStackParamList } from "@/navigation/OnboardingNavigator";
 
 type NavigationProp = NativeStackNavigationProp<OnboardingStackParamList, "Location">;
 
-// Strict tuple for TypeScript
-const ZENDO_PURPLE = ['#4f46e5', '#7c3aed'] as const;
+// Match the Qikly Gradient
+const QIKLY_GRADIENT = ['#00d2ff', '#3a7bd5'] as const;
+const BRAND_PRIMARY = '#3a7bd5';
 
 export default function LocationScreen() {
   const insets = useSafeAreaInsets();
@@ -45,15 +46,13 @@ export default function LocationScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* CENTERED CONTENT TO MATCH WELCOME SCREEN */}
       <View style={styles.centerWrapper}>
-        
         <View style={styles.logoWrapper}>
           <View style={styles.logoOuterBorder}>
              <Image 
-                source={require("../../../assets/images/icon.jpeg")} 
+                source={require("../../../assets/images/icon.png")} 
                 style={styles.logoImage} 
-                resizeMode="cover" 
+                resizeMode="contain" 
               />
           </View>
         </View>
@@ -64,16 +63,16 @@ export default function LocationScreen() {
             </ThemedText>
             
             <ThemedText style={[styles.description, { color: theme.textSecondary }]}>
-                We need your location to show you nearby stores{"\n"}and ensure delivery by Aman Mart in minutes.
+                We need your location to show you nearby stores{"\n"}
+                and ensure delivery by Aman Mart in minutes.
             </ThemedText>
         </View>
       </View>
       
-      {/* FOOTER WITH GRADIENT BUTTON */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.xl }]}>
         <Pressable onPress={handleAllowLocation}>
             <LinearGradient
-                colors={ZENDO_PURPLE}
+                colors={QIKLY_GRADIENT}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.mainBtn}
@@ -96,10 +95,7 @@ export default function LocationScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
+  container: { flex: 1, backgroundColor: '#ffffff' },
   centerWrapper: {
     flex: 1,
     justifyContent: 'center', 
@@ -107,34 +103,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingTop: 40,
   },
-  logoWrapper: {
-    marginBottom: 60, // Consistent with Welcome Screen spacing
-  },
+  logoWrapper: { marginBottom: 60 },
   logoOuterBorder: {
     width: 180,               
     height: 180,
-    borderRadius: 60,
+    borderRadius: 50,
     backgroundColor: '#fff',
     overflow: 'hidden',
-    shadowColor: '#4f46e5',
+    shadowColor: BRAND_PRIMARY,
     shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.1,
     shadowRadius: 30,
-    elevation: 15,
-    borderWidth: 6,
-    borderColor: '#fff',
+    elevation: 10,
   },
-  logoImage: {
-    width: '100%',
-    height: '100%',
-  },
-  textContainer: {
-    alignItems: 'center',
-  },
+  logoImage: { width: '100%', height: '100%' },
+  textContainer: { alignItems: 'center' },
   tagline: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#4f46e5',
+    color: BRAND_PRIMARY,
     marginBottom: 15,
     textTransform: 'uppercase',
     letterSpacing: 1.5,
@@ -147,28 +134,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     fontWeight: '500',
   },
-  footer: {
-    paddingHorizontal: Spacing.xl,
-    width: '100%',
-  },
+  footer: { paddingHorizontal: Spacing.xl, width: '100%' },
   mainBtn: { 
-    height: 65, 
-    borderRadius: 22, 
+    height: 60, 
+    borderRadius: 18, 
     alignItems: 'center', 
     justifyContent: 'center',
-    shadowColor: '#4f46e5',
+    shadowColor: BRAND_PRIMARY,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },
-  btnText: { 
-    color: '#fff', 
-    fontSize: 18, 
-    fontWeight: '800' 
-  },
-  skipLink: {
-    alignItems: "center",
-    marginTop: 25,
-  },
+  btnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  skipLink: { alignItems: "center", marginTop: 25 },
 });
