@@ -3,7 +3,7 @@ import { View, StyleSheet, Pressable } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useNavigation, NavigationState, getFocusedRouteNameFromRoute } from "@react-navigation/native";
+import { useNavigation, NavigationState, CommonActions } from "@react-navigation/native";
 
 import HomeStackNavigator from "@/navigation/HomeStackNavigator";
 import OrdersScreen from "@/screens/OrdersScreen";
@@ -35,7 +35,6 @@ export default function MainTabNavigator() {
     setSearchScope, 
     homeSearchRef,
     setActiveCategoryId,
-    searchScope,
   } = useSearch();
 
   const handleSearchPress = () => {
@@ -57,25 +56,38 @@ export default function MainTabNavigator() {
 
     // CATEGORY SCREEN BEHAVIOR - Search within category
     if (activeRouteName === 'Category') {
+      console.log("🔍 Activating category search");
       setSearchScope('category');
       setIsSearchActive(true);
       return;
     }
 
-    // OTHER SCREENS BEHAVIOR - Show overlay with appropriate scope
+    // Define scope mapping for tab screens
     const scopeMap: Record<string, SearchScope> = {
+      'HomeTab': 'global',
       'HistoryTab': 'history',
       'DealsTab': 'deals',
       'AccountTab': 'profile',
     };
 
+    // Get the scope for this screen
     const scope = scopeMap[activeRouteName] || 'global';
+    
+    console.log(`🔍 Activating ${scope} search for ${activeRouteName}`);
+    
+    // Set scope first, then activate search
     setSearchScope(scope);
     setIsSearchActive(true);
 
-    // Navigate to home if on unsupported screen
+    // If we're on an unknown screen, navigate to HomeTab
     if (!scopeMap[activeRouteName] && activeRouteName !== 'Home' && activeRouteName !== 'Category') {
-      navigation.navigate("HomeTab" as never);
+      console.log("⚠️ Unknown screen, navigating to HomeTab");
+      // Use correct navigation method for tab navigator
+      navigation.dispatch(
+        CommonActions.navigate({
+          name: 'HomeTab',
+        })
+      );
     }
   };
 

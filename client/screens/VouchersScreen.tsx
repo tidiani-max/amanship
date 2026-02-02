@@ -9,6 +9,7 @@ import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 
+
 type Tab = "vouchers" | "promotions";
 
 const PURPLE_PRIMARY = "#6366F1";

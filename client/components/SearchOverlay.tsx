@@ -1,394 +1,215 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
-  TextInput,
-  StyleSheet,
+  Modal,
   Pressable,
+  StyleSheet,
   Animated,
-  Keyboard,
-  FlatList,
-  Text,
-  Image,
-  ActivityIndicator,
+  ScrollView,
+  Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { useSearch } from '@/context/SearchContext';
-import { Product, Order } from '@/types';
+
+import { SearchBar } from '@/components/SearchBar';
+import { ThemedText } from '@/components/ThemedText';
+import { useTheme } from '@/hooks/useTheme';
 
 interface SearchOverlayProps {
-  onResultPress?: (result: any) => void;
-  onClose?: () => void;
+  visible: boolean;
+  onClose: () => void;
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+  children?: React.ReactNode;
 }
 
-export default function SearchOverlay({ onResultPress, onClose }: SearchOverlayProps) {
-  const { 
-    isSearchActive, 
-    setIsSearchActive, 
-    searchQuery, 
-    setSearchQuery, 
-    searchScope,
-    activeCategoryId,
-  } = useSearch();
-
-  const [results, setResults] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const searchInputRef = useRef<TextInput>(null);
+export function SearchOverlay({
+  visible,
+  onClose,
+  value,
+  onChangeText,
+  placeholder = 'Search...',
+  children,
+}: SearchOverlayProps) {
+  const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(-50)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
 
-  // Auto-focus when overlay appears
   useEffect(() => {
-    if (isSearchActive) {
+    if (visible) {
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
           duration: 250,
           useNativeDriver: true,
         }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 50,
+          friction: 8,
+          useNativeDriver: true,
+        }),
       ]).start();
-
-      // Focus input after animation
-      setTimeout(() => {
-        searchInputRef.current?.focus();
-      }, 100);
     } else {
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 0,
-          duration: 150,
+          duration: 200,
           useNativeDriver: true,
         }),
         Animated.timing(slideAnim, {
-          toValue: -50,
-          duration: 150,
+          toValue: 50,
+          duration: 200,
           useNativeDriver: true,
         }),
       ]).start();
     }
-  }, [isSearchActive]);
+  }, [visible]);
 
-  // Search logic based on scope
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setResults([]);
-      return;
-    }
-
-    const debounceTimer = setTimeout(async () => {
-      setIsLoading(true);
-      try {
-        let endpoint = '';
-        
-        switch (searchScope) {
-          case 'category':
-            // Search within specific category
-            endpoint = `/api/category/products?categoryId=${activeCategoryId}&search=${searchQuery}`;
-            break;
-          case 'history':
-            // Search order history
-            endpoint = `/api/orders/search?query=${searchQuery}`;
-            break;
-          case 'deals':
-            // Search vouchers/promotions
-            endpoint = `/api/vouchers/search?query=${searchQuery}`;
-            break;
-          case 'global':
-          default:
-            // Global product search
-            endpoint = `/api/products/search?query=${searchQuery}`;
-            break;
-        }
-
-        const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}${endpoint}`);
-        const data = await response.json();
-        setResults(data);
-      } catch (error) {
-        console.error('Search error:', error);
-        setResults([]);
-      } finally {
-        setIsLoading(false);
-      }
-    }, 300);
-
-    return () => clearTimeout(debounceTimer);
-  }, [searchQuery, searchScope, activeCategoryId]);
-
-  const handleClose = () => {
-    setIsSearchActive(false);
-    setSearchQuery('');
-    setResults([]);
-    Keyboard.dismiss();
-    onClose?.();
-  };
-
-  const handleResultPress = (result: any) => {
-    handleClose();
-    onResultPress?.(result);
-  };
-
-  const renderResult = ({ item }: { item: any }) => {
-    // Render based on search scope
-    switch (searchScope) {
-      case 'history':
-        return (
-          <Pressable
-            style={styles.resultItem}
-            onPress={() => handleResultPress(item)}
-          >
-            <View style={styles.orderResult}>
-              <Text style={styles.orderNumber}>Order #{item.orderNumber}</Text>
-              <Text style={styles.orderDate}>
-                {new Date(item.createdAt).toLocaleDateString()}
-              </Text>
-              <Text style={styles.orderTotal}>Rp {item.total.toLocaleString('id-ID')}</Text>
-            </View>
-          </Pressable>
-        );
-      
-      case 'deals':
-        return (
-          <Pressable
-            style={styles.resultItem}
-            onPress={() => handleResultPress(item)}
-          >
-            <View style={styles.voucherResult}>
-              <Feather name="gift" size={24} color="#10b981" />
-              <View style={styles.voucherInfo}>
-                <Text style={styles.voucherCode}>{item.code}</Text>
-                <Text style={styles.voucherDescription}>{item.description}</Text>
-              </View>
-            </View>
-          </Pressable>
-        );
-      
-      default:
-        // Product result
-        return (
-          <Pressable
-            style={styles.resultItem}
-            onPress={() => handleResultPress(item)}
-          >
-            <Image
-              source={{ uri: item.image || 'https://via.placeholder.com/60' }}
-              style={styles.productImage}
-            />
-            <View style={styles.productInfo}>
-              <Text style={styles.productName} numberOfLines={2}>
-                {item.name}
-              </Text>
-              <Text style={styles.productBrand}>{item.brand}</Text>
-              <Text style={styles.productPrice}>
-                Rp {item.price.toLocaleString('id-ID')}
-              </Text>
-            </View>
-          </Pressable>
-        );
-    }
-  };
-
-  if (!isSearchActive) return null;
+  if (!visible) return null;
 
   return (
-    <Animated.View
-      style={[
-        styles.overlay,
-        {
-          opacity: fadeAnim,
-        },
-      ]}
+    <Modal
+      visible={visible}
+      animationType="none"
+      transparent
+      onRequestClose={onClose}
+      statusBarTranslucent
     >
-      <Pressable style={styles.backdrop} onPress={handleClose} />
-      
-      <Animated.View
-        style={[
-          styles.searchContainer,
-          {
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
       >
-        <View style={styles.searchBar}>
-          <Feather name="search" size={20} color="#64748b" style={styles.searchIcon} />
-          <TextInput
-            ref={searchInputRef}
-            style={styles.searchInput}
-            placeholder={`Search ${searchScope === 'category' ? 'in category' : searchScope}...`}
-            placeholderTextColor="#64748b"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoFocus
-            returnKeyType="search"
+        <Animated.View
+          style={[
+            styles.overlay,
+            {
+              opacity: fadeAnim,
+            },
+          ]}
+        >
+          {/* Backdrop */}
+          <Pressable
+            style={styles.backdrop}
+            onPress={onClose}
+            accessible={false}
           />
-          {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery('')} style={styles.clearButton}>
-              <Feather name="x-circle" size={18} color="#64748b" />
-            </Pressable>
-          )}
-          <Pressable onPress={handleClose} style={styles.closeButton}>
-            <Feather name="x" size={24} color="#64748b" />
-          </Pressable>
-        </View>
 
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#3b82f6" />
-          </View>
-        ) : results.length > 0 ? (
-          <FlatList
-            data={results}
-            keyExtractor={(item) => item.id}
-            renderItem={renderResult}
-            style={styles.resultsList}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          />
-        ) : searchQuery.length > 0 ? (
-          <View style={styles.emptyContainer}>
-            <Feather name="search" size={48} color="#64748b" />
-            <Text style={styles.emptyText}>No results found</Text>
-          </View>
-        ) : null}
-      </Animated.View>
-    </Animated.View>
+          {/* Content */}
+          <Animated.View
+            style={[
+              styles.content,
+              {
+                backgroundColor: theme.backgroundRoot,
+                paddingTop: insets.top,
+                transform: [{ translateY: slideAnim }],
+              },
+            ]}
+          >
+            {/* Header with Search Bar */}
+            <View
+              style={[
+                styles.header,
+                { 
+                  backgroundColor: theme.cardBackground,
+                  borderBottomWidth: 1,
+                  borderBottomColor: theme.border || '#e5e7eb',
+                }
+              ]}
+            >
+              <View style={styles.searchBarContainer}>
+                <View style={styles.searchInputWrapper}>
+                  <Feather name="search" size={20} color="#64748b" />
+                  <input
+                    type="text"
+                    value={value}
+                    onChange={(e) => onChangeText(e.target.value)}
+                    placeholder={placeholder}
+                    autoFocus
+                    style={{
+                      flex: 1,
+                      border: 'none',
+                      outline: 'none',
+                      fontSize: 16,
+                      marginLeft: 12,
+                      backgroundColor: 'transparent',
+                      color: theme.text,
+                    }}
+                  />
+                  {value.length > 0 && (
+                    <Pressable
+                      onPress={() => onChangeText('')}
+                      style={styles.clearButton}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Feather name="x-circle" size={18} color="#64748b" />
+                    </Pressable>
+                  )}
+                </View>
+
+                <Pressable
+                  onPress={onClose}
+                  style={styles.closeButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Feather name="x" size={24} color={theme.text} />
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Search Results */}
+            <View style={{ flex: 1 }}>
+              {children}
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  backdrop: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 1000,
   },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  content: {
+    flex: 1,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
   },
-  searchContainer: {
-    backgroundColor: '#1f2937',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    paddingTop: 60,
+  header: {
     paddingHorizontal: 16,
-    paddingBottom: 20,
-    maxHeight: '80%',
+    paddingVertical: 16,
   },
-  searchBar: {
+  searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#111827',
+    gap: 12,
+  },
+  searchInputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
     borderRadius: 12,
     paddingHorizontal: 16,
-    height: 50,
-    marginBottom: 16,
-  },
-  searchIcon: {
-    marginRight: 12,
-  },
-  searchInput: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 16,
+    height: 48,
   },
   clearButton: {
-    padding: 8,
-    marginRight: 8,
+    padding: 4,
   },
   closeButton: {
     padding: 8,
-  },
-  loadingContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  resultsList: {
-    flex: 1,
-  },
-  resultItem: {
-    backgroundColor: '#111827',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  productImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  productInfo: {
-    flex: 1,
-  },
-  productName: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  productBrand: {
-    color: '#64748b',
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  productPrice: {
-    color: '#10b981',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  orderResult: {
-    flex: 1,
-  },
-  orderNumber: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  orderDate: {
-    color: '#64748b',
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  orderTotal: {
-    color: '#10b981',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  voucherResult: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  voucherInfo: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  voucherCode: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  voucherDescription: {
-    color: '#64748b',
-    fontSize: 12,
-  },
-  emptyContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: '#64748b',
-    fontSize: 16,
-    marginTop: 16,
   },
 });
