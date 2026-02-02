@@ -9,7 +9,7 @@ export type ThemedTextProps = TextProps & {
   lightColor?: string;
   darkColor?: string;
   type?: "h1" | "h2" | "h3" | "body" | "caption" | "button" | "small" | "link";
-  noTranslate?: boolean; // Option to disable auto-translate
+  noTranslate?: boolean;
 };
 
 export function ThemedText({
@@ -45,16 +45,32 @@ export function ThemedText({
     }
   };
 
-  // Auto-translate text children
-  const translatedChildren = React.useMemo(() => {
-    if (noTranslate || typeof children !== 'string') {
+  /**
+   * SAFETY LOGIC: 
+   * 1. If noTranslate is active, return original.
+   * 2. If children isn't a string, return original.
+   * 3. If autoTranslate returns an empty result, fallback to original children.
+   */
+  const translatedChildren = useMemo(() => {
+    if (noTranslate || typeof children !== 'string' || !children.trim()) {
       return children;
     }
-    return autoTranslate(children, language);
+
+    try {
+      const result = autoTranslate(children, language);
+      // If result is null/undefined/empty, we MUST show the original children
+      return result && result.length > 0 ? result : children;
+    } catch (error) {
+      console.warn("Translation failed for:", children);
+      return children;
+    }
   }, [children, language, noTranslate]);
 
   return (
-    <Text style={[{ color: getColor() }, getTypeStyle(), style]} {...rest}>
+    <Text 
+      style={[{ color: getColor() }, getTypeStyle(), style]} 
+      {...rest}
+    >
       {translatedChildren}
     </Text>
   );

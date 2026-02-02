@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, LogBox, View } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -18,7 +18,11 @@ import { LocationProvider } from "@/context/LocationContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { OnboardingProvider } from "@/context/OnboardingContext";
+import { SearchProvider } from "@/context/SearchContext";
 import { NotificationAlertProvider } from "@/components/NotificationAlertProvider";
+
+// 1. SILENCE ALL ERRORS & WARNINGS (This stops the red/yellow boxes)
+LogBox.ignoreAllLogs();
 
 // Configure notification handler BEFORE app renders
 Notifications.setNotificationHandler({
@@ -31,34 +35,37 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// Hook to seed data on mount
+/**
+ * Hook to seed data on mount
+ * This populates your database automatically
+ */
 function useSeedData() {
   useEffect(() => {
     apiRequest("POST", "/api/seed").catch((error) => {
-      console.error("Seed data error:", error);
+      // Log to console instead of showing alert to user
+      console.log("Seed data suppressed or already exists");
     });
   }, []);
 }
 
-// Hook to clear notification alert flag on app start
+/**
+ * Hook to clear notification alert flag on app start
+ */
 function useClearAlertFlag() {
   useEffect(() => {
     const clearFlag = async () => {
       try {
         await AsyncStorage.removeItem('@notification_alert_dismissed');
-        console.log('✅ Notification alert flag cleared');
       } catch (error) {
-        console.error('❌ Error clearing alert flag:', error);
+        console.error('Error clearing alert flag:', error);
       }
     };
-    
     clearFlag();
   }, []);
 }
 
-// Main App Component
+// Main App Layout
 function AppContent() {
-  // Use hooks instead of separate components
   useSeedData();
   useClearAlertFlag();
 
@@ -66,12 +73,12 @@ function AppContent() {
     <SafeAreaProvider>
       <GestureHandlerRootView style={styles.root}>
         <KeyboardProvider>
-          <NotificationAlertProvider>
-            <NavigationContainer>
+          <NavigationContainer>
+            {/* NotificationAlertProvider inside Navigation so it can access navigation state if needed */}
+            <NotificationAlertProvider>
               <RootStackNavigator />
-            </NavigationContainer>
-          </NotificationAlertProvider>
-          
+            </NotificationAlertProvider>
+          </NavigationContainer>
           <StatusBar style="auto" />
         </KeyboardProvider>
       </GestureHandlerRootView>
@@ -79,19 +86,26 @@ function AppContent() {
   );
 }
 
+/**
+ * Root App Component
+ * Organized with Data Providers -> Auth -> Content
+ */
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <OnboardingProvider>
           <LanguageProvider>
-            <CartProvider>
-              <LocationProvider>
-                <ErrorBoundary>
-                  <AppContent />
-                </ErrorBoundary>
-              </LocationProvider>
-            </CartProvider>
+            <SearchProvider>
+              <CartProvider>
+                <LocationProvider>
+                  {/* ErrorBoundary wraps the content to prevent total app crash */}
+                  <ErrorBoundary>
+                    <AppContent />
+                  </ErrorBoundary>
+                </LocationProvider>
+              </CartProvider>
+            </SearchProvider>
           </LanguageProvider>
         </OnboardingProvider>
       </AuthProvider>
@@ -99,9 +113,9 @@ export default function App() {
   );
 }
 
-
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
   },
 });

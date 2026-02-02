@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, Pressable, ScrollView } from "react-native";
+import { View, StyleSheet, Pressable, ScrollView, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 
@@ -10,6 +10,10 @@ import { useTheme } from "@/hooks/useTheme";
 import { useLanguage } from "@/context/LanguageContext";
 import { Spacing } from "@/constants/theme";
 import { Language } from "@/constants/translations";
+
+// Brand Colors
+const PURPLE_PRIMARY = "#6366F1";
+const PURPLE_LIGHT = "#EEF2FF";
 
 interface LanguageOption {
   code: Language;
@@ -36,30 +40,36 @@ function LanguageOptionRow({
   const { theme } = useTheme();
   
   return (
-    <Pressable style={styles.languageRow} onPress={onSelect}>
+    <Pressable 
+      style={[
+        styles.languageRow, 
+        isSelected && { backgroundColor: PURPLE_LIGHT + '50' }
+      ]} 
+      onPress={onSelect}
+    >
       <View style={styles.languageInfo}>
         <View style={styles.labelRow}>
-          <ThemedText type="body" style={{ fontWeight: "500" }} noTranslate>
+          <ThemedText style={[styles.languageName, isSelected && { color: PURPLE_PRIMARY }]} noTranslate>
             {languageOption.name}
           </ThemedText>
           {isSelected ? (
-            <View style={[styles.currentBadge, { backgroundColor: theme.primary + "20" }]}>
-              <ThemedText type="small" style={{ color: theme.primary, fontWeight: "600" }}>
+            <View style={[styles.currentBadge, { backgroundColor: PURPLE_PRIMARY }]}>
+              <ThemedText style={styles.badgeText}>
                 {currentLabel}
               </ThemedText>
             </View>
           ) : null}
         </View>
-        <ThemedText type="caption" style={{ color: theme.textSecondary }} noTranslate>
+        <ThemedText style={styles.nativeName} noTranslate>
           {languageOption.nativeName}
         </ThemedText>
       </View>
       {isSelected ? (
-        <View style={[styles.checkCircle, { backgroundColor: theme.primary }]}>
-          <Feather name="check" size={16} color={theme.buttonText} />
+        <View style={[styles.checkCircle, { backgroundColor: PURPLE_PRIMARY }]}>
+          <Feather name="check" size={16} color="white" />
         </View>
       ) : (
-        <View style={[styles.emptyCircle, { borderColor: theme.border }]} />
+        <View style={[styles.emptyCircle, { borderColor: '#E2E8F0' }]} />
       )}
     </Pressable>
   );
@@ -74,21 +84,28 @@ export default function LanguageScreen() {
     await setLanguage(code);
   };
 
+  // Fixed top padding for the header area
+  const dynamicTopPadding = Platform.OS === 'ios' ? insets.top : insets.top + 10;
+
   return (
     <ThemedView style={styles.container}>
+      {/* FIXED HEADER AREA */}
+      <View style={[styles.fixedHeader, { paddingTop: dynamicTopPadding }]}>
+        <ThemedText style={styles.mainTitle}>{t.language.selectLanguage}</ThemedText>
+      </View>
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: Spacing.lg,
             paddingBottom: insets.bottom + Spacing.xl,
           },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <ThemedText type="caption" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-          {t.language.selectLanguage.toUpperCase()}
+        <ThemedText type="caption" style={[styles.sectionTitle, { color: '#94A3B8' }]}>
+          {language === 'en' ? "AVAILABLE LANGUAGES" : "BAHASA TERSEDIA"}
         </ThemedText>
         
         <Card style={styles.card}>
@@ -101,17 +118,20 @@ export default function LanguageScreen() {
                 currentLabel={t.language.current}
               />
               {index < languages.length - 1 ? (
-                <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                <View style={styles.divider} />
               ) : null}
             </View>
           ))}
         </Card>
         
-        <ThemedText type="small" style={[styles.note, { color: theme.textSecondary }]}>
-          {language === "en" 
-            ? "App will use your selected language for all content."
-            : "Aplikasi akan menggunakan bahasa yang Anda pilih untuk semua konten."}
-        </ThemedText>
+        <View style={styles.noteContainer}>
+          <Feather name="info" size={16} color={PURPLE_PRIMARY} style={{ marginBottom: 8 }} />
+          <ThemedText style={styles.note}>
+            {language === "en" 
+              ? "The app will restart or update content to reflect your selected language."
+              : "Aplikasi akan memperbarui konten sesuai dengan bahasa yang Anda pilih."}
+          </ThemedText>
+        </View>
       </ScrollView>
     </ThemedView>
   );
@@ -120,67 +140,106 @@ export default function LanguageScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  fixedHeader: {
+    backgroundColor: '#FFF',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    zIndex: 10,
+  },
+  mainTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#1E293B',
+    marginTop: 10,
   },
   scrollView: {
     flex: 1,
   },
   content: {
-    paddingHorizontal: Spacing.lg,
-    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 24,
   },
   sectionTitle: {
-    marginBottom: Spacing.sm,
-    marginLeft: Spacing.xs,
+    marginBottom: 12,
+    marginLeft: 4,
+    fontWeight: '800',
     letterSpacing: 1,
   },
   card: {
     padding: 0,
-    marginBottom: Spacing.md,
+    marginBottom: 24,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    overflow: 'hidden',
+    elevation: 0,
   },
   languageRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: Spacing.lg,
-    minHeight: 72, // Ensure consistent height
+    padding: 20,
+    minHeight: 80,
   },
   languageInfo: {
     flex: 1,
-    gap: 4,
+  },
+  languageName: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: '#1E293B',
+  },
+  nativeName: {
+    fontSize: 14,
+    color: '#64748B',
+    marginTop: 2,
   },
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
-    flexWrap: 'wrap', // Allow wrapping if needed
+    gap: 8,
   },
   currentBadge: {
-    paddingHorizontal: Spacing.sm,
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
+  },
+  badgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: 'uppercase',
   },
   checkCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: Spacing.sm,
   },
   emptyCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     borderWidth: 2,
-    marginLeft: Spacing.sm,
   },
   divider: {
     height: 1,
-    marginHorizontal: Spacing.lg,
+    backgroundColor: '#F1F5F9',
+    marginHorizontal: 20,
+  },
+  noteContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 30,
+    marginTop: 10,
   },
   note: {
     textAlign: "center",
-    marginTop: Spacing.md,
-    paddingHorizontal: Spacing.lg,
+    fontSize: 13,
+    color: '#64748B',
     lineHeight: 20,
   },
 });

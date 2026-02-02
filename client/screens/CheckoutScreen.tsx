@@ -309,9 +309,7 @@ export default function CheckoutScreen() {
         {/* Address Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <View style={styles.squircleIcon}>
-              <Feather name="map-pin" size={20} color="#4f46e5" />
-            </View>
+           
             <ThemedText style={styles.sectionTitle}>{t.checkout.deliveryAddress}</ThemedText>
           </View>
           
@@ -320,9 +318,7 @@ export default function CheckoutScreen() {
               <Feather name={isManualLocation ? "map-pin" : "navigation"} size={20} color="#4f46e5" />
             </View>
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <ThemedText style={{ fontWeight: "900", fontSize: 16 }}>
-                {isManualLocation ? "Delivery Address" : "GPS Location"}
-              </ThemedText>
+
               <ThemedText style={{ color: '#64748b', fontSize: 13 }} numberOfLines={2}>
                 {isManualLocation && manualAddress ? manualAddress : "Location detected automatically"}
               </ThemedText>

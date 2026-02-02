@@ -21,6 +21,8 @@ import { getImageUrl } from "@/lib/image-url";
 import { useAuth } from "@/context/AuthContext";
 import { Alert } from 'react-native';
 import { HeaderTitle } from "@/components/HeaderTitle";
+// Find your context imports and add useLanguage
+import { useLanguage } from "@/context/LanguageContext";
 
 
 
@@ -126,6 +128,7 @@ export default function ImprovedHomeScreen() {
   const headerOpacity = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const { items } = useCart(); 
+  const { language, t } = useLanguage();
 
   const {
     location,
@@ -433,7 +436,7 @@ export default function ImprovedHomeScreen() {
   };
 
   // ===== FIXED PRODUCT CARD RENDER FUNCTION =====
-  const renderProductCard = (product: UIProduct) => {
+const renderProductCard = (product: UIProduct) => {
     const hasDiscount = product.originalPrice && product.originalPrice > product.price;
     const discountPercent = hasDiscount 
       ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
@@ -460,7 +463,7 @@ export default function ImprovedHomeScreen() {
         ]}
         onPress={() => navigation.navigate("ProductDetail", { product })}
       >
-        {/* RED Discount Badge - ONLY ONCE */}
+        {/* Discount Badge */}
         {hasDiscount && product.inStock && (
           <View style={styles.discountBadge}>
             <ThemedText style={styles.discountText} noTranslate>
@@ -482,7 +485,6 @@ export default function ImprovedHomeScreen() {
         </View>
 
         <View style={styles.productInfo}>
-          {/* GREEN Store Badge + PURPLE Time Badge */}
           <View style={styles.deliveryInfoRow}>
             <View style={styles.greenStoreBadge}>
               <Feather name="map-pin" size={9} color="#059669" />
@@ -507,15 +509,15 @@ export default function ImprovedHomeScreen() {
           </ThemedText>
 
           <View style={styles.productFooter}>
-            {/* FIXED: Single price container with no nesting */}
-            <View style={{ flex: 1 }}>
+            {/* Price Container with flex protection */}
+            <View style={{ flex: 1, marginRight: 8 }}>
               <ThemedText 
                 type="body" 
                 style={styles.priceText}
                 numberOfLines={1}
                 noTranslate
               >
-                {formatPrice(product.price)}
+                {String(formatPrice(product.price))}
               </ThemedText>
 
               {hasDiscount && (
@@ -525,12 +527,12 @@ export default function ImprovedHomeScreen() {
                   numberOfLines={1}
                   noTranslate
                 >
-                  {formatPrice(product.originalPrice!)}
+                  {String(formatPrice(product.originalPrice!))}
                 </ThemedText>
               )}
             </View>
 
-            {/* Purple Gradient Button */}
+            {/* Cart Button with explicit noTranslate */}
             <Pressable
               disabled={!product.inStock}
               style={[
@@ -548,7 +550,9 @@ export default function ImprovedHomeScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.addToCartGradient}
               >
-                <ThemedText style={styles.addButtonText}>ADD TO CART</ThemedText>
+                <ThemedText style={styles.addButtonText} noTranslate>
+                  {language === 'id' ? 'TAMBAH' : 'ADD'}
+                </ThemedText>
               </LinearGradient>
             </Pressable>
           </View>
@@ -1054,48 +1058,53 @@ export default function ImprovedHomeScreen() {
         )}
 
         {/* ===== PRODUCTS GRID ===== */}
-        <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
-          <View style={styles.sectionHeader}>
-            <ThemedText type="h3" style={styles.sectionTitle}>
-              {selectedStore ? (
-                <>
-                  <ThemedText type="h3" style={styles.sectionTitle} noTranslate>
-                    {selectedStore.name}{' '}
-                  </ThemedText>
-                  <ThemedText type="h3" style={styles.sectionTitle}>
-                    Products
-                  </ThemedText>
-                </>
-              ) : (
-                <ThemedText type="h3" style={styles.sectionTitle}>
-                  All Products
-                </ThemedText>
-              )}
-            </ThemedText>
-          </View>
-          
-          {productsLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#6366f1" />
-              <ThemedText style={{ color: theme.textSecondary, marginTop: 12 }}>
-                Loading products...
-              </ThemedText>
-            </View>
-          ) : (
-            <View style={styles.productsGrid}>
-              {filteredProducts.length > 0 ? (
-                filteredProducts.map(renderProductCard)
-              ) : (
-                <View style={styles.noResults}>
-                  <Feather name="search" size={48} color={theme.textSecondary} style={{ opacity: 0.3 }} />
-                  <ThemedText style={{ color: theme.textSecondary, marginTop: 12, fontSize: 15 }}>
-                    No products found
-                  </ThemedText>
-                </View>
-              )}
-            </View>
-          )}
+        {/* ===== PRODUCTS GRID ===== */}
+<View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
+  <View style={styles.sectionHeader}>
+    {selectedStore ? (
+      /* Using a View with row direction instead of nested ThemedText for better stability */
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
+        <ThemedText type="h3" style={styles.sectionTitle} noTranslate>
+          {String(selectedStore.name || '')}
+        </ThemedText>
+        <ThemedText type="h3" style={[styles.sectionTitle, { marginLeft: 6 }]}>
+          Products
+        </ThemedText>
+      </View>
+    ) : (
+      <ThemedText type="h3" style={styles.sectionTitle}>
+        All Products
+      </ThemedText>
+    )}
+  </View>
+  
+  {productsLoading ? (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color="#6366f1" />
+      <ThemedText style={{ color: theme.textSecondary, marginTop: 12 }}>
+        {language === 'id' ? 'Memuat produk...' : 'Loading products...'}
+      </ThemedText>
+    </View>
+  ) : (
+    <View style={styles.productsGrid}>
+      {filteredProducts.length > 0 ? (
+        filteredProducts.map(renderProductCard)
+      ) : (
+        <View style={styles.noResults}>
+          <Feather 
+            name="search" 
+            size={48} 
+            color={theme.textSecondary} 
+            style={{ opacity: 0.3 }} 
+          />
+          <ThemedText style={{ color: theme.textSecondary, marginTop: 12, fontSize: 15 }}>
+            {language === 'id' ? 'Produk tidak ditemukan' : 'No products found'}
+          </ThemedText>
         </View>
+      )}
+    </View>
+  )}
+</View>
       </Animated.ScrollView>
 
       <CartToast

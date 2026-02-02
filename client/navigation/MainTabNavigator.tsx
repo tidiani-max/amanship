@@ -1,37 +1,78 @@
 import React from "react";
-import { View, StyleSheet, Platform, Pressable } from "react-native";
+import { View, StyleSheet, Pressable } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient"; // Ensure you have this installed
+import { LinearGradient } from "expo-linear-gradient";
+import { useNavigation, NavigationState } from "@react-navigation/native";
 
 import HomeStackNavigator from "@/navigation/HomeStackNavigator";
 import OrdersScreen from "@/screens/OrdersScreen";
 import AccountScreen from "@/screens/AccountScreen";
 import VouchersScreen from "@/screens/VouchersScreen";
+import { useSearch, SearchScope } from "@/context/SearchContext";
 
 const Tab = createBottomTabNavigator();
 
+// Type guard to safely get route name
+function getCurrentRouteName(state: NavigationState | undefined): string {
+  if (!state) return 'HomeTab';
+  
+  const route = state.routes[state.index];
+  if (!route) return 'HomeTab';
+  
+  return route.name || 'HomeTab';
+}
+
 export default function MainTabNavigator() {
+  const navigation = useNavigation();
+  const { setIsSearchActive, setSearchScope } = useSearch();
+
+  const handleSearchPress = () => {
+    // Get current route name safely
+    const state = navigation.getState();
+    const routeName = getCurrentRouteName(state);
+
+    console.log("🔍 Search pressed from:", routeName);
+
+    // Map route names to search scopes
+    const scopeMap: Record<string, SearchScope> = {
+      'HomeTab': 'global',
+      'HistoryTab': 'history',
+      'DealsTab': 'deals',
+    };
+
+    // Get scope or default to global
+    const scope = scopeMap[routeName] || 'global';
+    
+    // Set search state
+    setSearchScope(scope);
+    setIsSearchActive(true);
+
+    // Navigate to home if on unsupported screen
+    if (!scopeMap[routeName]) {
+      navigation.navigate("HomeTab" as never);
+    }
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <Tab.Navigator
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: '#3b82f6', // Bright blue for active
-          tabBarInactiveTintColor: '#64748b', // Muted slate
+          tabBarActiveTintColor: '#3b82f6',
+          tabBarInactiveTintColor: '#64748b',
           tabBarShowLabel: true,
           tabBarStyle: {
             position: "absolute",
-            bottom: 30, // Floats above the bottom
+            bottom: 30,
             left: 20,
             right: 20,
-            backgroundColor: '#111827', // Deep dark navy/black
-            borderRadius: 40, // Fully rounded pill shape
+            backgroundColor: '#111827',
+            borderRadius: 40,
             height: 75,
             paddingBottom: 12,
             paddingTop: 12,
             borderTopWidth: 0,
-            // Shadow for the pill
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 10 },
             shadowOpacity: 0.3,
@@ -64,19 +105,28 @@ export default function MainTabNavigator() {
           }}
         />
 
-        {/* CENTRAL SEARCH BUTTON - CUSTOM UI */}
+        {/* CENTRAL SEARCH BUTTON */}
         <Tab.Screen
           name="SearchTab"
-          component={HomeStackNavigator} // Placeholder
+          component={HomeStackNavigator}
+          listeners={{
+            tabPress: (e) => {
+              // Prevent default navigation
+              e.preventDefault();
+              handleSearchPress();
+            },
+          }}
           options={{
-            tabBarLabel: "", // Hide label for search
+            tabBarLabel: "",
             tabBarButton: (props) => (
               <Pressable
-                onPress={() => console.log("Search Pressed")}
+                onPress={handleSearchPress}
                 style={styles.searchButtonContainer}
+                accessibilityLabel="Search"
+                accessibilityRole="button"
               >
                 <LinearGradient
-                  colors={['#4f46e5', '#a855f7']} // Zendo Purple Gradient
+                  colors={['#4f46e5', '#a855f7']}
                   style={styles.searchButtonGradient}
                 >
                   <Feather name="search" size={28} color="white" />
@@ -110,14 +160,14 @@ export default function MainTabNavigator() {
 
 const styles = StyleSheet.create({
   searchButtonContainer: {
-    top: -30, // Lifts the search button out of the bar
+    top: -30,
     justifyContent: 'center',
     alignItems: 'center',
   },
   searchButtonGradient: {
     width: 65,
     height: 65,
-    borderRadius: 22, // Squircle shape to match your theme
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: "#a855f7",
@@ -126,6 +176,6 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 12,
     borderWidth: 4,
-    borderColor: '#0f172a', // Matches the tab bar background to create "cutout" look
+    borderColor: '#0f172a',
   },
 });

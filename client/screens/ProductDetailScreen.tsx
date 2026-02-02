@@ -7,15 +7,17 @@ import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Button } from "@/components/Button";
-import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { useLanguage } from "@/context/LanguageContext";
-import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
+import { Spacing } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { useCart } from "@/context/CartContext";
 import { getImageUrl } from "@/lib/image-url";
 
-const { width } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+// Purple theme colors to match your homepage design
+const PURPLE_PRIMARY = "#6366F1"; 
+const PURPLE_LIGHT = "#EEF2FF";
 
 type ProductDetailRouteProp = RouteProp<RootStackParamList, "ProductDetail">;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -23,7 +25,6 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export default function ProductDetailScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { t } = useLanguage();
   const route = useRoute<ProductDetailRouteProp>();
   const navigation = useNavigation<NavigationProp>();
   const { product } = route.params;
@@ -31,8 +32,10 @@ export default function ProductDetailScreen() {
   const [showNutrition, setShowNutrition] = useState(false);
   const { addToCart } = useCart();
 
-  const formatPrice = (price: number) => {
-    return `Rp ${price.toLocaleString("id-ID")}`;
+  // Updated to Indonesian Rupiah Format
+  const formatPrice = (price: number): string => {
+    const safePrice = Number(price) || 0;
+    return `Rp ${safePrice.toLocaleString("id-ID")}`;
   };
 
   const handleAddToCart = () => {
@@ -46,587 +49,360 @@ export default function ProductDetailScreen() {
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
     : 0;
 
-  // Get store info if available
-  const storeName = (product as any).storeName;
-  const deliveryMinutes = (product as any).deliveryMinutes || 15;
-
   return (
-    <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      {/* ===== HEADER ===== */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn}>
+          <Feather name="chevron-left" size={28} color="#000" />
+        </Pressable>
+        <Pressable style={styles.iconBtn}>
+          <Feather name="share-2" size={22} color="#000" />
+        </Pressable>
+      </View>
+
       <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: insets.bottom + 120 },
-        ]}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* ===== ENHANCED IMAGE SECTION ===== */}
-        <View style={styles.imageSection}>
-          <View style={[styles.imageContainer, { backgroundColor: '#fafafa' }]}>
-            {product.image ? (
-              <Image 
-                source={{ uri: getImageUrl(product.image) }} 
-                style={styles.productImage}
-                resizeMode="contain"
-              />
-            ) : (
-              <View style={styles.placeholderContainer}>
-                <Feather name="package" size={100} color="#d1d5db" />
-              </View>
-            )}
-            
-            {/* Discount Badge */}
-            {hasDiscount && !isOutOfStock && (
-              <View style={styles.discountBadge}>
-                <ThemedText style={styles.discountText}>
-                  {discountPercent}% OFF
-                </ThemedText>
-              </View>
-            )}
-
-            {/* Out of Stock Badge */}
-            {isOutOfStock && (
-              <View style={styles.outOfStockOverlay}>
-                <View style={styles.outOfStockBadge}>
-                  <ThemedText style={styles.outOfStockText}>
-                    OUT OF STOCK
-                  </ThemedText>
-                </View>
-              </View>
-            )}
-          </View>
-
-          {/* Store & Delivery Info */}
-          {storeName && (
-            <View style={styles.deliveryInfoBar}>
-              <View style={styles.deliveryInfoItem}>
-                <Feather name="map-pin" size={16} color="#10b981" />
-                <ThemedText style={styles.deliveryInfoText}>
-                  {storeName}
-                </ThemedText>
-              </View>
-              <View style={styles.deliveryDivider} />
-              <View style={styles.deliveryInfoItem}>
-                <Feather name="clock" size={16} color="#10b981" />
-                <ThemedText style={styles.deliveryInfoText}>
-                  {deliveryMinutes} mins delivery
-                </ThemedText>
-              </View>
-            </View>
-          )}
-        </View>
-        
-        {/* ===== PRODUCT INFO SECTION ===== */}
-        <View style={styles.content}>
-          {/* Brand */}
-          <View style={styles.brandBadge}>
-            <ThemedText style={styles.brandText}>{product.brand}</ThemedText>
-          </View>
-
-          {/* Product Name */}
-          <ThemedText type="h2" style={styles.productName}>
-            {product.name}
-          </ThemedText>
-          
-          {/* Price Section */}
-          <View style={styles.priceSection}>
-            <View style={styles.priceContainer}>
-              <ThemedText style={styles.currentPrice}>
-                {formatPrice(product.price)}
-              </ThemedText>
-              {hasDiscount && (
-                <ThemedText style={styles.originalPrice}>
-                  {formatPrice(product.originalPrice!)}
-                </ThemedText>
-              )}
-            </View>
+        {/* ===== IMAGE SECTION ===== */}
+        <View style={styles.imageContainer}>
+          <View style={styles.imageBg}>
+            <Image 
+              source={{ uri: getImageUrl(product.image) }} 
+              style={styles.productImage}
+              resizeMode="contain"
+            />
             {hasDiscount && (
-              <View style={styles.savingsBadge}>
-                <ThemedText style={styles.savingsText}>
-                  Save Rp {(product.originalPrice! - product.price).toLocaleString("id-ID")}
-                </ThemedText>
+              <View style={styles.discountBadge}>
+                <ThemedText style={styles.discountText}>-{discountPercent}%</ThemedText>
               </View>
             )}
           </View>
+        </View>
+
+        <View style={styles.content}>
+          {/* Status Row: Purple for Brand, Emerald for Stock */}
+          <View style={styles.statusRow}>
+            <View style={styles.brandBadge}>
+              <ThemedText style={styles.brandText}>{product.brand || 'Premium Selection'}</ThemedText>
+            </View>
+            <View style={styles.storeBadge}>
+              <Feather name="check-circle" size={12} color="#065f46" />
+              <ThemedText style={styles.storeText}>IN STOCK</ThemedText>
+            </View>
+          </View>
+
+          <ThemedText style={styles.productName}>{product.name}</ThemedText>
+          
+          <View style={styles.priceContainer}>
+            <ThemedText style={styles.currentPrice}>{formatPrice(product.price)}</ThemedText>
+            {hasDiscount && (
+              <ThemedText style={styles.originalPrice}>{formatPrice(product.originalPrice!)}</ThemedText>
+            )}
+          </View>
+
+          <ThemedText style={styles.descriptionText}>
+            {product.description || "Indulge in the finest quality ingredients. This product is sourced responsibly to ensure peak freshness and taste for your daily needs."}
+          </ThemedText>
 
           <View style={styles.divider} />
-          
-          {/* Quantity Selector */}
+
+          {/* Quantity Selector - Pill Style with Purple Accents */}
           <View style={styles.quantitySection}>
-            <ThemedText type="h3" style={styles.sectionLabel}>
-              Quantity
-            </ThemedText>
-            <View style={styles.quantityControls}>
-              <Pressable
-                style={[styles.quantityButton, { backgroundColor: theme.backgroundDefault }]}
+            <ThemedText style={styles.sectionTitle}>Quantity</ThemedText>
+            <View style={styles.qtyPicker}>
+              <Pressable 
                 onPress={() => setQuantity(Math.max(1, quantity - 1))}
-                disabled={isOutOfStock}
+                style={styles.qtyBtn}
               >
-                <Feather name="minus" size={20} color={isOutOfStock ? "#d1d5db" : theme.text} />
+                <Feather name="minus" size={20} color="#000" />
               </Pressable>
-              <View style={styles.quantityDisplay}>
-                <ThemedText style={styles.quantityText}>{quantity}</ThemedText>
-              </View>
-              <Pressable
-                style={[styles.quantityButton, { backgroundColor: theme.primary }]}
+              <ThemedText style={styles.qtyValue}>{quantity}</ThemedText>
+              <Pressable 
                 onPress={() => setQuantity(quantity + 1)}
-                disabled={isOutOfStock}
+                style={[styles.qtyBtn, { backgroundColor: PURPLE_PRIMARY }]}
               >
                 <Feather name="plus" size={20} color="white" />
               </Pressable>
             </View>
           </View>
 
-          {/* Stock Info */}
-          {!isOutOfStock && (product as any).stockCount && (
-            <View style={styles.stockInfo}>
-              <Feather name="package" size={14} color="#059669" />
-              <ThemedText style={styles.stockText}>
-                {(product as any).stockCount} items available
-              </ThemedText>
-            </View>
+          {/* Nutrition Facts Toggle with Purple Icon */}
+          {product.nutrition && (
+            <Pressable 
+              style={styles.nutritionToggle}
+              onPress={() => setShowNutrition(!showNutrition)}
+            >
+              <View style={styles.row}>
+                <View style={styles.infoCircle}>
+                  <Feather name="info" size={16} color={PURPLE_PRIMARY} />
+                </View>
+                <ThemedText style={styles.nutritionTitle}>Nutrition Facts</ThemedText>
+              </View>
+              <Feather name={showNutrition ? "chevron-up" : "chevron-down"} size={20} color="#94A3B8" />
+            </Pressable>
           )}
 
-          <View style={styles.divider} />
-          
-          {/* Description */}
-          <View style={styles.descriptionSection}>
-            <ThemedText type="h3" style={styles.sectionLabel}>
-              Description
-            </ThemedText>
-            <ThemedText style={styles.descriptionText}>
-              {product.description || "No description available for this product."}
-            </ThemedText>
-          </View>
-          
-          {/* Nutrition Facts */}
-          {product.nutrition && (
-            <View style={styles.nutritionSection}>
-              <Pressable
-                style={styles.nutritionHeader}
-                onPress={() => setShowNutrition(!showNutrition)}
-              >
-                <View style={styles.nutritionHeaderLeft}>
-                  <Feather name="info" size={20} color={theme.primary} />
-                  <ThemedText type="h3" style={styles.sectionLabel}>
-                    Nutrition Facts
-                  </ThemedText>
+          {showNutrition && (
+            <View style={styles.nutritionCard}>
+              {Object.entries(product.nutrition || {}).map(([key, value]) => (
+                <View key={key} style={styles.nutritionRow}>
+                  <ThemedText style={styles.nutritionKey}>{key.toUpperCase()}</ThemedText>
+                  <ThemedText style={styles.nutritionVal}>{String(value || '-')}</ThemedText>
                 </View>
-                <Feather
-                  name={showNutrition ? "chevron-up" : "chevron-down"}
-                  size={24}
-                  color={theme.textSecondary}
-                />
-              </Pressable>
-              
-              {showNutrition && (
-                <View style={[styles.nutritionCard, { backgroundColor: theme.backgroundDefault }]}>
-                  <View style={styles.nutritionRow}>
-                    <View style={styles.nutritionLabel}>
-                      <Feather name="activity" size={16} color="#6b7280" />
-                      <ThemedText style={styles.nutritionLabelText}>Calories</ThemedText>
-                    </View>
-                    <ThemedText style={styles.nutritionValue}>
-                      {product.nutrition.calories}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.nutritionDivider} />
-                  <View style={styles.nutritionRow}>
-                    <View style={styles.nutritionLabel}>
-                      <Feather name="zap" size={16} color="#6b7280" />
-                      <ThemedText style={styles.nutritionLabelText}>Protein</ThemedText>
-                    </View>
-                    <ThemedText style={styles.nutritionValue}>
-                      {product.nutrition.protein}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.nutritionDivider} />
-                  <View style={styles.nutritionRow}>
-                    <View style={styles.nutritionLabel}>
-                      <Feather name="pie-chart" size={16} color="#6b7280" />
-                      <ThemedText style={styles.nutritionLabelText}>Carbs</ThemedText>
-                    </View>
-                    <ThemedText style={styles.nutritionValue}>
-                      {product.nutrition.carbs}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.nutritionDivider} />
-                  <View style={styles.nutritionRow}>
-                    <View style={styles.nutritionLabel}>
-                      <Feather name="droplet" size={16} color="#6b7280" />
-                      <ThemedText style={styles.nutritionLabelText}>Fat</ThemedText>
-                    </View>
-                    <ThemedText style={styles.nutritionValue}>
-                      {product.nutrition.fat}
-                    </ThemedText>
-                  </View>
-                </View>
-              )}
+              ))}
             </View>
           )}
         </View>
       </ScrollView>
-      
-      {/* ===== FOOTER WITH ADD TO CART ===== */}
-      <View
-        style={[
-          styles.footer,
-          {
-            backgroundColor: theme.backgroundRoot,
-            paddingBottom: insets.bottom + Spacing.lg,
-            borderTopColor: 'rgba(0,0,0,0.06)',
-          },
-        ]}
-      >
-        <View style={styles.footerContent}>
-          <View style={styles.footerPriceSection}>
-            <ThemedText style={styles.footerLabel}>Total Price</ThemedText>
-            <ThemedText style={styles.footerPrice}>
-              {formatPrice(product.price * quantity)}
-            </ThemedText>
-          </View>
-          <Button
-            onPress={handleAddToCart}
-            style={[
-              styles.addToCartButton,
-              isOutOfStock && styles.disabledButton,
-            ]}
-            disabled={isOutOfStock}
-          >
-            <Feather 
-              name={isOutOfStock ? "x-circle" : "shopping-cart"} 
-              size={20} 
-              color="white" 
-              style={{ marginRight: 8 }}
-            />
-            {isOutOfStock ? "Out of Stock" : "Add to Cart"}
-          </Button>
+
+      {/* ===== FLOATING FOOTER ===== */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+        <View style={styles.footerInfo}>
+          <ThemedText style={styles.totalLabel}>Total Price</ThemedText>
+          <ThemedText style={styles.totalAmount}>{formatPrice(product.price * quantity)}</ThemedText>
         </View>
+        <Button 
+          onPress={handleAddToCart}
+          style={[styles.addToCartBtn, { backgroundColor: PURPLE_PRIMARY }]}
+          disabled={isOutOfStock}
+        >
+          <Feather name="shopping-bag" size={20} color="white" style={{ marginRight: 8 }} />
+          Add to Basket
+        </Button>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContent: {
-    flexGrow: 1,
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
   },
-
-  // ===== IMAGE SECTION =====
-  imageSection: {
-    backgroundColor: 'white',
-  },
-  imageContainer: {
-    width: '100%',
-    height: 400,
-    alignItems: "center",
-    justifyContent: "center",
-    position: 'relative',
-  },
-  productImage: {
-    width: "100%",
-    height: "100%",
-  },
-  placeholderContainer: {
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F8FAFC',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  imageContainer: {
+    paddingHorizontal: 20,
+    marginTop: 10,
+  },
+  imageBg: {
+    width: '100%',
+    height: SCREEN_WIDTH * 0.85,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  productImage: {
+    width: '85%',
+    height: '85%',
+  },
   discountBadge: {
-    position: "absolute",
+    position: 'absolute',
     top: 20,
-    right: 20,
-    backgroundColor: '#ef4444',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    left: 20,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
   },
   discountText: {
     color: 'white',
     fontSize: 14,
     fontWeight: '900',
-    letterSpacing: 0.5,
   },
-  outOfStockOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  outOfStockBadge: {
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  outOfStockText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-
-  // ===== DELIVERY INFO BAR =====
-  deliveryInfoBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: Spacing.lg,
-    backgroundColor: '#d1fae5',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
-  },
-  deliveryInfoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  deliveryInfoText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#065f46',
-  },
-  deliveryDivider: {
-    width: 1,
-    height: 16,
-    backgroundColor: '#10b981',
-    marginHorizontal: 20,
-    opacity: 0.4,
-  },
-
-  // ===== CONTENT SECTION =====
   content: {
-    padding: Spacing.xl,
+    padding: 24,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   brandBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: PURPLE_LIGHT,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 8,
-    marginBottom: Spacing.sm,
   },
   brandText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#6b7280',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  productName: {
-    fontSize: 26,
-    fontWeight: '900',
-    marginBottom: Spacing.lg,
-    lineHeight: 32,
-    color: '#111827',
-  },
-
-  // ===== PRICE SECTION =====
-  priceSection: {
-    marginBottom: Spacing.xl,
-  },
-  priceContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 8,
-  },
-  currentPrice: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: '#10b981',
-  },
-  originalPrice: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#9ca3af',
-    textDecorationLine: "line-through",
-  },
-  savingsBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  savingsText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#92400e',
-  },
-
-  // ===== DIVIDER =====
-  divider: {
-    height: 1,
-    backgroundColor: '#e5e7eb',
-    marginVertical: Spacing.xl,
-  },
-
-  // ===== QUANTITY SECTION =====
-  quantitySection: {
-    marginBottom: Spacing.md,
-  },
-  sectionLabel: {
-    fontSize: 18,
     fontWeight: '800',
-    marginBottom: Spacing.md,
-    color: '#111827',
+    color: PURPLE_PRIMARY,
+    textTransform: 'uppercase',
   },
-  quantityControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.lg,
-  },
-  quantityButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  quantityDisplay: {
-    minWidth: 60,
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-  },
-  quantityText: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#111827',
-  },
-
-  // ===== STOCK INFO =====
-  stockInfo: {
+  storeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#d1fae5',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    alignSelf: 'flex-start',
-    marginTop: Spacing.sm,
+    gap: 4,
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  stockText: {
-    fontSize: 13,
-    fontWeight: '700',
+  storeText: {
+    fontSize: 11,
+    fontWeight: '900',
     color: '#065f46',
   },
-
-  // ===== DESCRIPTION =====
-  descriptionSection: {
-    marginBottom: Spacing.xl,
+  productName: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#1E293B',
+    marginBottom: 12,
+  },
+  priceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+  },
+  currentPrice: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#000',
+  },
+  originalPrice: {
+    fontSize: 18,
+    color: '#94A3B8',
+    textDecorationLine: 'line-through',
   },
   descriptionText: {
     fontSize: 15,
+    color: '#64748B',
     lineHeight: 24,
-    color: '#6b7280',
+    marginBottom: 24,
   },
-
-  // ===== NUTRITION =====
-  nutritionSection: {
-    marginTop: Spacing.md,
+  divider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginBottom: 24,
   },
-  nutritionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: Spacing.md,
+  quantitySection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 30,
   },
-  nutritionHeaderLeft: {
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  qtyPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 20,
+    padding: 6,
+  },
+  qtyBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 18,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  qtyValue: {
+    fontSize: 20,
+    fontWeight: '900',
+    paddingHorizontal: 20,
+  },
+  nutritionToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  nutritionCard: {
-    marginTop: Spacing.sm,
+  infoCircle: {
+    width: 32,
+    height: 32,
     borderRadius: 16,
-    padding: Spacing.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-  },
-  nutritionRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: Spacing.md,
-  },
-  nutritionLabel: {
-    flexDirection: 'row',
+    backgroundColor: PURPLE_LIGHT,
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'center',
   },
-  nutritionLabelText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  nutritionValue: {
+  nutritionTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#111827',
   },
-  nutritionDivider: {
-    height: 1,
-    backgroundColor: '#f3f4f6',
+  nutritionCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 20,
+    padding: 16,
+    marginTop: 8,
   },
-
-  // ===== FOOTER =====
+  nutritionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  nutritionKey: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  nutritionVal: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
   footer: {
-    position: "absolute",
+    position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    paddingTop: Spacing.lg,
-    paddingHorizontal: Spacing.xl,
-    borderTopWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  footerContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: Spacing.lg,
-  },
-  footerPriceSection: {
-    flex: 1,
-  },
-  footerLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginBottom: 4,
-  },
-  footerPrice: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#10b981',
-  },
-  addToCartButton: {
-    flex: 1,
+    backgroundColor: 'white',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 14,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 10,
   },
-  disabledButton: {
-    backgroundColor: '#d1d5db',
+  footerInfo: {
+    flex: 1,
+  },
+  totalLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '700',
+  },
+  totalAmount: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#000',
+  },
+  addToCartBtn: {
+    flex: 1.5,
+    height: 58,
+    borderRadius: 20,
   },
 });
