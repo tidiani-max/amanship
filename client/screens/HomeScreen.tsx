@@ -514,7 +514,7 @@ const renderProductCard = (product: UIProduct) => {
               <ThemedText 
                 type="body" 
                 style={styles.priceText}
-                numberOfLines={1}
+                numberOfLines={2}
                 noTranslate
               >
                 {String(formatPrice(product.price))}
