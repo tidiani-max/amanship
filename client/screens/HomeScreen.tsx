@@ -1057,7 +1057,7 @@ const renderProductCard = (product: UIProduct) => {
           </View>
         )}
 
-        {/* ===== PRODUCTS GRID ===== */}
+
         {/* ===== PRODUCTS GRID ===== */}
 <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
   <View style={styles.sectionHeader}>
