@@ -1,15 +1,13 @@
-import React, { useEffect, useRef } from "react";
-import { View, StyleSheet, ScrollView, ActivityIndicator, Linking, Pressable, Image, Animated } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { View, StyleSheet, ScrollView, ActivityIndicator, Linking, Pressable, Image, Animated, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather, FontAwesome5, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
-
 
 const BRAND_PURPLE = "#6338f2";
 
@@ -21,7 +19,7 @@ export default function OrderTrackingScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<OrderTrackingRouteProp>();
   const { orderId } = route.params;
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<any>(null);
 
   // Fetch order data every 3 seconds
   const { data: order, isLoading } = useQuery({
@@ -34,8 +32,6 @@ export default function OrderTrackingScreen() {
   });
 
   // FIX #1: Simplify status to 4 steps
-  // Backend: pending, confirmed, picking, packed, delivering, delivered
-  // Frontend: pending → picking → packed → delivering
   const getSimpleStatus = () => {
     const status = order?.status?.toLowerCase() || 'pending';
     if (status === 'pending' || status === 'confirmed') return 'pending';
@@ -73,22 +69,6 @@ export default function OrderTrackingScreen() {
   const driverLng = driverData?.location?.longitude || null;
   const driverHeading = driverData?.location?.heading || 0;
 
-  // Auto-fit map when driver location updates
-  useEffect(() => {
-    if (mapRef.current && customerLat && customerLng && driverLat && driverLng) {
-      mapRef.current.fitToCoordinates(
-        [
-          { latitude: customerLat, longitude: customerLng },
-          { latitude: driverLat, longitude: driverLng },
-        ],
-        {
-          edgePadding: { top: 100, right: 50, bottom: 50, left: 50 },
-          animated: true,
-        }
-      );
-    }
-  }, [driverLat, driverLng]);
-
   // Decide what to show
   const showMap = (simpleStatus === 'packed' || simpleStatus === 'delivering') && customerLat && customerLng;
   const showDriver = simpleStatus === 'delivering' && driverLat && driverLng;
@@ -107,57 +87,27 @@ export default function OrderTrackingScreen() {
       {/* TOP: Map or Illustration */}
       <View style={{ height: '52%' }}>
         {showMap ? (
-          <MapView
-            ref={mapRef}
-            provider={PROVIDER_GOOGLE}
-            style={styles.map}
-            initialRegion={{
-              latitude: customerLat!,
-              longitude: customerLng!,
-              latitudeDelta: 0.02,
-              longitudeDelta: 0.02,
-            }}
-          >
-            {/* Customer purple dot */}
-            <Marker coordinate={{ latitude: customerLat!, longitude: customerLng! }}>
-              <View style={styles.customerMarker}>
-                <View style={styles.customerMarkerInner} />
-              </View>
-            </Marker>
-
-            {/* Pulsing circle when searching */}
-            {searchingDriver && (
-              <Marker coordinate={{ latitude: customerLat!, longitude: customerLng! }}>
-                <PulsingCircle />
-              </Marker>
-            )}
-
-            {/* Driver bike marker */}
-            {showDriver && (
-              <Marker
-                coordinate={{ latitude: driverLat!, longitude: driverLng! }}
-                rotation={driverHeading}
-                flat
-              >
-                <View style={styles.driverMarker}>
-                  <MaterialCommunityIcons name="motorbike" size={28} color="white" />
-                </View>
-              </Marker>
-            )}
-
-            {/* Blue dashed route line */}
-            {showDriver && (
-              <Polyline
-                coordinates={[
-                  { latitude: driverLat!, longitude: driverLng! },
-                  { latitude: customerLat!, longitude: customerLng! },
-                ]}
-                strokeColor={BRAND_PURPLE}
-                strokeWidth={4}
-                lineDashPattern={[10, 10]}
-              />
-            )}
-          </MapView>
+          Platform.OS === "web" ? (
+            <WebMapView 
+              customerLat={customerLat!}
+              customerLng={customerLng!}
+              driverLat={driverLat}
+              driverLng={driverLng}
+              searchingDriver={searchingDriver}
+              showDriver={showDriver}
+            />
+          ) : (
+            <NativeMapView
+              mapRef={mapRef}
+              customerLat={customerLat!}
+              customerLng={customerLng!}
+              driverLat={driverLat}
+              driverLng={driverLng}
+              driverHeading={driverHeading}
+              searchingDriver={searchingDriver}
+              showDriver={showDriver}
+            />
+          )
         ) : (
           <View style={styles.illustrationContainer}>
             <Image 
@@ -330,6 +280,127 @@ export default function OrderTrackingScreen() {
   );
 }
 
+// WEB MAP COMPONENT - Simple placeholder for web
+function WebMapView({ customerLat, customerLng, driverLat, driverLng, searchingDriver, showDriver }: any) {
+  return (
+    <View style={styles.webMapContainer}>
+      <View style={styles.webMapPlaceholder}>
+        <MaterialCommunityIcons name="map-marker" size={60} color={BRAND_PURPLE} />
+        <ThemedText style={styles.webMapText}>
+          {searchingDriver ? 'Searching for driver...' : 'Your delivery location'}
+        </ThemedText>
+        {customerLat && customerLng && (
+          <ThemedText style={styles.webMapCoords}>
+            📍 {customerLat.toFixed(5)}, {customerLng.toFixed(5)}
+          </ThemedText>
+        )}
+        {showDriver && driverLat && driverLng && (
+          <View style={styles.webDriverInfo}>
+            <MaterialCommunityIcons name="motorbike" size={24} color={BRAND_PURPLE} />
+            <ThemedText style={styles.webDriverText}>
+              Driver at: {driverLat.toFixed(5)}, {driverLng.toFixed(5)}
+            </ThemedText>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// NATIVE MAP COMPONENT - Uses react-native-maps (ONLY on native platforms)
+function NativeMapView({ mapRef, customerLat, customerLng, driverLat, driverLng, driverHeading, searchingDriver, showDriver }: any) {
+  const [MapComponents, setMapComponents] = useState<any>(null);
+
+  useEffect(() => {
+    // Dynamically import react-native-maps ONLY on native
+    if (Platform.OS !== "web") {
+      import("react-native-maps").then((maps) => {
+        setMapComponents(maps);
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (mapRef.current && customerLat && customerLng && driverLat && driverLng) {
+      mapRef.current.fitToCoordinates(
+        [
+          { latitude: customerLat, longitude: customerLng },
+          { latitude: driverLat, longitude: driverLng },
+        ],
+        {
+          edgePadding: { top: 100, right: 50, bottom: 50, left: 50 },
+          animated: true,
+        }
+      );
+    }
+  }, [driverLat, driverLng, customerLat, customerLng]);
+
+  if (!MapComponents) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={BRAND_PURPLE} />
+      </View>
+    );
+  }
+
+  const MapView = MapComponents.default;
+  const { Marker, Polyline, PROVIDER_GOOGLE } = MapComponents;
+
+  return (
+    <MapView
+      ref={mapRef}
+      provider={PROVIDER_GOOGLE}
+      style={styles.map}
+      initialRegion={{
+        latitude: customerLat,
+        longitude: customerLng,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      }}
+    >
+      {/* Customer purple dot */}
+      <Marker coordinate={{ latitude: customerLat, longitude: customerLng }}>
+        <View style={styles.customerMarker}>
+          <View style={styles.customerMarkerInner} />
+        </View>
+      </Marker>
+
+      {/* Pulsing circle when searching */}
+      {searchingDriver && (
+        <Marker coordinate={{ latitude: customerLat, longitude: customerLng }}>
+          <PulsingCircle />
+        </Marker>
+      )}
+
+      {/* Driver bike marker */}
+      {showDriver && (
+        <Marker
+          coordinate={{ latitude: driverLat, longitude: driverLng }}
+          rotation={driverHeading}
+          flat
+        >
+          <View style={styles.driverMarker}>
+            <MaterialCommunityIcons name="motorbike" size={28} color="white" />
+          </View>
+        </Marker>
+      )}
+
+      {/* Blue dashed route line */}
+      {showDriver && (
+        <Polyline
+          coordinates={[
+            { latitude: driverLat, longitude: driverLng },
+            { latitude: customerLat, longitude: customerLng },
+          ]}
+          strokeColor={BRAND_PURPLE}
+          strokeWidth={4}
+          lineDashPattern={[10, 10]}
+        />
+      )}
+    </MapView>
+  );
+}
+
 function PulsingCircle() {
   const pulseAnim = useRef(new Animated.Value(0)).current;
 
@@ -399,4 +470,11 @@ const styles = StyleSheet.create({
   customerMarkerInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: BRAND_PURPLE },
   driverMarker: { width: 50, height: 50, borderRadius: 25, backgroundColor: BRAND_PURPLE, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 2 }, shadowRadius: 4, elevation: 5 },
   pulsingCircle: { width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderColor: BRAND_PURPLE, backgroundColor: 'rgba(99, 56, 242, 0.1)' },
+  // Web-specific styles
+  webMapContainer: { flex: 1, backgroundColor: '#f8fafc', position: 'relative' },
+  webMapPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  webMapText: { marginTop: 15, fontSize: 16, fontWeight: '700', color: '#64748b', textAlign: 'center' },
+  webMapCoords: { marginTop: 8, fontSize: 13, color: '#94a3b8' },
+  webDriverInfo: { marginTop: 20, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, backgroundColor: 'white', borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.1, shadowOffset: { width: 0, height: 2 }, shadowRadius: 8 },
+  webDriverText: { fontSize: 14, color: '#475569', fontWeight: '600' },
 });

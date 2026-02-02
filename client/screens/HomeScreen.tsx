@@ -432,6 +432,7 @@ export default function ImprovedHomeScreen() {
     }
   };
 
+  // ===== FIXED PRODUCT CARD RENDER FUNCTION =====
   const renderProductCard = (product: UIProduct) => {
     const hasDiscount = product.originalPrice && product.originalPrice > product.price;
     const discountPercent = hasDiscount 
@@ -459,7 +460,7 @@ export default function ImprovedHomeScreen() {
         ]}
         onPress={() => navigation.navigate("ProductDetail", { product })}
       >
-        {/* RED Discount Badge */}
+        {/* RED Discount Badge - ONLY ONCE */}
         {hasDiscount && product.inStock && (
           <View style={styles.discountBadge}>
             <ThemedText style={styles.discountText} noTranslate>
@@ -506,48 +507,28 @@ export default function ImprovedHomeScreen() {
           </ThemedText>
 
           <View style={styles.productFooter}>
+            {/* FIXED: Single price container with no nesting */}
             <View style={{ flex: 1 }}>
- <View style={{ flex: 1 }}>
-  <View style={{ flex: 1 }}>
-  <ThemedText type="body" style={styles.priceText}>
-    {formatPrice(product.price)}
-  </ThemedText>
+              <ThemedText 
+                type="body" 
+                style={styles.priceText}
+                numberOfLines={1}
+                noTranslate
+              >
+                {formatPrice(product.price)}
+              </ThemedText>
 
-  {hasDiscount && (
-    <ThemedText
-      type="small"
-      style={styles.originalPriceText}
-      noTranslate
-    >
-      {formatPrice(product.originalPrice!)}
-    </ThemedText>
-  )}
-</View>
-
-
-  {hasDiscount && (
-    <ThemedText
-      type="small"
-      style={styles.originalPriceText}
-      noTranslate
-    >
-      {formatPrice(product.originalPrice!)}
-    </ThemedText>
-  )}
-</View>
-
-
-  {hasDiscount && (
-    <ThemedText
-      type="small"
-      style={styles.originalPriceText}
-      numberOfLines={1}
-      noTranslate
-    >
-      {formatPrice(product.originalPrice!)}
-    </ThemedText>
-  )}
-</View>
+              {hasDiscount && (
+                <ThemedText
+                  type="small"
+                  style={styles.originalPriceText}
+                  numberOfLines={1}
+                  noTranslate
+                >
+                  {formatPrice(product.originalPrice!)}
+                </ThemedText>
+              )}
+            </View>
 
             {/* Purple Gradient Button */}
             <Pressable
@@ -578,107 +559,102 @@ export default function ImprovedHomeScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-     {/* ===== HEADER - ZENDO (CONSISTENT) ===== */}
-
-{/* ===== HEADER - ZENDO (CONSISTENT) ===== */}
-<View
-  style={[
-    styles.headerContainer,
-    {
-      backgroundColor: theme.cardBackground,
-      // Increased space from the top
-      paddingTop: insets.top + 16, 
-      paddingBottom: 20,
-      // Added shadow for visibility/depth
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.08,
-      shadowRadius: 10,
-      elevation: 5,
-      zIndex: 100,
-    },
-  ]}
->
-  <View 
-    style={{ 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      justifyContent: 'space-between', 
-      paddingHorizontal: responsivePadding 
-    }}
-  >
-    
-    {/* LEFT: ZendO LOGO (Enhanced Contrast) */}
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <LinearGradient
-        colors={['#4f46e5', '#9333ea']} // More vivid purple
-        style={{ 
-          width: 42, 
-          height: 42, 
-          borderRadius: 14, 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          marginRight: 10,
-          // Inner glow effect
-          borderWidth: 1,
-          borderColor: 'rgba(255,255,255,0.2)'
-        }}
+      {/* ===== HEADER - ZENDO (CONSISTENT) ===== */}
+      <View
+        style={[
+          styles.headerContainer,
+          {
+            backgroundColor: theme.cardBackground,
+            paddingTop: insets.top + 16, 
+            paddingBottom: 20,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.08,
+            shadowRadius: 10,
+            elevation: 5,
+            zIndex: 100,
+          },
+        ]}
       >
-        <ThemedText style={{ color: 'white', fontWeight: '900', fontSize: 24 }}>z</ThemedText>
-      </LinearGradient>
-      <ThemedText style={{ fontSize: 26, fontWeight: '900', letterSpacing: -0.8, color: '#1e293b' }}>
-        Zend<ThemedText style={{ fontSize: 26, fontWeight: '900', color: '#7c3aed' }}>O</ThemedText>
-      </ThemedText>
-    </View>
+        <View 
+          style={{ 
+            flexDirection: 'row', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            paddingHorizontal: responsivePadding 
+          }}
+        >
+          
+          {/* LEFT: ZendO LOGO (Enhanced Contrast) */}
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <LinearGradient
+              colors={['#4f46e5', '#9333ea']}
+              style={{ 
+                width: 42, 
+                height: 42, 
+                borderRadius: 14, 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                marginRight: 10,
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.2)'
+              }}
+            >
+              <ThemedText style={{ color: 'white', fontWeight: '900', fontSize: 24 }}>z</ThemedText>
+            </LinearGradient>
+            <ThemedText style={{ fontSize: 26, fontWeight: '900', letterSpacing: -0.8, color: '#1e293b' }}>
+              Zend<ThemedText style={{ fontSize: 26, fontWeight: '900', color: '#7c3aed' }}>O</ThemedText>
+            </ThemedText>
+          </View>
 
-    {/* RIGHT: LOCATION SELECTOR (High Visibility) */}
-    <Pressable 
-      style={{ 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        flexShrink: 1, 
-        marginLeft: 12,
-        backgroundColor: '#f8fafc', // Subtle background to make the section "sit" better
-        padding: 6,
-        borderRadius: 16,
-      }} 
-      onPress={() => navigation.navigate("EditAddress")}
-    >
-      <View style={{ alignItems: 'flex-end', marginRight: 10, paddingLeft: 4 }}>
-        <ThemedText style={{ color: '#64748b', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>
-          DELIVERING TO
-        </ThemedText>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <ThemedText 
-            numberOfLines={1} 
-            style={{ fontWeight: "800", fontSize: 15, color: '#0f172a' }}
+          {/* RIGHT: LOCATION SELECTOR (High Visibility) */}
+          <Pressable 
+            style={{ 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              flexShrink: 1, 
+              marginLeft: 12,
+              backgroundColor: '#f8fafc',
+              padding: 6,
+              borderRadius: 16,
+            }} 
+            onPress={() => navigation.navigate("EditAddress")}
           >
-            {getLocationDisplayName() || "Home Office"}
-          </ThemedText>
-          <Feather name="chevron-down" size={16} color="#475569" style={{ marginLeft: 2 }} />
+            <View style={{ alignItems: 'flex-end', marginRight: 10, paddingLeft: 4 }}>
+              <ThemedText style={{ color: '#64748b', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>
+                DELIVERING TO
+              </ThemedText>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <ThemedText 
+                  numberOfLines={1} 
+                  style={{ fontWeight: "800", fontSize: 15, color: '#0f172a' }}
+                >
+                  {getLocationDisplayName() || "Home Office"}
+                </ThemedText>
+                <Feather name="chevron-down" size={16} color="#475569" style={{ marginLeft: 2 }} />
+              </View>
+            </View>
+
+            <LinearGradient
+              colors={['#0284c7', '#3b82f6']}
+              style={{ 
+                width: 40, 
+                height: 40, 
+                borderRadius: 14, 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                shadowColor: "#3b82f6",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 6,
+              }}
+            >
+              <Feather name="map-pin" size={18} color="white" />
+            </LinearGradient>
+          </Pressable>
+
         </View>
       </View>
-
-      <LinearGradient
-        colors={['#0284c7', '#3b82f6']} // Sharp Blue
-        style={{ 
-          width: 40, 
-          height: 40, 
-          borderRadius: 14, 
-          justifyContent: 'center', 
-          alignItems: 'center',
-          shadowColor: "#3b82f6",
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 6,
-        }}
-      >
-        <Feather name="map-pin" size={18} color="white" />
-      </LinearGradient>
-    </Pressable>
-
-  </View>
-</View>
 
 
       <Animated.ScrollView
@@ -696,8 +672,6 @@ export default function ImprovedHomeScreen() {
         scrollEventThrottle={16}
       >
 
-      
-
         {/* ===== SEARCH BAR WITH MIC INSIDE - SCREENSHOT 1 ===== */}
         <View style={{ paddingHorizontal: responsivePadding, marginBottom: Spacing.md }}>
           <View style={[styles.searchBarWithMic, { backgroundColor: theme.backgroundDefault }]}>
@@ -709,7 +683,6 @@ export default function ImprovedHomeScreen() {
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
-            {/* MIC BUTTON INSIDE SEARCH BAR */}
             <Pressable
               style={styles.micInsideSearch}
               onPress={() => navigation.navigate("VoiceOrderModal")}
@@ -720,312 +693,301 @@ export default function ImprovedHomeScreen() {
         </View>
 
 
-{/* ===== HERO BANNER - DEEP PURPLE VIBE ===== */}
-{bannersData && bannersData.length > 0 && (
-  <View style={[styles.heroBannerSection, { paddingHorizontal: responsivePadding }]}>
-    <ScrollView
-      ref={bannerScrollRef}
-      horizontal
-      pagingEnabled
-      showsHorizontalScrollIndicator={false}
-      scrollEventThrottle={16}
-      decelerationRate="fast"
-      snapToInterval={screenWidth > maxWidth ? maxWidth - (responsivePadding * 2) : screenWidth - (responsivePadding * 2)}
-    >
-      {bannersData.map((banner) => (
-        <Pressable 
-          key={banner.id} 
-          style={[
-            styles.heroSlide, 
-            { 
-              width: screenWidth > maxWidth 
-                ? maxWidth - (responsivePadding * 2) 
-                : screenWidth - (responsivePadding * 2),
-              height: bannerHeight,
-              borderRadius: 24,
-              overflow: 'hidden',
-              backgroundColor: '#000', // Ensures no white peaks through
-            }
-          ]}
-        >
-          <Image 
-            source={{ uri: banner.image }} 
-            style={[styles.heroImage, { opacity: 0.85 }]} // Slightly dim the base image
-            resizeMode="cover"
-          />
-          
-          {/* DEEPER PURPLE TINT */}
-          <LinearGradient
-            colors={['rgba(46, 16, 101, 0.3)', 'rgba(88, 28, 235, 0.5)']}
-            style={StyleSheet.absoluteFill}
-          />
+        {/* ===== HERO BANNER - DEEP PURPLE VIBE ===== */}
+        {bannersData && bannersData.length > 0 && (
+          <View style={[styles.heroBannerSection, { paddingHorizontal: responsivePadding }]}>
+            <ScrollView
+              ref={bannerScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              scrollEventThrottle={16}
+              decelerationRate="fast"
+              snapToInterval={screenWidth > maxWidth ? maxWidth - (responsivePadding * 2) : screenWidth - (responsivePadding * 2)}
+            >
+              {bannersData.map((banner) => (
+                <Pressable 
+                  key={banner.id} 
+                  style={[
+                    styles.heroSlide, 
+                    { 
+                      width: screenWidth > maxWidth 
+                        ? maxWidth - (responsivePadding * 2) 
+                        : screenWidth - (responsivePadding * 2),
+                      height: bannerHeight,
+                      borderRadius: 24,
+                      overflow: 'hidden',
+                      backgroundColor: '#000',
+                    }
+                  ]}
+                >
+                  <Image 
+                    source={{ uri: banner.image }} 
+                    style={[styles.heroImage, { opacity: 0.85 }]}
+                    resizeMode="cover"
+                  />
+                  
+                  <LinearGradient
+                    colors={['rgba(46, 16, 101, 0.3)', 'rgba(88, 28, 235, 0.5)']}
+                    style={StyleSheet.absoluteFill}
+                  />
 
-          {/* HEAVIER DARK GRADIENT FOR TEXT CONTRAST */}
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.95)']}
-            locations={[0, 0.4, 0.9]}
-            style={styles.heroOverlay}
-          >
-            <View style={styles.heroContent}>
-              {/* Vibrant Yellow Badge */}
-              <View style={[styles.premiumDeliveryBadge, { backgroundColor: '#fbce1f' }]}>
-                <Feather name="zap" size={13} color="#000" />
-                <ThemedText style={[styles.premiumDeliveryText, { color: '#000', fontWeight: '800' }]}>
-                   PREMIUM DELIVERY
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.95)']}
+                    locations={[0, 0.4, 0.9]}
+                    style={styles.heroOverlay}
+                  >
+                    <View style={styles.heroContent}>
+                      <View style={[styles.premiumDeliveryBadge, { backgroundColor: '#fbce1f' }]}>
+                        <Feather name="zap" size={13} color="#000" />
+                        <ThemedText style={[styles.premiumDeliveryText, { color: '#000', fontWeight: '800' }]}>
+                           PREMIUM DELIVERY
+                        </ThemedText>
+                      </View>
+                      
+                      <View style={styles.heroHeadline}>
+                        <ThemedText 
+                          numberOfLines={2}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.7}
+                          style={[
+                            styles.heroTitleWhite, 
+                            { fontSize: isMobile ? 24 : 32 }
+                          ]}
+                        >
+                          {banner.title || "Everything You Need,"}
+                        </ThemedText>
+
+                        <ThemedText 
+                          numberOfLines={1} 
+                          style={[
+                            styles.heroTitlePurple, 
+                            { fontSize: isMobile ? 22 : 30, color: '#a78bfa' }
+                          ]}
+                        >
+                          {banner.subtitle || "Delivered Fast."}
+                        </ThemedText>
+                      </View>
+                      
+                      <Pressable style={styles.heroCTAContainer}>
+                        <LinearGradient
+                          colors={['#4f46e5', '#7c3aed']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.heroCTAButton}
+                        >
+                          <ThemedText style={styles.heroCTAText}>Get Started</ThemedText>
+                          <Feather name="chevron-right" size={18} color="white" style={{marginLeft: 4}} />
+                        </LinearGradient>
+                      </Pressable>
+                    </View>
+                  </LinearGradient>
+                </Pressable>
+              ))}
+            </ScrollView>
+            
+            <View style={styles.heroDots}>
+            </View>
+          </View>
+        )}
+
+        {/* ===== CATEGORIES SECTION - LARGE & VISIBLE ===== */}
+        {!searchQuery && availableCategories.length > 0 && (
+          <View style={[styles.section, { paddingHorizontal: responsivePadding, marginTop: 15 }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <ThemedText style={{ fontSize: 22, fontWeight: '900', color: '#1e293b' }}>
+                Categories
+              </ThemedText>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 20, paddingRight: 20, paddingBottom: 10 }}
+              decelerationRate="fast"
+            >
+              {availableCategories.map((category) => (
+                <Pressable
+                  key={category.id}
+                  style={{ alignItems: 'center', width: 85 }}
+                  onPress={() => handleCategoryPress(category)}
+                >
+                  <View style={{
+                    width: 80,
+                    height: 80,
+                    borderRadius: 28,
+                    backgroundColor: '#f8fafc', 
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    marginBottom: 10,
+                    overflow: 'hidden',
+                    borderWidth: 1,
+                    borderColor: '#f1f5f9',
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 6 },
+                    shadowOpacity: 0.08,
+                    shadowRadius: 8,
+                    elevation: 3,
+                  }}>
+                    {category.image ? (
+                      <Image
+                        source={{ uri: getImageUrl(category.image) ?? "" }}
+                        style={{ width: '100%', height: '100%' }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Feather name="grid" size={30} color="#cbd5e1" />
+                    )}
+                  </View>
+                  
+                  <ThemedText 
+                    numberOfLines={1} 
+                    style={{ 
+                      fontSize: 13,
+                      fontWeight: '800', 
+                      color: '#334155',
+                      textAlign: 'center',
+                      letterSpacing: -0.2
+                    }}
+                  >
+                    {category.name}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+         {/* ===== PROMOTIONS SECTION ===== */}
+        {promotionsData && promotionsData.length > 0 && (
+          <View style={[styles.section, { paddingHorizontal: responsivePadding, marginTop: 20 }]}>
+            
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ 
+                  backgroundColor: '#fff', 
+                  padding: 8, 
+                  borderRadius: 12, 
+                  marginRight: 12,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 5,
+                  elevation: 2
+                }}>
+                  <Feather name="gift" size={20} color="#f97316" />
+                </View>
+                <ThemedText style={{ fontSize: 24, fontWeight: '900', color: '#1e293b' }}>
+                  Special Offers
                 </ThemedText>
               </View>
-              
-              <View style={styles.heroHeadline}>
-  <ThemedText 
-    numberOfLines={2} // Limits the title to 2 lines
-    adjustsFontSizeToFit // Auto-shrinks text if it's too long
-    minimumFontScale={0.7} // Won't shrink smaller than 70% of original size
-    style={[
-      styles.heroTitleWhite, 
-      { fontSize: isMobile ? 24 : 32 } // Slightly reduced base size
-    ]}
-  >
-    {banner.title || "Everything You Need,"}
-  </ThemedText>
 
-  <ThemedText 
-    numberOfLines={1} 
-    style={[
-      styles.heroTitlePurple, 
-      { fontSize: isMobile ? 22 : 30, color: '#a78bfa' }
-    ]}
-  >
-    {banner.subtitle || "Delivered Fast."}
-  </ThemedText>
-</View>
-              
-              {/* BOLD PURPLE BUTTON */}
-              <Pressable style={styles.heroCTAContainer}>
-                <LinearGradient
-                  colors={['#4f46e5', '#7c3aed']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.heroCTAButton}
-                >
-                  <ThemedText style={styles.heroCTAText}>Get Started</ThemedText>
-                  <Feather name="chevron-right" size={18} color="white" style={{marginLeft: 4}} />
-                </LinearGradient>
+              <Pressable 
+                onPress={() => refetchPromotions()}
+                style={{ 
+                  backgroundColor: '#fff', 
+                  padding: 10, 
+                  borderRadius: 14,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 5,
+                  elevation: 2
+                }}
+              >
+                <Feather name="refresh-cw" size={18} color="#3b82f6" />
               </Pressable>
             </View>
-          </LinearGradient>
-        </Pressable>
-      ))}
-    </ScrollView>
-    
-    {/* Update Dot indicator to be more visible */}
-    <View style={styles.heroDots}>
-        {/* ... dots mapping ... */}
-    </View>
-  </View>
-)}
-
-{/* ===== CATEGORIES SECTION - LARGE & VISIBLE ===== */}
-{!searchQuery && availableCategories.length > 0 && (
-  <View style={[styles.section, { paddingHorizontal: responsivePadding, marginTop: 15 }]}>
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-      <ThemedText style={{ fontSize: 22, fontWeight: '900', color: '#1e293b' }}>
-        Categories
-      </ThemedText>
-    </View>
-
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ gap: 20, paddingRight: 20, paddingBottom: 10 }}
-      decelerationRate="fast"
-    >
-      {availableCategories.map((category) => (
-        <Pressable
-          key={category.id}
-          style={{ alignItems: 'center', width: 85 }} // Increased width to accommodate larger icon
-          onPress={() => handleCategoryPress(category)}
-        >
-          <View style={{
-            width: 80, // Increased from 68
-            height: 80, // Increased from 68
-            borderRadius: 28, // Scaled up the "squircle" radius
-            backgroundColor: '#f8fafc', 
-            justifyContent: 'center',
-            alignItems: 'center',
-            marginBottom: 10,
-            overflow: 'hidden',
-            borderWidth: 1,
-            borderColor: '#f1f5f9',
-            // Stronger shadow for the larger element
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: 0.08,
-            shadowRadius: 8,
-            elevation: 3,
-          }}>
-            {category.image ? (
-              <Image
-                source={{ uri: getImageUrl(category.image) ?? "" }}
-                style={{ width: '100%', height: '100%' }}
-                resizeMode="cover"
-              />
-            ) : (
-              <Feather name="grid" size={30} color="#cbd5e1" />
-            )}
-          </View>
-          
-          <ThemedText 
-            numberOfLines={1} 
-            style={{ 
-              fontSize: 13, // Slightly larger font
-              fontWeight: '800', 
-              color: '#334155',
-              textAlign: 'center',
-              letterSpacing: -0.2
-            }}
-          >
-            {category.name}
-          </ThemedText>
-        </Pressable>
-      ))}
-    </ScrollView>
-  </View>
-)}
-
-       {/* ===== PROMOTIONS SECTION ===== */}
-{promotionsData && promotionsData.length > 0 && (
-  <View style={[styles.section, { paddingHorizontal: responsivePadding, marginTop: 20 }]}>
-    
-    {/* SECTION HEADER - MATCHING SCREENSHOT */}
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <View style={{ 
-          backgroundColor: '#fff', 
-          padding: 8, 
-          borderRadius: 12, 
-          marginRight: 12,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 5,
-          elevation: 2
-        }}>
-          <Feather name="gift" size={20} color="#f97316" /> {/* Orange Gift Icon */}
-        </View>
-        <ThemedText style={{ fontSize: 24, fontWeight: '900', color: '#1e293b' }}>
-          Special Offers
-        </ThemedText>
-      </View>
-
-      <Pressable 
-        onPress={() => refetchPromotions()}
-        style={{ 
-          backgroundColor: '#fff', 
-          padding: 10, 
-          borderRadius: 14,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 5,
-          elevation: 2
-        }}
-      >
-        <Feather name="refresh-cw" size={18} color="#3b82f6" />
-      </Pressable>
-    </View>
-    
-    <ScrollView 
-      horizontal 
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ gap: 16, paddingBottom: 10 }}
-      decelerationRate="fast"
-      snapToInterval={screenWidth * 0.85}
-    >
-      {promotionsData.map((promo) => {
-        const isClaimed = claimedPromotionsMap[promo.id] || false;
-        
-        return (
-          <Pressable
-            key={promo.id}
-            style={{
-              width: screenWidth * 0.8,
-              height: 200,
-              borderRadius: 32, // The large roundness from your image
-              overflow: 'hidden', // This is the "magic" line
-              backgroundColor: '#000',
-            }}
-            onPress={() => handleClaimPromotion(promo)}
-          >
-{promo.bannerImage ? (
-  <Image
-    source={{ uri: promo.bannerImage }}
-    style={StyleSheet.absoluteFill}
-    resizeMode="cover"
-  />
-) : (
-  <View style={[StyleSheet.absoluteFill, { backgroundColor: '#333' }]} /> 
-  // Renders a dark background if the image is missing
-)}
-            <LinearGradient
-              colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.85)']} // Darker bottom for text contrast
-              style={StyleSheet.absoluteFill}
-            />
-
-            <View style={{ flex: 1, padding: 20, justifyContent: 'space-between' }}>
-              {/* Top Row: Category Icon */}
-              <View style={{ 
-                width: 40, 
-                height: 40, 
-                borderRadius: 12, 
-                backgroundColor: 'rgba(255,255,255,0.25)', 
-                justifyContent: 'center', 
-                alignItems: 'center' 
-              }}>
-                <Feather name="shopping-bag" size={20} color="white" />
-              </View>
-
-              {/* Bottom Content */}
-              <View>
-                <ThemedText style={{ color: 'white', fontSize: 22, fontWeight: '900', marginBottom: 4 }}>
-                  {promo.title}
-                </ThemedText>
-                <ThemedText style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14, fontWeight: '600' }}>
-                  {promo.description}
-                </ThemedText>
+            
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 16, paddingBottom: 10 }}
+              decelerationRate="fast"
+              snapToInterval={screenWidth * 0.85}
+            >
+              {promotionsData.map((promo) => {
+                const isClaimed = claimedPromotionsMap[promo.id] || false;
                 
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 15 }}>
-                  <View>
-                    <ThemedText style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '900' }}>
-                      STARTS FROM
-                    </ThemedText>
-                    <ThemedText style={{ color: 'white', fontSize: 16, fontWeight: '800' }}>
-                      Min {formatPrice(promo.minOrder)}
-                    </ThemedText>
-                  </View>
+                return (
+                  <Pressable
+                    key={promo.id}
+                    style={{
+                      width: screenWidth * 0.8,
+                      height: 200,
+                      borderRadius: 32,
+                      overflow: 'hidden',
+                      backgroundColor: '#000',
+                    }}
+                    onPress={() => handleClaimPromotion(promo)}
+                  >
+                    {promo.bannerImage ? (
+                      <Image
+                        source={{ uri: promo.bannerImage }}
+                        style={StyleSheet.absoluteFill}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={[StyleSheet.absoluteFill, { backgroundColor: '#333' }]} /> 
+                    )}
+                    <LinearGradient
+                      colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.85)']}
+                      style={StyleSheet.absoluteFill}
+                    />
 
-                  <View style={{ 
-                    backgroundColor: 'white', 
-                    paddingHorizontal: 20, 
-                    paddingVertical: 10, 
-                    borderRadius: 20,
-                    shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 5,
-                  }}>
-                    <ThemedText style={{ color: '#2563eb', fontWeight: '900', fontSize: 14 }}>
-                      {isClaimed ? "Claimed" : "Claim Now"}
-                    </ThemedText>
-                  </View>
-                </View>
-              </View>
-            </View>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
-  </View>
-)}
+                    <View style={{ flex: 1, padding: 20, justifyContent: 'space-between' }}>
+                      <View style={{ 
+                        width: 40, 
+                        height: 40, 
+                        borderRadius: 12, 
+                        backgroundColor: 'rgba(255,255,255,0.25)', 
+                        justifyContent: 'center', 
+                        alignItems: 'center' 
+                      }}>
+                        <Feather name="shopping-bag" size={20} color="white" />
+                      </View>
+
+                      <View>
+                        <ThemedText style={{ color: 'white', fontSize: 22, fontWeight: '900', marginBottom: 4 }}>
+                          {promo.title}
+                        </ThemedText>
+                        <ThemedText style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14, fontWeight: '600' }}>
+                          {promo.description}
+                        </ThemedText>
+                        
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 15 }}>
+                          <View>
+                            <ThemedText style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '900' }}>
+                              STARTS FROM
+                            </ThemedText>
+                            <ThemedText style={{ color: 'white', fontSize: 16, fontWeight: '800' }}>
+                              Min {formatPrice(promo.minOrder)}
+                            </ThemedText>
+                          </View>
+
+                          <View style={{ 
+                            backgroundColor: 'white', 
+                            paddingHorizontal: 20, 
+                            paddingVertical: 10, 
+                            borderRadius: 20,
+                            shadowColor: "#000",
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.2,
+                            shadowRadius: 5,
+                          }}>
+                            <ThemedText style={{ color: '#2563eb', fontWeight: '900', fontSize: 14 }}>
+                              {isClaimed ? "Claimed" : "Claim Now"}
+                            </ThemedText>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         {/* ===== STORE SELECTOR ===== */}
         {storesData.length > 0 && (
@@ -1147,47 +1109,38 @@ export default function ImprovedHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  // ===== HEADER - EXACT MATCH SCREENSHOT 1 =====
-headerContainer: {
-  paddingHorizontal: 16,
-  paddingBottom: 8,
-},
-
-headerInner: {
-  flexDirection: "row",
-  alignItems: "center",
-},
-
-logoGradientBox: {
-  width: 34,
-  height: 34,
-  borderRadius: 10,
-  alignItems: "center",
-  justifyContent: "center",
-  marginRight: 10,
-
-  shadowColor: "#000",
-  shadowOpacity: 0.15,
-  shadowRadius: 3,
-  shadowOffset: { width: 0, height: 2 },
-  elevation: 2,
-},
-
-logoZ: {
-  color: "#FFFFFF",
-  fontWeight: "800",
-  fontSize: 16,
-},
-
-brandZendO: {
-  fontSize: 20,
-  fontWeight: "700",
-  color: "#5B5BFF",
-  letterSpacing: 0.2,
-},
-
-
-
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  headerInner: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  logoGradientBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  logoZ: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 16,
+  },
+  brandZendO: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#5B5BFF",
+    letterSpacing: 0.2,
+  },
   rightIcons: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1238,8 +1191,6 @@ brandZendO: {
     borderRadius: 18,
     backgroundColor: '#e5e7eb',
   },
-
-  // ===== LOCATION =====
   locationSelector: {
     flexDirection: "row",
     alignItems: "center",
@@ -1259,8 +1210,6 @@ brandZendO: {
     justifyContent: "center",
     flexShrink: 0,
   },
-
-  // ===== SEARCH BAR WITH MIC INSIDE =====
   searchBarWithMic: {
     flexDirection: "row",
     alignItems: "center",
@@ -1296,8 +1245,6 @@ brandZendO: {
     shadowRadius: 3,
     elevation: 3,
   },
-
-  // ===== HERO BANNER - EXACT MATCH SCREENSHOT 1 =====
   heroBannerSection: { 
     marginBottom: Spacing.lg + 4 
   },
@@ -1381,21 +1328,19 @@ brandZendO: {
     borderRadius: 4,
   },
   heroTitlePurple: {
-    color: '#c084fc', // Light purple for a "glow" text look
+    color: '#c084fc',
     fontWeight: '900',
   },
-  
   heroCTAContainer: {
     marginTop: 15,
     width: 140,
     borderRadius: 12,
-    overflow: 'hidden', // Ensures gradient stays in bounds
+    overflow: 'hidden',
     elevation: 5,
     shadowColor: '#6366f1',
     shadowOpacity: 0.3,
     shadowRadius: 10,
   },
-  
   heroCTAButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1403,10 +1348,6 @@ brandZendO: {
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
-
- 
-
-  // ===== SECTIONS =====
   section: { 
     marginBottom: Spacing.lg 
   },
@@ -1428,8 +1369,6 @@ brandZendO: {
     fontWeight: '700',
     color: '#6366f1',
   },
-
-  // ===== CATEGORIES =====
   categoriesScroll: { 
     gap: Spacing.md, 
     paddingVertical: 6,
@@ -1457,8 +1396,6 @@ brandZendO: {
     color: '#374151',
     flexWrap: 'wrap',
   },
-
-  // ===== STORES =====
   storeChipsContainer: { 
     paddingTop: Spacing.sm, 
     paddingBottom: Spacing.xs, 
@@ -1483,8 +1420,6 @@ brandZendO: {
     fontWeight: '600',
     flexShrink: 0,
   },
-
-  // ===== PRODUCTS - MATCH SCREENSHOT 2 =====
   productsGrid: { 
     flexDirection: "row", 
     flexWrap: "wrap", 
@@ -1599,7 +1534,7 @@ brandZendO: {
     fontWeight: '900', 
     fontSize: 16, 
     color: '#1f2937',
-    flexShrink: 1,
+    flexShrink: 0,  // FIXED: Prevents text shrinking
   },
   addToCartButton: { 
     flexShrink: 0,
@@ -1637,8 +1572,6 @@ brandZendO: {
     alignItems: 'center',
     padding: 60,
   },
-
-  // ===== PROMOTIONS =====
   promoCard: {
     width: 260,
     backgroundColor: 'white',
@@ -1737,5 +1670,4 @@ brandZendO: {
     letterSpacing: 0.3,
     textAlign: 'center',
   },
- 
 });
