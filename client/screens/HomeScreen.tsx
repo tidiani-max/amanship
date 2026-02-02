@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { ThemedText } from "@/components/ThemedText";
 import { CartToast } from "@/components/CartToast";
+import { GroceryChatBot } from "@/components/GroceryChatBot";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
@@ -21,10 +22,7 @@ import { getImageUrl } from "@/lib/image-url";
 import { useAuth } from "@/context/AuthContext";
 import { Alert } from 'react-native';
 import { HeaderTitle } from "@/components/HeaderTitle";
-// Find your context imports and add useLanguage
 import { useLanguage } from "@/context/LanguageContext";
-
-
 
 const { width } = Dimensions.get("window");
 
@@ -122,6 +120,7 @@ export default function ImprovedHomeScreen() {
   const [screenWidth, setScreenWidth] = useState(width);
   const [selectedStore, setSelectedStore] = useState<APIStore | null>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const [chatBotVisible, setChatBotVisible] = useState(false);
   
   const bannerScrollRef = useRef<ScrollView>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -435,8 +434,8 @@ export default function ImprovedHomeScreen() {
     }
   };
 
-  // ===== FIXED PRODUCT CARD RENDER FUNCTION =====
-const renderProductCard = (product: UIProduct) => {
+  // ===== PRODUCT CARD RENDER FUNCTION =====
+  const renderProductCard = (product: UIProduct) => {
     const hasDiscount = product.originalPrice && product.originalPrice > product.price;
     const discountPercent = hasDiscount 
       ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
@@ -463,7 +462,6 @@ const renderProductCard = (product: UIProduct) => {
         ]}
         onPress={() => navigation.navigate("ProductDetail", { product })}
       >
-        {/* Discount Badge */}
         {hasDiscount && product.inStock && (
           <View style={styles.discountBadge}>
             <ThemedText style={styles.discountText} noTranslate>
@@ -509,7 +507,6 @@ const renderProductCard = (product: UIProduct) => {
           </ThemedText>
 
           <View style={styles.productFooter}>
-            {/* Price Container with flex protection */}
             <View style={{ flex: 1, marginRight: 8 }}>
               <ThemedText 
                 type="body" 
@@ -532,7 +529,6 @@ const renderProductCard = (product: UIProduct) => {
               )}
             </View>
 
-            {/* Cart Button with explicit noTranslate */}
             <Pressable
               disabled={!product.inStock}
               style={[
@@ -563,103 +559,98 @@ const renderProductCard = (product: UIProduct) => {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-    {/* ===== HEADER - QIKLY (CONSISTENT) ===== */}
-<View
-  style={[
-    styles.headerContainer,
-    {
-      backgroundColor: theme.cardBackground,
-      paddingTop: insets.top + 16, 
-      paddingBottom: 20,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.08,
-      shadowRadius: 10,
-      elevation: 5,
-      zIndex: 100,
-    },
-  ]}
->
-  <View 
-    style={{ 
-      flexDirection: 'row', 
-      alignItems: 'center', 
-      justifyContent: 'space-between', 
-      paddingHorizontal: responsivePadding 
-    }}
-  >
-    
-    {/* LEFT: Qikly LOGO (Enhanced Contrast) */}
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <LinearGradient
-        colors={['#00d2ff', '#3a7bd5']} // Qikly Gradient
-        style={{ 
-          width: 42, 
-          height: 42, 
-          borderRadius: 14, 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          marginRight: 10,
-          borderWidth: 1,
-          borderColor: 'rgba(255,255,255,0.2)'
-        }}
+      {/* ===== HEADER ===== */}
+      <View
+        style={[
+          styles.headerContainer,
+          {
+            backgroundColor: theme.cardBackground,
+            paddingTop: insets.top + 16, 
+            paddingBottom: 20,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.08,
+            shadowRadius: 10,
+            elevation: 5,
+            zIndex: 100,
+          },
+        ]}
       >
-        <ThemedText style={{ color: 'white', fontWeight: '900', fontSize: 24 }}>Q</ThemedText>
-      </LinearGradient>
-      <ThemedText style={{ fontSize: 26, fontWeight: '900', letterSpacing: -0.8, color: '#0f172a' }}>
-        Qikly
-      </ThemedText>
-    </View>
+        <View 
+          style={{ 
+            flexDirection: 'row', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            paddingHorizontal: responsivePadding 
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <LinearGradient
+              colors={['#00d2ff', '#3a7bd5']}
+              style={{ 
+                width: 42, 
+                height: 42, 
+                borderRadius: 14, 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                marginRight: 10,
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.2)'
+              }}
+            >
+              <ThemedText style={{ color: 'white', fontWeight: '900', fontSize: 24 }}>Q</ThemedText>
+            </LinearGradient>
+            <ThemedText style={{ fontSize: 26, fontWeight: '900', letterSpacing: -0.8, color: '#0f172a' }}>
+              Qikly
+            </ThemedText>
+          </View>
 
-    {/* RIGHT: LOCATION SELECTOR (High Visibility) */}
-    <Pressable 
-      style={{ 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        flexShrink: 1, 
-        marginLeft: 12,
-        backgroundColor: '#f1f5f9', // Slightly deeper gray for better contrast on white
-        padding: 6,
-        borderRadius: 16,
-      }} 
-      onPress={() => navigation.navigate("EditAddress")}
-    >
-      <View style={{ alignItems: 'flex-end', marginRight: 10, paddingLeft: 4 }}>
-        <ThemedText style={{ color: '#64748b', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>
-          DELIVERING TO
-        </ThemedText>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <ThemedText 
-            numberOfLines={1} 
-            style={{ fontWeight: "800", fontSize: 15, color: '#0f172a' }}
+          <Pressable 
+            style={{ 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              flexShrink: 1, 
+              marginLeft: 12,
+              backgroundColor: '#f1f5f9',
+              padding: 6,
+              borderRadius: 16,
+            }} 
+            onPress={() => navigation.navigate("EditAddress")}
           >
-            {getLocationDisplayName() || "Home Office"}
-          </ThemedText>
-          <Feather name="chevron-down" size={16} color="#3a7bd5" style={{ marginLeft: 2 }} />
+            <View style={{ alignItems: 'flex-end', marginRight: 10, paddingLeft: 4 }}>
+              <ThemedText style={{ color: '#64748b', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>
+                DELIVERING TO
+              </ThemedText>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <ThemedText 
+                  numberOfLines={1} 
+                  style={{ fontWeight: "800", fontSize: 15, color: '#0f172a' }}
+                >
+                  {getLocationDisplayName() || "Home Office"}
+                </ThemedText>
+                <Feather name="chevron-down" size={16} color="#3a7bd5" style={{ marginLeft: 2 }} />
+              </View>
+            </View>
+
+            <LinearGradient
+              colors={['#00d2ff', '#3a7bd5']}
+              style={{ 
+                width: 40, 
+                height: 40, 
+                borderRadius: 14, 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                shadowColor: "#3a7bd5",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 6,
+              }}
+            >
+              <Feather name="map-pin" size={18} color="white" />
+            </LinearGradient>
+          </Pressable>
         </View>
       </View>
-
-      <LinearGradient
-        colors={['#00d2ff', '#3a7bd5']} // Consistent with brand logo
-        style={{ 
-          width: 40, 
-          height: 40, 
-          borderRadius: 14, 
-          justifyContent: 'center', 
-          alignItems: 'center',
-          shadowColor: "#3a7bd5",
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 6,
-        }}
-      >
-        <Feather name="map-pin" size={18} color="white" />
-      </LinearGradient>
-    </Pressable>
-
-  </View>
-</View>
-
 
       <Animated.ScrollView
         style={{ flex: 1 }}
@@ -675,8 +666,7 @@ const renderProductCard = (product: UIProduct) => {
         )}
         scrollEventThrottle={16}
       >
-
-        {/* ===== SEARCH BAR WITH MIC INSIDE - SCREENSHOT 1 ===== */}
+        {/* ===== SEARCH BAR ===== */}
         <View style={{ paddingHorizontal: responsivePadding, marginBottom: Spacing.md }}>
           <View style={[styles.searchBarWithMic, { backgroundColor: theme.backgroundDefault }]}>
             <Feather name="search" size={18} color="#9ca3af" />
@@ -696,8 +686,28 @@ const renderProductCard = (product: UIProduct) => {
           </View>
         </View>
 
+        {/* ===== AI CHATBOT BUTTON ===== */}
+        <View style={{ paddingHorizontal: responsivePadding, marginBottom: Spacing.md }}>
+          <Pressable
+            style={styles.aiChatButton}
+            onPress={() => setChatBotVisible(true)}
+          >
+            <LinearGradient
+              colors={['#6366f1', '#8b5cf6']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.aiChatGradient}
+            >
+              <Feather name="message-circle" size={20} color="white" />
+              <ThemedText style={styles.aiChatText}>
+                🤖 Ask AI: "What should I cook today?"
+              </ThemedText>
+              <Feather name="star" size={16} color="white" />
+            </LinearGradient>
+          </Pressable>
+        </View>
 
-        {/* ===== HERO BANNER - DEEP PURPLE VIBE ===== */}
+        {/* ===== HERO BANNER ===== */}
         {bannersData && bannersData.length > 0 && (
           <View style={[styles.heroBannerSection, { paddingHorizontal: responsivePadding }]}>
             <ScrollView
@@ -790,12 +800,11 @@ const renderProductCard = (product: UIProduct) => {
               ))}
             </ScrollView>
             
-            <View style={styles.heroDots}>
-            </View>
+            <View style={styles.heroDots} />
           </View>
         )}
 
-        {/* ===== CATEGORIES SECTION - LARGE & VISIBLE ===== */}
+        {/* ===== CATEGORIES ===== */}
         {!searchQuery && availableCategories.length > 0 && (
           <View style={[styles.section, { paddingHorizontal: responsivePadding, marginTop: 15 }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
@@ -862,10 +871,9 @@ const renderProductCard = (product: UIProduct) => {
           </View>
         )}
 
-         {/* ===== PROMOTIONS SECTION ===== */}
+        {/* ===== PROMOTIONS ===== */}
         {promotionsData && promotionsData.length > 0 && (
           <View style={[styles.section, { paddingHorizontal: responsivePadding, marginTop: 20 }]}>
-            
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <View style={{ 
@@ -1057,61 +1065,73 @@ const renderProductCard = (product: UIProduct) => {
           </View>
         )}
 
-
         {/* ===== PRODUCTS GRID ===== */}
-<View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
-  <View style={styles.sectionHeader}>
-    {selectedStore ? (
-      /* Using a View with row direction instead of nested ThemedText for better stability */
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
-        <ThemedText type="h3" style={styles.sectionTitle} noTranslate>
-          {String(selectedStore.name || '')}
-        </ThemedText>
-        <ThemedText type="h3" style={[styles.sectionTitle, { marginLeft: 6 }]}>
-          Products
-        </ThemedText>
-      </View>
-    ) : (
-      <ThemedText type="h3" style={styles.sectionTitle}>
-        All Products
-      </ThemedText>
-    )}
-  </View>
-  
-  {productsLoading ? (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#6366f1" />
-      <ThemedText style={{ color: theme.textSecondary, marginTop: 12 }}>
-        {language === 'id' ? 'Memuat produk...' : 'Loading products...'}
-      </ThemedText>
-    </View>
-  ) : (
-    <View style={styles.productsGrid}>
-      {filteredProducts.length > 0 ? (
-        filteredProducts.map(renderProductCard)
-      ) : (
-        <View style={styles.noResults}>
-          <Feather 
-            name="search" 
-            size={48} 
-            color={theme.textSecondary} 
-            style={{ opacity: 0.3 }} 
-          />
-          <ThemedText style={{ color: theme.textSecondary, marginTop: 12, fontSize: 15 }}>
-            {language === 'id' ? 'Produk tidak ditemukan' : 'No products found'}
-          </ThemedText>
+        <View style={[styles.section, { paddingHorizontal: responsivePadding }]}>
+          <View style={styles.sectionHeader}>
+            {selectedStore ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
+                <ThemedText type="h3" style={styles.sectionTitle} noTranslate>
+                  {String(selectedStore.name || '')}
+                </ThemedText>
+                <ThemedText type="h3" style={[styles.sectionTitle, { marginLeft: 6 }]}>
+                  Products
+                </ThemedText>
+              </View>
+            ) : (
+              <ThemedText type="h3" style={styles.sectionTitle}>
+                All Products
+              </ThemedText>
+            )}
+          </View>
+          
+          {productsLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#6366f1" />
+              <ThemedText style={{ color: theme.textSecondary, marginTop: 12 }}>
+                {language === 'id' ? 'Memuat produk...' : 'Loading products...'}
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={styles.productsGrid}>
+              {filteredProducts.length > 0 ? (
+                filteredProducts.map(renderProductCard)
+              ) : (
+                <View style={styles.noResults}>
+                  <Feather 
+                    name="search" 
+                    size={48} 
+                    color={theme.textSecondary} 
+                    style={{ opacity: 0.3 }} 
+                  />
+                  <ThemedText style={{ color: theme.textSecondary, marginTop: 12, fontSize: 15 }}>
+                    {language === 'id' ? 'Produk tidak ditemukan' : 'No products found'}
+                  </ThemedText>
+                </View>
+              )}
+            </View>
+          )}
         </View>
-      )}
-    </View>
-  )}
-</View>
       </Animated.ScrollView>
 
+      {/* ===== CART TOAST ===== */}
       <CartToast
         visible={toastVisible}
         hasItems={items.length > 0}
         productName={lastAddedProduct}
         onDismiss={() => setToastVisible(false)}
+      />
+
+      {/* ===== AI CHATBOT ===== */}
+      <GroceryChatBot
+        visible={chatBotVisible}
+        onClose={() => setChatBotVisible(false)}
+        availableProducts={products.map(p => ({
+          id: p.id,
+          name: p.name,
+          brand: p.brand,
+          price: p.price,
+          category: p.category || 'uncategorized',
+        }))}
       />
     </View>
   );
@@ -1121,103 +1141,6 @@ const styles = StyleSheet.create({
   headerContainer: {
     paddingHorizontal: 16,
     paddingBottom: 8,
-  },
-  headerInner: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  logoGradientBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  logoZ: {
-    color: "#FFFFFF",
-    fontWeight: "800",
-    fontSize: 16,
-  },
-  brandZendO: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#5B5BFF",
-    letterSpacing: 0.2,
-  },
-  rightIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  iconBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#6366f1',
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 2,
-    borderColor: 'white',
-  },
-  iconBadgeText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: 'white',
-  },
-  notificationDot: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#6366f1',
-    borderWidth: 1.5,
-    borderColor: 'white',
-  },
-  userAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#e5e7eb',
-  },
-  locationSelector: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 10,
-    borderRadius: 10,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: 'white',
-  },
-  locationIconWrapper: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#6366f1',
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
   },
   searchBarWithMic: {
     flexDirection: "row",
@@ -1253,6 +1176,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 3,
     elevation: 3,
+  },
+  aiChatButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  aiChatGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  aiChatText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
   },
   heroBannerSection: { 
     marginBottom: Spacing.lg + 4 
@@ -1300,42 +1246,6 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
-  heroTitleGradient: { 
-    color: '#a5f3fc',
-    fontWeight: '900', 
-    lineHeight: 36,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  heroCTA: {
-    backgroundColor: '#6366f1',
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginTop: 8,
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-   heroCTAText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  heroDots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 16,
-  },
-  heroDot: { 
-    height: 8, 
-    borderRadius: 4,
-  },
   heroTitlePurple: {
     color: '#c084fc',
     fontWeight: '900',
@@ -1357,6 +1267,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
+  heroCTAText: {
+    color: 'white',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  heroDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+  },
   section: { 
     marginBottom: Spacing.lg 
   },
@@ -1372,38 +1293,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
     flexShrink: 1,
     color: '#1f2937',
-  },
-  viewAllText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#6366f1',
-  },
-  categoriesScroll: { 
-    gap: Spacing.md, 
-    paddingVertical: 6,
-  },
-  categoryItem: {
-    alignItems: "center",
-    width: 76,
-  },
-  categoryIconWrapper: {
-    width: 68,
-    height: 68,
-    borderRadius: 16,
-    overflow: "hidden",
-    marginBottom: Spacing.xs,
-    backgroundColor: '#f3f4f6',
-  },
-  categoryImage: {
-    width: 68,
-    height: 68,
-  },
-  categoryLabel: {
-    textAlign: "center",
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#374151',
-    flexWrap: 'wrap',
   },
   storeChipsContainer: { 
     paddingTop: Spacing.sm, 
@@ -1543,7 +1432,7 @@ const styles = StyleSheet.create({
     fontWeight: '900', 
     fontSize: 16, 
     color: '#1f2937',
-    flexShrink: 0,  // FIXED: Prevents text shrinking
+    flexShrink: 0,
   },
   addToCartButton: { 
     flexShrink: 0,
@@ -1580,103 +1469,5 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     padding: 60,
-  },
-  promoCard: {
-    width: 260,
-    backgroundColor: 'white',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#f3f4f6',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 4,
-    overflow: 'hidden',
-  },
-  promoImageFull: {
-    width: '100%',
-    height: '100%',
-  },
-  promoContent: {
-    padding: Spacing.md,
-    gap: Spacing.xs,
-  },
-  promoIconBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  promoTitle: {
-    fontWeight: '800',
-    fontSize: 15,
-    lineHeight: 19,
-    color: '#1f2937',
-    flexShrink: 1,
-  },
-  promoDesc: {
-    fontSize: 12,
-    color: '#6b7280',
-    lineHeight: 16,
-    flexShrink: 1,
-  },
-  promoDetailsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 5,
-    marginTop: 3,
-  },
-  storeTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#eef2ff',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  storeTagText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#4338ca',
-    flexShrink: 1,
-  },
-  minOrderTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  minOrderText: {
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 7,
-    alignSelf: 'flex-start',
-  },
-  promoButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    marginTop: 5,
-  },
-  promoButtonText: {
-    fontWeight: '800',
-    fontSize: 11,
-    letterSpacing: 0.3,
-    textAlign: 'center',
   },
 });
