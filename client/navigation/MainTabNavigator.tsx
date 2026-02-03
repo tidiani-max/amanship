@@ -3,7 +3,7 @@ import { View, StyleSheet, Pressable } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useNavigation, NavigationState, CommonActions } from "@react-navigation/native";
+import { useNavigation, NavigationState, CommonActions, getFocusedRouteNameFromRoute } from "@react-navigation/native";
 
 import HomeStackNavigator from "@/navigation/HomeStackNavigator";
 import OrdersScreen from "@/screens/OrdersScreen";
@@ -13,56 +13,38 @@ import { useSearch, SearchScope } from "@/context/SearchContext";
 
 const Tab = createBottomTabNavigator();
 
-// Helper to get the deepest active route name in navigation state
 function getActiveRouteName(state: NavigationState | undefined): string {
   if (!state) return 'Home';
-  
   const route = state.routes[state.index];
   if (!route) return 'Home';
-  
-  // If this route has nested state, recurse
-  if (route.state) {
-    return getActiveRouteName(route.state as NavigationState);
-  }
-  
+  if (route.state) return getActiveRouteName(route.state as NavigationState);
   return route.name;
 }
 
 export default function MainTabNavigator() {
   const navigation = useNavigation();
-  const { 
-    setIsSearchActive, 
-    setSearchScope, 
-    homeSearchRef,
-    setActiveCategoryId,
-  } = useSearch();
+  const { setIsSearchActive, setSearchScope, homeSearchRef } = useSearch();
 
   const handleSearchPress = () => {
     const state = navigation.getState();
     const activeRouteName = getActiveRouteName(state);
 
-    console.log("🔍 Search pressed from route:", activeRouteName);
+    console.log("🔍 Search triggered for:", activeRouteName);
 
-    // HOME SCREEN BEHAVIOR - Focus existing search bar
+    // 1. Logic for Home
     if (activeRouteName === 'Home') {
-      if (homeSearchRef?.current) {
-        console.log("✅ Focusing home search bar");
-        homeSearchRef.current.focus();
-      } else {
-        console.warn('⚠️ Home search ref not available');
-      }
+      homeSearchRef?.current?.focus();
       return;
     }
 
-    // CATEGORY SCREEN BEHAVIOR - Search within category
+    // 2. Logic for Category
     if (activeRouteName === 'Category') {
-      console.log("🔍 Activating category search");
       setSearchScope('category');
       setIsSearchActive(true);
       return;
     }
 
-    // Define scope mapping for tab screens
+    // 3. Logic for Tabs
     const scopeMap: Record<string, SearchScope> = {
       'HomeTab': 'global',
       'HistoryTab': 'history',
@@ -70,63 +52,44 @@ export default function MainTabNavigator() {
       'AccountTab': 'profile',
     };
 
-    // Get the scope for this screen
     const scope = scopeMap[activeRouteName] || 'global';
-    
-    console.log(`🔍 Activating ${scope} search for ${activeRouteName}`);
-    
-    // Set scope first, then activate search
     setSearchScope(scope);
     setIsSearchActive(true);
-
-    // If we're on an unknown screen, navigate to HomeTab
-    if (!scopeMap[activeRouteName] && activeRouteName !== 'Home' && activeRouteName !== 'Category') {
-      console.log("⚠️ Unknown screen, navigating to HomeTab");
-      // Use correct navigation method for tab navigator
-      navigation.dispatch(
-        CommonActions.navigate({
-          name: 'HomeTab',
-        })
-      );
-    }
   };
 
   return (
     <View style={{ flex: 1 }}>
       <Tab.Navigator
-        screenOptions={{
+        screenOptions={({ route }) => ({
           headerShown: false,
           tabBarActiveTintColor: '#3b82f6',
           tabBarInactiveTintColor: '#64748b',
-          tabBarShowLabel: true,
-          tabBarStyle: {
-            position: "absolute",
-            bottom: 30,
-            left: 20,
-            right: 20,
-            backgroundColor: '#111827',
-            borderRadius: 40,
-            height: 75,
-            paddingBottom: 12,
-            paddingTop: 12,
-            borderTopWidth: 0,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: 0.3,
-            shadowRadius: 15,
-            elevation: 10,
-          },
-          tabBarLabelStyle: {
-            fontSize: 10,
-            fontWeight: '900',
-            letterSpacing: 1,
-            marginTop: 4,
-          },
-        }}
+          tabBarStyle: ((route) => {
+            const routeName = getFocusedRouteNameFromRoute(route) ?? "";
+            // HIDE TAB BAR on screens that ARE NOT Home, Category, Account, Orders, Vouchers
+            const hideOnScreens = ["ProductDetail", "Cart", "Checkout"]; 
+            if (hideOnScreens.includes(routeName)) return { display: "none" };
+            
+            return {
+              position: "absolute",
+              bottom: 30,
+              left: 20,
+              right: 20,
+              backgroundColor: '#111827',
+              borderRadius: 40,
+              height: 75,
+              paddingBottom: 12,
+              paddingTop: 12,
+              borderTopWidth: 0,
+              elevation: 10,
+            };
+          })(route),
+          tabBarLabelStyle: { fontSize: 10, fontWeight: '900', marginTop: 4 },
+        })}
       >
         <Tab.Screen
           name="HomeTab"
-          component={HomeStackNavigator}
+          component={HomeStackNavigator} // Ensure CategoryScreen is INSIDE this Navigator!
           options={{
             tabBarLabel: "SHOP",
             tabBarIcon: ({ color }) => <Feather name="shopping-bag" size={20} color={color} />,
@@ -142,30 +105,15 @@ export default function MainTabNavigator() {
           }}
         />
 
-        {/* CENTRAL SEARCH BUTTON */}
         <Tab.Screen
           name="SearchTab"
           component={HomeStackNavigator}
-          listeners={{
-            tabPress: (e) => {
-              // Prevent default navigation
-              e.preventDefault();
-              handleSearchPress();
-            },
-          }}
+          listeners={{ tabPress: (e) => { e.preventDefault(); handleSearchPress(); } }}
           options={{
             tabBarLabel: "",
-            tabBarButton: (props) => (
-              <Pressable
-                onPress={handleSearchPress}
-                style={styles.searchButtonContainer}
-                accessibilityLabel="Search"
-                accessibilityRole="button"
-              >
-                <LinearGradient
-                  colors={['#4f46e5', '#a855f7']}
-                  style={styles.searchButtonGradient}
-                >
+            tabBarButton: () => (
+              <Pressable onPress={handleSearchPress} style={styles.searchButtonContainer}>
+                <LinearGradient colors={['#4f46e5', '#a855f7']} style={styles.searchButtonGradient}>
                   <Feather name="search" size={28} color="white" />
                 </LinearGradient>
               </Pressable>
@@ -196,23 +144,10 @@ export default function MainTabNavigator() {
 }
 
 const styles = StyleSheet.create({
-  searchButtonContainer: {
-    top: -30,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  searchButtonContainer: { top: -30, justifyContent: 'center', alignItems: 'center' },
   searchButtonGradient: {
-    width: 65,
-    height: 65,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: "#a855f7",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 12,
-    borderWidth: 4,
-    borderColor: '#0f172a',
+    width: 65, height: 65, borderRadius: 22,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 4, borderColor: '#0f172a',
   },
 });

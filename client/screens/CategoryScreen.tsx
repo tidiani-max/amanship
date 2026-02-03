@@ -28,7 +28,6 @@ import { useLocation } from "@/context/LocationContext";
 import { CartToast } from "@/components/CartToast";
 import { SearchOverlayHeader } from '@/components/SearchOverlayHeader';
 
-
 const { width } = Dimensions.get("window");
 
 // Brand Colors
@@ -102,17 +101,20 @@ export default function CategoryScreen() {
   const { items } = useCart(); 
   
   // Search state
-  const { isSearchActive, setIsSearchActive, searchScope, setActiveCategoryId } = useSearch();
+  const { isSearchActive, setIsSearchActive, searchScope, setSearchScope, setActiveCategoryId } = useSearch();
   const [localSearchQuery, setLocalSearchQuery] = useState('');
 
-  // Register category ID when component mounts
+  // Set search scope for this screen
   useEffect(() => {
+    console.log('📂 CategoryScreen - Setting search scope to category');
+    setSearchScope('category');
     setActiveCategoryId(category.id);
     
     return () => {
+      console.log('📂 CategoryScreen - Cleaning up');
       setActiveCategoryId(null);
     };
-  }, [category.id]);
+  }, [category.id, setSearchScope, setActiveCategoryId]);
 
   React.useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
@@ -187,6 +189,7 @@ export default function CategoryScreen() {
   };
 
   const handleCloseSearch = () => {
+    console.log('🔴 CategoryScreen - Closing search overlay');
     setIsSearchActive(false);
     setLocalSearchQuery('');
   };
@@ -307,6 +310,9 @@ export default function CategoryScreen() {
 
   const maxWidth = screenWidth > 1600 ? 1600 : screenWidth;
   const containerPadding = screenWidth > maxWidth ? (screenWidth - maxWidth) / 2 : 0;
+  const shouldShowOverlay = isSearchActive && searchScope === 'category';
+
+  console.log('🎨 CategoryScreen - Rendering, shouldShowOverlay:', shouldShowOverlay);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
@@ -367,7 +373,6 @@ export default function CategoryScreen() {
             paddingTop: Spacing.md,
             paddingBottom: insets.bottom + Spacing.xl + 120,
           }}
-          
           columnWrapperStyle={{ gap: Spacing.md }}
           ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
           showsVerticalScrollIndicator={false}
@@ -390,18 +395,18 @@ export default function CategoryScreen() {
       />
 
       {/* SEARCH OVERLAY */}
-      {isSearchActive && searchScope === 'category' && (
-  <View style={styles.searchOverlay}>
-    <Pressable style={styles.backdrop} onPress={handleCloseSearch} />
-    
-    <View style={[styles.searchContent, { backgroundColor: theme.backgroundRoot, paddingTop: insets.top + 12 }]}>
-      <SearchOverlayHeader
-        value={localSearchQuery}
-        onChangeText={setLocalSearchQuery}
-        onClose={handleCloseSearch}
-        placeholder={`Search in ${category.name}...`}
-        theme={theme}
-      />
+      {shouldShowOverlay && (
+        <View style={styles.searchOverlay}>
+          <Pressable style={styles.backdrop} onPress={handleCloseSearch} />
+          
+          <View style={[styles.searchContent, { backgroundColor: theme.backgroundRoot, paddingTop: insets.top + 12 }]}>
+            <SearchOverlayHeader
+              value={localSearchQuery}
+              onChangeText={setLocalSearchQuery}
+              onClose={handleCloseSearch}
+              placeholder={`Search in ${category.name}...`}
+              theme={theme}
+            />
             
             {/* Search Results */}
             <FlatList
@@ -658,7 +663,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 9999,
+    zIndex: 999999,
+    elevation: 999999,
   },
   backdrop: {
     position: 'absolute',

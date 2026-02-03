@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,13 @@ import {
   StyleSheet,
   Alert,
   Clipboard,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
+import { useSearch } from '@/context/SearchContext';
+import { SearchOverlayHeader } from '@/components/SearchOverlayHeader';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Voucher {
   id: string;
@@ -57,14 +61,27 @@ interface HistoryItem {
 
 export default function VouchersScreen() {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { isSearchActive, setIsSearchActive, searchScope, setSearchScope } = useSearch();
   const [activeTab, setActiveTab] = useState<'vouchers' | 'promotions' | 'history'>('vouchers');
   const [refreshing, setRefreshing] = useState(false);
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
 
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   
   const [loading, setLoading] = useState(true);
+
+  // Set search scope for this screen
+  useEffect(() => {
+    console.log('🎁 VouchersScreen - Setting search scope to deals');
+    setSearchScope('deals');
+    
+    return () => {
+      console.log('🎁 VouchersScreen - Cleaning up');
+    };
+  }, [setSearchScope]);
 
   useEffect(() => {
     fetchData();
@@ -112,6 +129,45 @@ export default function VouchersScreen() {
   const copyToClipboard = (code: string) => {
     Clipboard.setString(code);
     Alert.alert('Copied!', `Voucher code ${code} copied to clipboard`);
+  };
+
+  // Filter data based on search
+  const filteredVouchers = useMemo(() => {
+    if (!localSearchQuery.trim()) return vouchers;
+    
+    const query = localSearchQuery.toLowerCase();
+    return vouchers.filter(v => 
+      v.title?.toLowerCase().includes(query) ||
+      v.code?.toLowerCase().includes(query) ||
+      v.description?.toLowerCase().includes(query)
+    );
+  }, [vouchers, localSearchQuery]);
+
+  const filteredPromotions = useMemo(() => {
+    if (!localSearchQuery.trim()) return promotions;
+    
+    const query = localSearchQuery.toLowerCase();
+    return promotions.filter(p => 
+      p.title?.toLowerCase().includes(query) ||
+      p.description?.toLowerCase().includes(query)
+    );
+  }, [promotions, localSearchQuery]);
+
+  const filteredHistory = useMemo(() => {
+    if (!localSearchQuery.trim()) return history;
+    
+    const query = localSearchQuery.toLowerCase();
+    return history.filter(h => 
+      h.voucherCode?.toLowerCase().includes(query) ||
+      h.voucherTitle?.toLowerCase().includes(query) ||
+      h.orderNumber?.toLowerCase().includes(query)
+    );
+  }, [history, localSearchQuery]);
+
+  const handleCloseSearch = () => {
+    console.log('🔴 VouchersScreen - Closing search overlay');
+    setIsSearchActive(false);
+    setLocalSearchQuery('');
   };
 
   const formatDiscount = (item: Voucher | Promotion) => {
@@ -290,117 +346,182 @@ export default function VouchersScreen() {
     );
   };
 
+  const shouldShowOverlay = isSearchActive && searchScope === 'deals';
+
+  console.log('🎨 VouchersScreen - Rendering, shouldShowOverlay:', shouldShowOverlay);
+
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Rewards</Text>
+    <View style={{ flex: 1 }}>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>My Rewards</Text>
+        </View>
+
+        {/* Tabs */}
+        <View style={styles.tabs}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'vouchers' && styles.activeTab]}
+            onPress={() => setActiveTab('vouchers')}
+          >
+            <Ionicons
+              name="ticket"
+              size={20}
+              color={activeTab === 'vouchers' ? '#10b981' : '#6b7280'}
+            />
+            <Text
+              style={[styles.tabText, activeTab === 'vouchers' && styles.activeTabText]}
+            >
+              Vouchers ({vouchers.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'promotions' && styles.activeTab]}
+            onPress={() => setActiveTab('promotions')}
+          >
+            <Ionicons
+              name="pricetag"
+              size={20}
+              color={activeTab === 'promotions' ? '#8b5cf6' : '#6b7280'}
+            />
+            <Text
+              style={[styles.tabText, activeTab === 'promotions' && styles.activeTabText]}
+            >
+              Promotions ({promotions.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'history' && styles.activeTab]}
+            onPress={() => setActiveTab('history')}
+          >
+            <Ionicons
+              name="time"
+              size={20}
+              color={activeTab === 'history' ? '#3b82f6' : '#6b7280'}
+            />
+            <Text
+              style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}
+            >
+              History
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Content */}
+        <ScrollView
+          style={styles.content}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          {activeTab === 'vouchers' && (
+            <View style={styles.section}>
+              {vouchers.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Ionicons name="ticket-outline" size={64} color="#d1d5db" />
+                  <Text style={styles.emptyTitle}>No vouchers yet</Text>
+                  <Text style={styles.emptyText}>
+                    Vouchers will be automatically assigned based on your activity
+                  </Text>
+                </View>
+              ) : (
+                vouchers.map(renderVoucher)
+              )}
+            </View>
+          )}
+
+          {activeTab === 'promotions' && (
+            <View style={styles.section}>
+              {promotions.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Ionicons name="pricetag-outline" size={64} color="#d1d5db" />
+                  <Text style={styles.emptyTitle}>No promotions claimed</Text>
+                  <Text style={styles.emptyText}>
+                    Check the home screen for available promotions
+                  </Text>
+                </View>
+              ) : (
+                promotions.map(renderPromotion)
+              )}
+            </View>
+          )}
+
+          {activeTab === 'history' && (
+            <View style={styles.section}>
+              {history.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Ionicons name="time-outline" size={64} color="#d1d5db" />
+                  <Text style={styles.emptyTitle}>No history yet</Text>
+                  <Text style={styles.emptyText}>
+                    Your used vouchers will appear here
+                  </Text>
+                </View>
+              ) : (
+                history.map(renderHistoryItem)
+              )}
+            </View>
+          )}
+        </ScrollView>
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'vouchers' && styles.activeTab]}
-          onPress={() => setActiveTab('vouchers')}
-        >
-          <Ionicons
-            name="ticket"
-            size={20}
-            color={activeTab === 'vouchers' ? '#10b981' : '#6b7280'}
-          />
-          <Text
-            style={[styles.tabText, activeTab === 'vouchers' && styles.activeTabText]}
-          >
-            Vouchers ({vouchers.length})
-          </Text>
-        </TouchableOpacity>
+      {/* SEARCH OVERLAY */}
+      {shouldShowOverlay && (
+        <View style={overlayStyles.searchOverlay}>
+          <Pressable style={overlayStyles.backdrop} onPress={handleCloseSearch} />
+          
+          <View style={[overlayStyles.searchContent, { backgroundColor: '#f9fafb', paddingTop: insets.top + 60 }]}>
+            <SearchOverlayHeader
+              value={localSearchQuery}
+              onChangeText={setLocalSearchQuery}
+              onClose={handleCloseSearch}
+              placeholder="Search vouchers and promotions..."
+              theme={{ text: '#111827', cardBackground: '#fff' }}
+            />
 
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'promotions' && styles.activeTab]}
-          onPress={() => setActiveTab('promotions')}
-        >
-          <Ionicons
-            name="pricetag"
-            size={20}
-            color={activeTab === 'promotions' ? '#8b5cf6' : '#6b7280'}
-          />
-          <Text
-            style={[styles.tabText, activeTab === 'promotions' && styles.activeTabText]}
-          >
-            Promotions ({promotions.length})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'history' && styles.activeTab]}
-          onPress={() => setActiveTab('history')}
-        >
-          <Ionicons
-            name="time"
-            size={20}
-            color={activeTab === 'history' ? '#3b82f6' : '#6b7280'}
-          />
-          <Text
-            style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}
-          >
-            History
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Content */}
-      <ScrollView
-        style={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        {activeTab === 'vouchers' && (
-          <View style={styles.section}>
-            {vouchers.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="ticket-outline" size={64} color="#d1d5db" />
-                <Text style={styles.emptyTitle}>No vouchers yet</Text>
-                <Text style={styles.emptyText}>
-                  Vouchers will be automatically assigned based on your activity
-                </Text>
-              </View>
-            ) : (
-              vouchers.map(renderVoucher)
-            )}
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+              {activeTab === 'vouchers' && (
+                filteredVouchers.length > 0 ? (
+                  filteredVouchers.map(renderVoucher)
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="search-outline" size={64} color="#d1d5db" />
+                    <Text style={styles.emptyTitle}>No vouchers found</Text>
+                    <Text style={styles.emptyText}>
+                      Try searching with different keywords
+                    </Text>
+                  </View>
+                )
+              )}
+              {activeTab === 'promotions' && (
+                filteredPromotions.length > 0 ? (
+                  filteredPromotions.map(renderPromotion)
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="search-outline" size={64} color="#d1d5db" />
+                    <Text style={styles.emptyTitle}>No promotions found</Text>
+                    <Text style={styles.emptyText}>
+                      Try searching with different keywords
+                    </Text>
+                  </View>
+                )
+              )}
+              {activeTab === 'history' && (
+                filteredHistory.length > 0 ? (
+                  filteredHistory.map(renderHistoryItem)
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="search-outline" size={64} color="#d1d5db" />
+                    <Text style={styles.emptyTitle}>No history found</Text>
+                    <Text style={styles.emptyText}>
+                      Try searching with different keywords
+                    </Text>
+                  </View>
+                )
+              )}
+            </ScrollView>
           </View>
-        )}
-
-        {activeTab === 'promotions' && (
-          <View style={styles.section}>
-            {promotions.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="pricetag-outline" size={64} color="#d1d5db" />
-                <Text style={styles.emptyTitle}>No promotions claimed</Text>
-                <Text style={styles.emptyText}>
-                  Check the home screen for available promotions
-                </Text>
-              </View>
-            ) : (
-              promotions.map(renderPromotion)
-            )}
-          </View>
-        )}
-
-        {activeTab === 'history' && (
-          <View style={styles.section}>
-            {history.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="time-outline" size={64} color="#d1d5db" />
-                <Text style={styles.emptyTitle}>No history yet</Text>
-                <Text style={styles.emptyText}>
-                  Your used vouchers will appear here
-                </Text>
-              </View>
-            ) : (
-              history.map(renderHistoryItem)
-            )}
-          </View>
-        )}
-      </ScrollView>
+        </View>
+      )}
     </View>
   );
 }
@@ -620,5 +741,28 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+});
+
+const overlayStyles = StyleSheet.create({
+  searchOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 999999,
+    elevation: 999999,
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  searchContent: {
+    flex: 1,
   },
 });

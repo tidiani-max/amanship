@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { View, StyleSheet, FlatList, Pressable, Image, Modal, Platform } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -13,6 +13,7 @@ import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { useSearch } from "@/context/SearchContext";
+import { Spacing } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { SearchOverlayHeader } from '@/components/SearchOverlayHeader';
 
@@ -31,8 +32,26 @@ export default function OrdersScreen() {
   const navigation = useNavigation<NavigationProp>();
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
   
-  const { isSearchActive, setIsSearchActive, searchScope } = useSearch();
+  // Search state
+  const { isSearchActive, setIsSearchActive, searchScope, setSearchScope } = useSearch();
   const [localSearchQuery, setLocalSearchQuery] = useState('');
+
+  // Set search scope for this screen
+  useEffect(() => {
+    console.log('📦 OrdersScreen - Setting search scope to history');
+    setSearchScope('history');
+    
+    return () => {
+      console.log('📦 OrdersScreen - Cleaning up');
+    };
+  }, [setSearchScope]);
+
+  // DEBUG: Log when search state changes
+  useEffect(() => {
+    console.log('📊 OrdersScreen - isSearchActive:', isSearchActive);
+    console.log('📊 OrdersScreen - searchScope:', searchScope);
+    console.log('📊 OrdersScreen - Should show overlay:', isSearchActive && searchScope === 'history');
+  }, [isSearchActive, searchScope]);
 
   const userId = user?.id;
 
@@ -54,16 +73,22 @@ export default function OrdersScreen() {
   const completedOrders = allOrders.filter((o: any) => o.status === "delivered");
   const orders = activeTab === "active" ? activeOrders : completedOrders;
 
+  // Filter orders based on search query
   const filteredOrders = useMemo(() => {
     if (!localSearchQuery.trim()) return orders;
+    
     const query = localSearchQuery.toLowerCase();
     return orders.filter((order: any) => 
       order.orderNumber?.toLowerCase().includes(query) ||
       order.id?.toLowerCase().includes(query) ||
       order.status?.toLowerCase().includes(query) ||
-      order.items?.some((item: any) => item.productName?.toLowerCase().includes(query))
+      order.items?.some((item: any) => 
+        item.productName?.toLowerCase().includes(query)
+      )
     );
   }, [orders, localSearchQuery]);
+
+  const formatPrice = (price: any) => `Rp ${(Number(price) || 0).toLocaleString("id-ID")}`;
 
   const formatDate = (dateInput: Date | string) => {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
@@ -86,18 +111,9 @@ export default function OrdersScreen() {
   };
 
   const handleCloseSearch = () => {
+    console.log('🔴 OrdersScreen - Closing search overlay');
     setIsSearchActive(false);
     setLocalSearchQuery('');
-  };
-
-  const handleOrderPress = (order: any) => {
-    if (order.status === "delivered") {
-        navigation.navigate("OrderDetail", { order });
-    } else {
-        navigation.navigate("OrderTracking", { orderId: order.id });
-    }
-    // Close search if an order is picked
-    if (isSearchActive) handleCloseSearch();
   };
 
   const renderOrder = ({ item }: { item: any }) => {
@@ -115,6 +131,7 @@ export default function OrdersScreen() {
               <Feather name="package" size={24} color="#999" />
             )}
           </View>
+
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <ThemedText style={{ fontWeight: "800", flex: 1, marginRight: 8, fontSize: 15 }}>
@@ -124,7 +141,9 @@ export default function OrdersScreen() {
                 <ThemedText style={[styles.statusBadgeText, { color: statusTheme.color }]}>{statusTheme.label}</ThemedText>
               </View>
             </View>
+            
             <ThemedText type="caption" style={{ color: "#94a3b8", marginTop: 4, fontWeight: "600" }}>{formatDate(item.createdAt)}</ThemedText>
+            
             {isActiveOrder && (
               <View style={{ marginTop: 12 }}>
                 <View style={styles.progressTrack}>
@@ -140,73 +159,96 @@ export default function OrdersScreen() {
             )}
           </View>
         </View>
+
+        {isActiveOrder && (
+          <View style={styles.trackButtonContainer}>
+            <View style={styles.trackButtonInner}>
+              <Feather name="navigation" size={14} color={BRAND_PURPLE} />
+              <ThemedText style={{ color: BRAND_PURPLE, fontWeight: '800', fontSize: 13 }}>Track Order</ThemedText>
+            </View>
+          </View>
+        )}
       </Card>
     );
   };
 
+  const handleOrderPress = (order: any) => {
+    order.status === "delivered" ? navigation.navigate("OrderDetail", { order }) : navigation.navigate("OrderTracking", { orderId: order.id });
+  };
+
   const shouldShowOverlay = isSearchActive && searchScope === 'history';
 
+  console.log('🎨 OrdersScreen - Rendering, shouldShowOverlay:', shouldShowOverlay);
+
   return (
-    <ThemedView style={styles.container}>
-      {/* Main Screen Content */}
-      <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
-        <ThemedText style={styles.headerTitle}>My Orders</ThemedText>
-      </View>
-      
-      <View style={styles.tabsContainer}>
-        <Pressable style={[styles.tab, activeTab === "active" && styles.activeTabBorder]} onPress={() => setActiveTab("active")}>
-          <ThemedText style={[styles.tabText, activeTab === "active" ? styles.activeTabText : { color: '#94a3b8' }]}>Active ({activeOrders.length})</ThemedText>
-        </Pressable>
-        <Pressable style={[styles.tab, activeTab === "completed" && styles.activeTabBorder]} onPress={() => setActiveTab("completed")}>
-          <ThemedText style={[styles.tabText, activeTab === "completed" ? styles.activeTabText : { color: '#94a3b8' }]}>History ({completedOrders.length})</ThemedText>
-        </Pressable>
-      </View>
-      
-      <FlatList
-        data={orders}
-        renderItem={renderOrder}
-        onRefresh={refetch}
-        refreshing={isLoading}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 100 }]}
-      />
-
-      {/* SEARCH OVERLAY - REWRITTEN AS MODAL */}
-      <Modal
-        visible={shouldShowOverlay}
-        animationType="fade"
-        transparent={false} // Prevents aria-hidden conflict on web
-        onRequestClose={handleCloseSearch}
-      >
-        <View style={[styles.searchContent, { backgroundColor: theme.backgroundRoot || '#F8F9FB', paddingTop: insets.top + 20 }]}>
-          <SearchOverlayHeader
-            value={localSearchQuery}
-            onChangeText={setLocalSearchQuery}
-            onClose={handleCloseSearch}
-            placeholder="Search your orders..."
-            theme={theme}
-          />
-
-          <FlatList
-            data={filteredOrders}
-            renderItem={renderOrder}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <Feather name="search" size={48} color="#64748b" />
-                <ThemedText style={{ color: '#64748b', marginTop: 16, fontSize: 16 }}>No orders found</ThemedText>
-              </View>
-            }
-          />
+    <View style={{ flex: 1 }}>
+      <ThemedView style={[styles.container, { backgroundColor: '#F8F9FB' }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
+          <ThemedText style={styles.headerTitle}>My Orders</ThemedText>
         </View>
-      </Modal>
-    </ThemedView>
+        
+        <View style={styles.tabsContainer}>
+          <Pressable style={[styles.tab, activeTab === "active" && styles.activeTabBorder]} onPress={() => setActiveTab("active")}>
+            <ThemedText style={[styles.tabText, activeTab === "active" ? styles.activeTabText : { color: '#94a3b8' }]}>Active ({activeOrders.length})</ThemedText>
+          </Pressable>
+          <Pressable style={[styles.tab, activeTab === "completed" && styles.activeTabBorder]} onPress={() => setActiveTab("completed")}>
+            <ThemedText style={[styles.tabText, activeTab === "completed" ? styles.activeTabText : { color: '#94a3b8' }]}>History ({completedOrders.length})</ThemedText>
+          </Pressable>
+        </View>
+        
+        <FlatList
+          data={orders}
+          renderItem={renderOrder}
+          onRefresh={refetch}
+          refreshing={isLoading}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 120 }]}
+        />
+      </ThemedView>
+
+      {/* SEARCH OVERLAY - MOVED OUTSIDE ThemedView */}
+      {shouldShowOverlay && (
+        <View style={styles.searchOverlay}>
+          <Pressable 
+            style={styles.backdrop} 
+            onPress={handleCloseSearch}
+          />
+          
+          <View style={[styles.searchContent, { backgroundColor: theme.backgroundRoot || '#F8F9FB', paddingTop: insets.top + 20 }]}>
+            <SearchOverlayHeader
+              value={localSearchQuery}
+              onChangeText={setLocalSearchQuery}
+              onClose={handleCloseSearch}
+              placeholder="Search your orders..."
+              theme={theme}
+            />
+
+            <FlatList
+              data={filteredOrders}
+              renderItem={renderOrder}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Feather name="search" size={48} color="#64748b" />
+                  <ThemedText style={{ color: '#64748b', marginTop: 16, fontSize: 16 }}>
+                    No orders found
+                  </ThemedText>
+                  <ThemedText style={{ color: '#9ca3af', marginTop: 8, fontSize: 13 }}>
+                    Try searching by order number or product name
+                  </ThemedText>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FB' },
+  container: { flex: 1 },
   header: { paddingHorizontal: 24, paddingBottom: 16, backgroundColor: '#fff' },
   headerTitle: { fontSize: 24, fontWeight: '900', color: '#1e293b' },
   tabsContainer: { flexDirection: "row", paddingHorizontal: 24, backgroundColor: '#fff', marginBottom: 12 },
@@ -215,7 +257,7 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 14, fontWeight: '700' },
   activeTabText: { color: BRAND_PURPLE },
   listContent: { paddingHorizontal: 16, gap: 12 },
-  orderCard: { borderRadius: 24, padding: 16, backgroundColor: '#fff', marginBottom: 8 },
+  orderCard: { borderRadius: 24, padding: 16, backgroundColor: '#fff', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
   imageContainer: { width: 70, height: 70, borderRadius: 18, backgroundColor: '#f1f5f9', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   productImage: { width: '100%', height: '100%' },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
@@ -223,6 +265,29 @@ const styles = StyleSheet.create({
   progressTrack: { height: 6, backgroundColor: '#f1f5f9', borderRadius: 3, overflow: 'hidden' },
   progressBar: { height: '100%', borderRadius: 3 },
   activeIndicator: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' },
+  trackButtonContainer: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  trackButtonInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   emptyState: { alignItems: 'center', justifyContent: 'center', padding: 60 },
-  searchContent: { flex: 1 },
+  
+  // Search Overlay Styles - CRITICAL FIXES
+  searchOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 999999,
+    elevation: 999999,
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  searchContent: {
+    flex: 1,
+  },
 });

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useRef } from 'react';
+import { useNavigation } from '@react-navigation/native';
 
 export type SearchScope = 'global' | 'category' | 'history' | 'deals' | 'profile';
 
@@ -11,7 +12,7 @@ interface SearchContextType {
   searchScope: SearchScope;
   setSearchScope: (scope: SearchScope) => void;
   
-  // Search query
+  // Search query - GLOBAL state only for home screen
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   
@@ -24,7 +25,7 @@ interface SearchContextType {
   setActiveCategoryId: (id: string | null) => void;
   
   // Methods
-  triggerSearch: () => void;
+  triggerSearch: (scope: SearchScope) => void;
   clearSearch: () => void;
 }
 
@@ -37,13 +38,16 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
   const [homeSearchRef, setHomeSearchRef] = useState<React.RefObject<any> | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
 
-  const triggerSearch = () => {
+  const triggerSearch = (scope: SearchScope) => {
+    console.log('🔍 Search triggered for scope:', scope);
+    setSearchScope(scope);
     setIsSearchActive(true);
   };
 
   const clearSearch = () => {
     setSearchQuery('');
     setIsSearchActive(false);
+    setSearchScope('global');
   };
 
   const value: SearchContextType = {
