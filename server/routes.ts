@@ -6,7 +6,10 @@ import { db } from "./db";
 import { 
   categories, products, vouchers, users, stores, storeStaff, 
   storeInventory, otpCodes, addresses, orders, orderItems, 
-  cartItems, messages, promotions,              
+  cartItems, messages, promotions,  userAssignedVouchers, 
+  voucherTriggerLog, 
+  voucherUsageLog,
+  promotionUsageLog ,             
   userPromotionUsage,      
   userVoucherUsage,     
 } from "../shared/schema";
@@ -26,6 +29,8 @@ import {
   notifyCustomerOrderStatus,
   notifyChatMessage 
 } from './notifications';
+
+import cron from 'node-cron';
 
 // ==================== CONFIGURATION ====================
 const DEMO_USER_ID = "demo-user";
@@ -65,6 +70,149 @@ const uploadPromotion = multer({ storage: promotionStorage });
 const promotionsDir = path.join(process.cwd(), "uploads", "promotions");
 if (!fs.existsSync(promotionsDir)) {
   fs.mkdirSync(promotionsDir, { recursive: true });
+}
+
+async function checkAndAssignVouchers(
+  userId: string, 
+  trigger: string, 
+  metadata?: { orderValue?: number; orderCount?: number }
+) {
+  try {
+    console.log(`🎁 Checking voucher triggers for user ${userId}, trigger: ${trigger}`);
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) {
+      console.log(`❌ User not found: ${userId}`);
+      return;
+    }
+
+    const eligibleVouchers = await db
+      .select()
+      .from(vouchers)
+      .where(
+        and(
+          eq(vouchers.isActive, true),
+          eq(vouchers.autoAssign, true),
+          eq(vouchers.trigger, trigger)
+        )
+      );
+
+    console.log(`📋 Found ${eligibleVouchers.length} eligible vouchers for trigger "${trigger}"`);
+
+    for (const voucher of eligibleVouchers) {
+      const existing = await db
+        .select()
+        .from(userAssignedVouchers)
+        .where(
+          and(
+            eq(userAssignedVouchers.userId, userId),
+            eq(userAssignedVouchers.voucherId, voucher.id),
+            eq(userAssignedVouchers.isActive, true)
+          )
+        )
+        .limit(1);
+
+      if (existing.length > 0) {
+        console.log(`⏭️  User already has active voucher: ${voucher.title}`);
+        continue;
+      }
+
+      const rules = voucher.assignmentRules as any;
+      let shouldAssign = false;
+
+      if (trigger === "first_signup") {
+        shouldAssign = user.totalOrders === 0;
+      } else if (trigger === "nth_order" && rules?.orderCount) {
+        shouldAssign = user.totalOrders === rules.orderCount;
+      } else if (trigger === "inactive_period" && rules?.inactiveDays) {
+        if (!user.lastOrderAt) {
+          shouldAssign = false;
+        } else {
+          const daysSinceLastOrder = Math.floor(
+            (Date.now() - new Date(user.lastOrderAt).getTime()) / (1000 * 60 * 60 * 24)
+          );
+          shouldAssign = daysSinceLastOrder >= rules.inactiveDays;
+        }
+      } else if (trigger === "high_value_order" && rules?.minOrderValue && metadata?.orderValue) {
+        shouldAssign = metadata.orderValue >= rules.minOrderValue;
+      } else if (trigger === "birthday") {
+        if (!user.birthdate) {
+          shouldAssign = false;
+        } else {
+          const today = new Date();
+          const bday = new Date(user.birthdate);
+          shouldAssign = 
+            today.getMonth() === bday.getMonth() && 
+            today.getDate() === bday.getDate();
+        }
+      } else if (trigger === "special_event") {
+        shouldAssign = true;
+      }
+
+      if (!shouldAssign) {
+        console.log(`⏭️  Voucher "${voucher.title}" rules not met`);
+        continue;
+      }
+
+      if (voucher.usageLimit && voucher.usedCount >= voucher.usageLimit) {
+        console.log(`⏭️  Voucher "${voucher.title}" has reached global usage limit`);
+        continue;
+      }
+
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + voucher.daysValid);
+
+      const [assignment] = await db
+        .insert(userAssignedVouchers)
+        .values({
+          userId,
+          voucherId: voucher.id,
+          assignedBy: "system",
+          expiresAt,
+          usageCount: 0,
+          isActive: true,
+        })
+        .returning();
+
+      await db.insert(voucherTriggerLog).values({
+        userId,
+        voucherId: voucher.id,
+        trigger,
+        assignedVoucherId: assignment.id,
+      });
+
+      console.log(`✅ Assigned voucher "${voucher.title}" to user ${userId}`);
+      console.log(`📅 Expires: ${expiresAt.toISOString()}`);
+
+      if (user.pushToken) {
+        try {
+          await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              to: user.pushToken,
+              sound: 'default',
+              title: '🎁 New Voucher!',
+              body: `You got ${voucher.title}`,
+              data: {
+                type: 'voucher_assigned',
+                voucherId: voucher.id,
+                assignedVoucherId: assignment.id,
+              },
+            }),
+          });
+          console.log(`📬 Push notification sent to user ${userId}`);
+        } catch (notifError) {
+          console.error(`❌ Failed to send push notification:`, notifError);
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`❌ Voucher assignment error for user ${userId}:`, error);
+  }
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -352,6 +500,9 @@ app.post("/api/auth/otp/send", async (req, res) => {
 });
 
 // 2. Updated OTP Verify: Handle Password Reset and Registration
+// ===== CORRECTED OTP VERIFY ROUTE =====
+// Place this in your routes.ts file replacing the existing one
+
 app.post("/api/auth/otp/verify", async (req, res) => {
   try {
     const { phone, code, name, email, password, mode } = req.body;
@@ -372,6 +523,7 @@ app.post("/api/auth/otp/verify", async (req, res) => {
 
     const existingUsers = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
     let user;
+    let userJustCreated = false;
 
     if (existingUsers.length > 0) {
       // UPDATE EXISTING USER
@@ -397,9 +549,13 @@ app.post("/api/auth/otp/verify", async (req, res) => {
         phone,
         email: email || null,
         role: isSuperAdmin ? "admin" : "customer",
-        firstLogin: false // ✅ New users don't need password reset
+        firstLogin: false, // ✅ New users don't need password reset
+        isNewUser: true,
+        totalOrders: 0,
+        totalSpent: 0,
       }).returning();
       user = newUser[0];
+      userJustCreated = true;
     }
 
     const staffRecord = await storage.getStoreStaffByUserId(user.id);
@@ -412,6 +568,13 @@ app.post("/api/auth/otp/verify", async (req, res) => {
         role: staffRecord.role, 
         status: staffRecord.status 
       };
+    }
+
+    // 🎁 AUTO-ASSIGN WELCOME VOUCHER if new user
+    if (userJustCreated) {
+      setTimeout(() => {
+        checkAndAssignVouchers(user!.id, "first_signup");
+      }, 2000);
     }
 
     res.json({ 
@@ -1878,6 +2041,8 @@ app.get("/api/orders/:id", async (req, res) => {
 
 // Add this NEW endpoint to your routes.ts
 
+// ===== CORRECTED DRIVER ORDER COMPLETE ROUTE =====
+
 app.put("/api/driver/orders/:id/complete", async (req, res) => {
   try {
     const { id } = req.params;
@@ -1923,8 +2088,27 @@ app.put("/api/driver/orders/:id/complete", async (req, res) => {
       .where(eq(orders.id, id))
       .returning();
 
+    // ✅ UPDATE USER STATS (totalOrders, totalSpent, lastOrderAt)
+    await db.update(users)
+      .set({ 
+        totalOrders: sql`${users.totalOrders} + 1`,
+        totalSpent: sql`${users.totalSpent} + ${completed.total}`,
+        lastOrderAt: new Date(),
+        isNewUser: false, // Mark as returning user after first order
+        firstOrderAt: sql`COALESCE(${users.firstOrderAt}, NOW())`, // Set if null
+      })
+      .where(eq(users.id, completed.userId));
+
     // 🔔 NOTIFY CUSTOMER ORDER DELIVERED
     await notifyCustomerOrderStatus(completed.id, "delivered");
+
+    // 🎁 CHECK VOUCHER TRIGGERS (async, don't await)
+    setTimeout(() => {
+      checkAndAssignVouchers(completed.userId, "nth_order");
+      checkAndAssignVouchers(completed.userId, "high_value_order", { 
+        orderValue: completed.total 
+      });
+    }, 1000);
 
     console.log(`✅ Order ${id} completed by driver ${userId}`);
     res.json(completed);
@@ -4612,6 +4796,326 @@ async function findBestClaimedPromotion(
     return null;
   }
 }
+
+
+
+
+
+// ===== GET ASSIGNED VOUCHERS =====
+app.get("/api/vouchers/assigned", async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    console.log(`📋 Fetching assigned vouchers for user: ${userId}`);
+    const now = new Date();
+
+    const assignedVouchers = await db
+      .select({
+        assignment: userAssignedVouchers,
+        voucher: vouchers,
+      })
+      .from(userAssignedVouchers)
+      .leftJoin(vouchers, eq(userAssignedVouchers.voucherId, vouchers.id))
+      .where(
+        and(
+          eq(userAssignedVouchers.userId, userId as string),
+          eq(userAssignedVouchers.isActive, true),
+          sql`${userAssignedVouchers.expiresAt} > ${now}`,
+          eq(vouchers.isActive, true)
+        )
+      )
+      .orderBy(sql`${userAssignedVouchers.assignedAt} DESC`);
+
+    const formatted = assignedVouchers.map((item) => ({
+      ...item.voucher,
+      assignedAt: item.assignment.assignedAt,
+      expiresAt: item.assignment.expiresAt,
+      usageCount: item.assignment.usageCount,
+      assignedBy: item.assignment.assignedBy,
+      assignmentId: item.assignment.id,
+      remainingUses: (item.voucher?.userLimit || 1) - item.assignment.usageCount,
+    }));
+
+    console.log(`✅ Found ${formatted.length} active assigned vouchers`);
+    res.json(formatted);
+  } catch (error) {
+    console.error("❌ Get assigned vouchers error:", error);
+    res.status(500).json({ error: "Failed to fetch vouchers" });
+  }
+});
+
+// ===== GET VOUCHER HISTORY =====
+app.get("/api/vouchers/history", async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    console.log(`📋 Fetching voucher history for user: ${userId}`);
+
+    const history = await db
+      .select({
+        log: voucherUsageLog,
+        voucher: vouchers,
+        order: orders,
+      })
+      .from(voucherUsageLog)
+      .leftJoin(vouchers, eq(voucherUsageLog.voucherId, vouchers.id))
+      .leftJoin(orders, eq(voucherUsageLog.orderId, orders.id))
+      .where(eq(voucherUsageLog.userId, userId as string))
+      .orderBy(sql`${voucherUsageLog.usedAt} DESC`)
+      .limit(50);
+
+    const formatted = history.map((item) => ({
+      id: item.log.id,
+      voucherCode: item.voucher?.code,
+      voucherTitle: item.voucher?.title,
+      discountApplied: item.log.discountApplied,
+      orderNumber: item.order?.orderNumber,
+      orderTotal: item.order?.total,
+      usedAt: item.log.usedAt,
+    }));
+
+    res.json(formatted);
+  } catch (error) {
+    console.error("❌ Get voucher history error:", error);
+    res.status(500).json({ error: "Failed to fetch history" });
+  }
+});
+
+// ===== VALIDATE VOUCHER =====
+app.post("/api/vouchers/validate", async (req, res) => {
+  try {
+    const { code, userId, orderTotal } = req.body;
+
+    console.log("🔍 Validating voucher:", { code, userId, orderTotal });
+
+    if (!code || !userId || orderTotal === undefined) {
+      return res.status(400).json({ 
+        valid: false,
+        error: "Missing required fields" 
+      });
+    }
+
+    const now = new Date();
+
+    const [voucher] = await db
+      .select()
+      .from(vouchers)
+      .where(
+        and(
+          eq(vouchers.code, code.toUpperCase()),
+          eq(vouchers.isActive, true)
+        )
+      )
+      .limit(1);
+
+    if (!voucher) {
+      console.log("❌ Voucher not found or inactive");
+      return res.status(404).json({ 
+        valid: false, 
+        error: "Voucher not found or expired" 
+      });
+    }
+
+    const [assignment] = await db
+      .select()
+      .from(userAssignedVouchers)
+      .where(
+        and(
+          eq(userAssignedVouchers.userId, userId),
+          eq(userAssignedVouchers.voucherId, voucher.id),
+          eq(userAssignedVouchers.isActive, true),
+          sql`${userAssignedVouchers.expiresAt} > ${now}`
+        )
+      )
+      .limit(1);
+
+    if (!assignment) {
+      console.log("❌ Voucher not assigned to user or expired");
+      return res.status(400).json({ 
+        valid: false, 
+        error: "This voucher is not available to you" 
+      });
+    }
+
+    if (assignment.usageCount >= voucher.userLimit) {
+      return res.status(400).json({ 
+        valid: false, 
+        error: "You've already used this voucher" 
+      });
+    }
+
+    if (orderTotal < voucher.minOrder) {
+      return res.status(400).json({ 
+        valid: false, 
+        error: `Minimum order is Rp ${voucher.minOrder.toLocaleString("id-ID")}` 
+      });
+    }
+
+    let discount = 0;
+    if (voucher.discountType === "percentage") {
+      discount = Math.floor((orderTotal * voucher.discount) / 100);
+      if (voucher.maxDiscount && discount > voucher.maxDiscount) {
+        discount = voucher.maxDiscount;
+      }
+    } else {
+      discount = voucher.discount;
+    }
+
+    console.log(`✅ Voucher valid - discount: ${discount}`);
+
+    res.json({
+      valid: true,
+      voucher: {
+        id: voucher.id,
+        code: voucher.code,
+        discount,
+        description: voucher.description,
+        assignmentId: assignment.id,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Validate voucher error:", error);
+    res.status(500).json({ 
+      valid: false,
+      error: "Failed to validate voucher" 
+    });
+  }
+});
+
+// ===== DAILY CRON JOB =====
+app.post("/api/cron/daily-voucher-check", async (req, res) => {
+  try {
+    console.log("⏰ Running daily voucher assignment check...");
+
+    const inactiveThreshold = 30;
+    const inactiveDate = new Date();
+    inactiveDate.setDate(inactiveDate.getDate() - inactiveThreshold);
+
+    const inactiveUsers = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.role, "customer"),
+          sql`${users.lastOrderAt} < ${inactiveDate}`,
+          sql`${users.lastOrderAt} IS NOT NULL`
+        )
+      );
+
+    console.log(`📋 Found ${inactiveUsers.length} inactive users`);
+
+    for (const user of inactiveUsers) {
+      await checkAndAssignVouchers(user.id, "inactive_period");
+    }
+
+    const today = new Date();
+    const birthdayUsers = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.role, "customer"),
+          sql`EXTRACT(MONTH FROM ${users.birthdate}) = ${today.getMonth() + 1}`,
+          sql`EXTRACT(DAY FROM ${users.birthdate}) = ${today.getDate()}`,
+          sql`${users.birthdate} IS NOT NULL`
+        )
+      );
+
+    console.log(`🎂 Found ${birthdayUsers.length} users with birthdays today`);
+
+    for (const user of birthdayUsers) {
+      await checkAndAssignVouchers(user.id, "birthday");
+    }
+
+    const expiredAssignments = await db
+      .update(userAssignedVouchers)
+      .set({ isActive: false })
+      .where(
+        and(
+          eq(userAssignedVouchers.isActive, true),
+          sql`${userAssignedVouchers.expiresAt} < NOW()`
+        )
+      )
+      .returning();
+
+    console.log(`🗑️  Deactivated ${expiredAssignments.length} expired voucher assignments`);
+
+    res.json({ 
+      success: true,
+      inactiveUsersChecked: inactiveUsers.length,
+      birthdayUsersChecked: birthdayUsers.length,
+      expiredAssignments: expiredAssignments.length,
+    });
+  } catch (error) {
+    console.error("❌ Daily voucher check error:", error);
+    res.status(500).json({ error: "Failed to run daily check" });
+  }
+});
+
+// ===== ADMIN: CREATE VOUCHER TEMPLATE =====
+app.post("/api/admin/vouchers/template", async (req, res) => {
+  try {
+    const { 
+      title, description, type, trigger, discount, discountType, 
+      maxDiscount, minOrder, daysValid, userLimit, usageLimit, assignmentRules 
+    } = req.body;
+
+    const code = `${type.toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+    const [voucher] = await db.insert(vouchers).values({
+      code, title, description, type, trigger, discountType, discount,
+      maxDiscount: maxDiscount || null,
+      minOrder: minOrder || 0,
+      daysValid: daysValid || 30,
+      userLimit: userLimit ,
+      usageLimit: usageLimit || null,
+      autoAssign: true,
+      assignmentRules: assignmentRules || {},
+      validFrom: new Date(),
+      validUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      isActive: true,
+    }).returning();
+
+    console.log(`✅ Created voucher template: ${voucher.title} (${voucher.code})`);
+    res.json(voucher);
+  } catch (error) {
+    console.error("❌ Create voucher template error:", error);
+    res.status(500).json({ error: "Failed to create voucher" });
+  }
+});
+
+
+
+
+// Run daily at 9 AM
+cron.schedule('0 9 * * *', async () => {
+  console.log('🎁 Running daily voucher check...');
+  try {
+    await fetch(`${process.env.DOMAIN}/api/cron/daily-voucher-check`, {
+      method: 'POST',
+    });
+  } catch (error) {
+    console.error('❌ Cron job failed:', error);
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
