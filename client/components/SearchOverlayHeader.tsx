@@ -18,13 +18,17 @@ interface SearchInputProps {
 // Custom search input component that works on both web and mobile
 function SearchInput({ value, onChangeText, placeholder, theme }: SearchInputProps) {
   const inputRef = useRef<TextInput>(null);
+  const hasFocused = useRef(false);
 
   useEffect(() => {
-    // Auto-focus on mount
-    const timer = setTimeout(() => {
-      inputRef.current?.focus();
-    }, 100);
-    return () => clearTimeout(timer);
+    // Only focus once when component first mounts
+    if (!hasFocused.current) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+        hasFocused.current = true;
+      }, 100);
+      return () => clearTimeout(timer);
+    }
   }, []);
 
   if (Platform.OS === 'web') {
@@ -84,7 +88,7 @@ interface SearchOverlayHeaderProps {
   theme: any;
 }
 
-export function SearchOverlayHeader({
+export const SearchOverlayHeader = React.memo(function SearchOverlayHeader({
   value,
   onChangeText,
   onClose,
@@ -123,7 +127,7 @@ export function SearchOverlayHeader({
       </Pressable>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   searchHeader: {

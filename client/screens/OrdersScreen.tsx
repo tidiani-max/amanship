@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { View, StyleSheet, FlatList, Pressable, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -35,6 +35,13 @@ export default function OrdersScreen() {
   // Search state
   const { isSearchActive, setIsSearchActive, searchScope } = useSearch();
   const [localSearchQuery, setLocalSearchQuery] = useState('');
+
+  // DEBUG: Log when search state changes
+  useEffect(() => {
+    console.log('📊 OrdersScreen - isSearchActive:', isSearchActive);
+    console.log('📊 OrdersScreen - searchScope:', searchScope);
+    console.log('📊 OrdersScreen - Should show overlay:', isSearchActive && searchScope === 'history');
+  }, [isSearchActive, searchScope]);
 
   const userId = user?.id;
 
@@ -94,6 +101,7 @@ export default function OrdersScreen() {
   };
 
   const handleCloseSearch = () => {
+    console.log('🔴 Closing search overlay');
     setIsSearchActive(false);
     setLocalSearchQuery('');
   };
@@ -158,45 +166,53 @@ export default function OrdersScreen() {
     order.status === "delivered" ? navigation.navigate("OrderDetail", { order }) : navigation.navigate("OrderTracking", { orderId: order.id });
   };
 
+  const shouldShowOverlay = isSearchActive && searchScope === 'history';
+
+  console.log('🎨 Rendering OrdersScreen, shouldShowOverlay:', shouldShowOverlay);
+
   return (
-    <ThemedView style={[styles.container, { backgroundColor: '#F8F9FB' }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
-        <ThemedText style={styles.headerTitle}>My Orders</ThemedText>
-      </View>
-      
-      <View style={styles.tabsContainer}>
-        <Pressable style={[styles.tab, activeTab === "active" && styles.activeTabBorder]} onPress={() => setActiveTab("active")}>
-          <ThemedText style={[styles.tabText, activeTab === "active" ? styles.activeTabText : { color: '#94a3b8' }]}>Active ({activeOrders.length})</ThemedText>
-        </Pressable>
-        <Pressable style={[styles.tab, activeTab === "completed" && styles.activeTabBorder]} onPress={() => setActiveTab("completed")}>
-          <ThemedText style={[styles.tabText, activeTab === "completed" ? styles.activeTabText : { color: '#94a3b8' }]}>History ({completedOrders.length})</ThemedText>
-        </Pressable>
-      </View>
-      
-      <FlatList
-        data={orders}
-        renderItem={renderOrder}
-        onRefresh={refetch}
-        refreshing={isLoading}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 120 }]}
-      />
+    <>
+      <ThemedView style={[styles.container, { backgroundColor: '#F8F9FB' }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
+          <ThemedText style={styles.headerTitle}>My Orders</ThemedText>
+        </View>
+        
+        <View style={styles.tabsContainer}>
+          <Pressable style={[styles.tab, activeTab === "active" && styles.activeTabBorder]} onPress={() => setActiveTab("active")}>
+            <ThemedText style={[styles.tabText, activeTab === "active" ? styles.activeTabText : { color: '#94a3b8' }]}>Active ({activeOrders.length})</ThemedText>
+          </Pressable>
+          <Pressable style={[styles.tab, activeTab === "completed" && styles.activeTabBorder]} onPress={() => setActiveTab("completed")}>
+            <ThemedText style={[styles.tabText, activeTab === "completed" ? styles.activeTabText : { color: '#94a3b8' }]}>History ({completedOrders.length})</ThemedText>
+          </Pressable>
+        </View>
+        
+        <FlatList
+          data={orders}
+          renderItem={renderOrder}
+          onRefresh={refetch}
+          refreshing={isLoading}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 120 }]}
+        />
+      </ThemedView>
 
-      {/* SEARCH OVERLAY */}
-      {isSearchActive && searchScope === 'history' && (
-  <View style={styles.searchOverlay}>
-    <Pressable style={styles.backdrop} onPress={handleCloseSearch} />
-    
-    <View style={[styles.searchContent, { backgroundColor: theme.backgroundRoot, paddingTop: insets.top + 20 }]}>
-      <SearchOverlayHeader
-        value={localSearchQuery}
-        onChangeText={setLocalSearchQuery}
-        onClose={handleCloseSearch}
-        placeholder="Search your orders..."
-        theme={theme}
-      />
+      {/* SEARCH OVERLAY - MOVED OUTSIDE ThemedView */}
+      {shouldShowOverlay && (
+        <View style={styles.searchOverlay} pointerEvents="box-none">
+          <Pressable 
+            style={styles.backdrop} 
+            onPress={handleCloseSearch}
+          />
+          
+          <View style={[styles.searchContent, { backgroundColor: theme.backgroundRoot || '#F8F9FB', paddingTop: insets.top + 20 }]}>
+            <SearchOverlayHeader
+              value={localSearchQuery}
+              onChangeText={setLocalSearchQuery}
+              onClose={handleCloseSearch}
+              placeholder="Search your orders..."
+              theme={theme}
+            />
 
-            {/* Search Results */}
             <FlatList
               data={filteredOrders}
               renderItem={renderOrder}
@@ -217,7 +233,7 @@ export default function OrdersScreen() {
           </View>
         </View>
       )}
-    </ThemedView>
+    </>
   );
 }
 
@@ -243,25 +259,18 @@ const styles = StyleSheet.create({
   trackButtonInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   emptyState: { alignItems: 'center', justifyContent: 'center', padding: 60 },
   
-  // Search Overlay Styles
+  // Search Overlay Styles - CRITICAL FIXES
   searchOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 9999,
+    ...StyleSheet.absoluteFillObject, // Use absoluteFillObject instead of individual properties
+    zIndex: 99999, // Increased z-index
+    elevation: 99999, // Android elevation
   },
   backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
   searchContent: {
     flex: 1,
+    zIndex: 100000,
   },
-  
 });
