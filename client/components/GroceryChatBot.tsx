@@ -102,9 +102,21 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
 
     try {
       // Filter products: Only include those with 15-minute delivery or less
-      const fastDeliveryProducts = availableProducts.filter(
+      let fastDeliveryProducts = availableProducts.filter(
         p => (p.deliveryMinutes ?? 999) <= 15
       );
+
+      // If no products with 15min delivery, fallback to 30min
+      if (fastDeliveryProducts.length === 0) {
+        fastDeliveryProducts = availableProducts.filter(
+          p => (p.deliveryMinutes ?? 999) <= 30
+        );
+      }
+
+      // If still no products, use all available products
+      if (fastDeliveryProducts.length === 0) {
+        fastDeliveryProducts = availableProducts;
+      }
 
       // Sort by delivery time (fastest first)
       const sortedProducts = fastDeliveryProducts.sort(
@@ -120,10 +132,28 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
         })
         .join('\n');
 
+      // Check if we have any products
+      if (!productCatalog || productCatalog.trim().length === 0) {
+        throw new Error('No products available');
+      }
+
       // Also keep a map for matching products later
       const productMap = new Map(
         sortedProducts.map(p => [p.name.toLowerCase(), p])
       );
+
+      const requestBody = {
+        userMessage: userMessage.content,
+        productCatalog: productCatalog,
+        language: language, // Send current language
+      };
+
+      console.log('📤 Sending to chatbot API:', {
+        messageLength: requestBody.userMessage.length,
+        catalogLength: requestBody.productCatalog.length,
+        language: requestBody.language,
+        productsCount: sortedProducts.length,
+      });
 
       const response = await fetch(
         `${process.env.EXPO_PUBLIC_DOMAIN}/api/chatbot/grocery-assistant`,
@@ -132,16 +162,16 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            userMessage: userMessage.content,
-            productCatalog: productCatalog,
-            language: language, // Send current language
-          }),
+          body: JSON.stringify(requestBody),
         }
       );
 
+      console.log('📥 Response status:', response.status);
+
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`);
+        const errorText = await response.text();
+        console.error('❌ API Error Response:', errorText);
+        throw new Error(`API Error: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();

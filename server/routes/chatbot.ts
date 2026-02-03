@@ -7,11 +7,29 @@ const router = Router();
  */
 router.post("/grocery-assistant", async (req, res) => {
   try {
+    console.log('📥 Received chatbot request:', {
+      hasUserMessage: !!req.body.userMessage,
+      hasProductCatalog: !!req.body.productCatalog,
+      language: req.body.language,
+      userMessageLength: req.body.userMessage?.length,
+      catalogLength: req.body.productCatalog?.length,
+    });
+
     const { userMessage, productCatalog, language = 'en' } = req.body;
 
-    if (!userMessage || !productCatalog) {
+    if (!userMessage) {
+      console.error('❌ Missing userMessage');
       return res.status(400).json({
-        error: "Missing required fields: userMessage and productCatalog",
+        error: "Missing required field: userMessage",
+        received: { userMessage: !!userMessage, productCatalog: !!productCatalog }
+      });
+    }
+
+    if (!productCatalog) {
+      console.error('❌ Missing productCatalog');
+      return res.status(400).json({
+        error: "Missing required field: productCatalog",
+        received: { userMessage: !!userMessage, productCatalog: !!productCatalog }
       });
     }
 
