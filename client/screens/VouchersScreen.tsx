@@ -9,7 +9,7 @@ import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { useSearch } from "@/context/SearchContext";
-
+import { SearchOverlayHeader } from '@/components/SearchOverlayHeader';
 type Tab = "vouchers" | "promotions";
 
 const PURPLE_PRIMARY = "#6366F1";
@@ -136,49 +136,18 @@ export default function VouchersScreen() {
 
       {/* SEARCH OVERLAY */}
       {isSearchActive && searchScope === 'deals' && (
-        <View style={styles.searchOverlay}>
-          {/* Backdrop */}
-          <Pressable 
-            style={styles.backdrop} 
-            onPress={handleCloseSearch}
-          />
-          
-          {/* Search Content */}
-          <View style={[styles.searchContent, { backgroundColor: theme.backgroundRoot, paddingTop: dynamicTopPadding }]}>
-            {/* Search Header */}
-            <View style={[styles.searchHeader, { backgroundColor: theme.cardBackground }]}>
-              <View style={styles.searchInputWrapper}>
-                <Feather name="search" size={20} color="#64748b" />
-                <input
-                  type="text"
-                  value={localSearchQuery}
-                  onChange={(e) => setLocalSearchQuery(e.target.value)}
-                  placeholder="Search vouchers and deals..."
-                  autoFocus
-                  style={{
-                    flex: 1,
-                    border: 'none',
-                    outline: 'none',
-                    fontSize: 16,
-                    marginLeft: 12,
-                    backgroundColor: 'transparent',
-                    color: theme.text,
-                  }}
-                />
-                {localSearchQuery.length > 0 && (
-                  <Pressable
-                    onPress={() => setLocalSearchQuery('')}
-                    style={styles.clearButton}
-                  >
-                    <Feather name="x-circle" size={18} color="#64748b" />
-                  </Pressable>
-                )}
-              </View>
-              
-              <Pressable onPress={handleCloseSearch} style={styles.closeButton}>
-                <Feather name="x" size={24} color={theme.text} />
-              </Pressable>
-            </View>
+  <View style={styles.searchOverlay}>
+    <Pressable style={styles.backdrop} onPress={handleCloseSearch} />
+    
+    <View style={[styles.searchContent, { backgroundColor: theme.backgroundRoot, paddingTop: dynamicTopPadding }]}>
+      {/* Use the new component */}
+      <SearchOverlayHeader
+        value={localSearchQuery}
+        onChangeText={setLocalSearchQuery}
+        onClose={handleCloseSearch}
+        placeholder="Search vouchers and deals..."
+        theme={theme}
+      />
             
             {/* Search Results */}
             <FlatList
@@ -279,28 +248,5 @@ const styles = StyleSheet.create({
   searchContent: {
     flex: 1,
   },
-  searchHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  searchInputWrapper: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 48,
-  },
-  clearButton: {
-    padding: 4,
-  },
-  closeButton: {
-    padding: 8,
-  },
+  
 });
