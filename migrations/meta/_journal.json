@@ -15,6 +15,13 @@
       "when": 1768804291685,
       "tag": "0001_naive_lilandra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770101430423,
+      "tag": "0002_white_mad_thinker",
+      "breakpoints": true
     }
   ]
 }

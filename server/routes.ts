@@ -3245,66 +3245,84 @@ app.get("/api/vouchers/active", async (req, res) => {
 
 // ===== VALIDATE VOUCHER CODE =====
 
-app.post("/api/vouchers/validate", async (req, res) => {
+app.post("/api/vouchers/validate", async (req: Request, res: Response) => {
   try {
     const { code, userId, orderTotal } = req.body;
 
-    console.log("🔍 Validating voucher:", { code, userId, orderTotal });
-
     if (!code || !userId || orderTotal === undefined) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         valid: false,
-        error: "Missing required fields" 
+        error: "Missing required fields",
       });
     }
 
     const now = new Date();
 
-    // Find voucher with error handling
-    let voucher;
-    try {
-      const voucherResult = await db
+    // 1. Find voucher
+    const [voucher] = await db
+      .select()
+      .from(vouchers)
+      .where(
+        and(
+          eq(vouchers.code, code.toUpperCase()),
+          eq(vouchers.isActive, true),
+          lte(vouchers.validFrom, now),
+          gte(vouchers.validUntil, now)
+        )
+      )
+      .limit(1);
+
+    if (!voucher) {
+      return res.status(404).json({
+        valid: false,
+        error: "Voucher not found or expired",
+      });
+    }
+
+    // 2. Global usage limit
+    if (voucher.usageLimit && voucher.usedCount >= voucher.usageLimit) {
+      return res.status(400).json({
+        valid: false,
+        error: "Voucher usage limit reached",
+      });
+    }
+
+    let assignmentId: string | null = null;
+
+    // 3. IF AUTO-ASSIGNED → CHECK ASSIGNMENT TABLE
+    if (voucher.autoAssign) {
+      const [assignment] = await db
         .select()
-        .from(vouchers)
+        .from(userAssignedVouchers)
         .where(
           and(
-            eq(vouchers.code, code.toUpperCase()),
-            eq(vouchers.isActive, true),
-            lte(vouchers.validFrom, now),
-            gte(vouchers.validUntil, now)
+            eq(userAssignedVouchers.userId, userId),
+            eq(userAssignedVouchers.voucherId, voucher.id),
+            eq(userAssignedVouchers.isActive, true),
+            sql`${userAssignedVouchers.expiresAt} > ${now}`
           )
         )
         .limit(1);
-      
-      voucher = voucherResult[0];
-    } catch (dbError) {
-      console.error("❌ Database error finding voucher:", dbError);
-      return res.status(500).json({ 
-        valid: false,
-        error: "Database error, please try again" 
-      });
-    }
 
-    if (!voucher) {
-      console.log("❌ Voucher not found or expired");
-      return res.status(404).json({ 
-        valid: false, 
-        error: "Voucher not found or expired" 
-      });
-    }
+      if (!assignment) {
+        return res.status(400).json({
+          valid: false,
+          error: "This voucher is not available to you",
+        });
+      }
 
-    // Check usage limits
-    if (voucher.usageLimit && voucher.usedCount >= voucher.usageLimit) {
-      return res.status(400).json({ 
-        valid: false, 
-        error: "Voucher usage limit reached" 
-      });
-    }
+      if (assignment.usageCount >= voucher.userLimit) {
+        return res.status(400).json({
+          valid: false,
+          error: "You've already used this voucher",
+        });
+      }
 
-    // ✅ FIXED: Check user usage with proper TypeScript types
-    let userUsageCount = 0;
-    try {
-      const userUsageResult: Array<{ count: number }> = await db
+      assignmentId = assignment.id;
+    } 
+    // 4. GLOBAL VOUCHER → CHECK USER USAGE
+    else {
+      const result: Array<{ count: number }> = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(userVoucherUsage)
         .where(
@@ -3313,55 +3331,46 @@ app.post("/api/vouchers/validate", async (req, res) => {
             eq(userVoucherUsage.voucherId, voucher.id)
           )
         );
-      
-      userUsageCount = userUsageResult[0]?.count || 0;
-    } catch (usageError) {
-      console.error("❌ Error checking user usage:", usageError);
-      // Continue with usage count 0 if lookup fails
+
+      const usageCount = result[0]?.count || 0;
+
+      if (usageCount >= voucher.userLimit) {
+        return res.status(400).json({
+          valid: false,
+          error: "You've already used this voucher",
+        });
+      }
     }
 
-    if (userUsageCount >= voucher.userLimit) {
-      return res.status(400).json({ 
-        valid: false, 
-        error: "You've already used this voucher" 
-      });
-    }
-
-    // Check minimum order
+    // 5. Min order
     if (orderTotal < voucher.minOrder) {
-      return res.status(400).json({ 
-        valid: false, 
-        error: `Minimum order is Rp ${voucher.minOrder.toLocaleString("id-ID")}` 
+      return res.status(400).json({
+        valid: false,
+        error: `Minimum order is Rp ${voucher.minOrder.toLocaleString("id-ID")}`,
       });
     }
 
-    // Check user targeting
-    let user;
-    try {
-      const userResult = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      user = userResult[0];
-    } catch (userError) {
-      console.error("❌ Error fetching user:", userError);
-      // Continue without user targeting check
-    }
+    // 6. User targeting
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
     if (user) {
       if (voucher.targetUsers === "new_users" && !user.isNewUser) {
-        return res.status(400).json({ 
-          valid: false, 
-          error: "This voucher is for new users only" 
+        return res.status(400).json({
+          valid: false,
+          error: "This voucher is for new users only",
         });
       }
       if (voucher.targetUsers === "returning_users" && user.isNewUser) {
-        return res.status(400).json({ 
-          valid: false, 
-          error: "This voucher is for returning users only" 
+        return res.status(400).json({
+          valid: false,
+          error: "This voucher is for returning users only",
         });
       }
     }
 
-    // Calculate discount
+    // 7. Discount calc
     let discount = 0;
+
     if (voucher.discountType === "percentage") {
       discount = Math.floor((orderTotal * voucher.discount) / 100);
       if (voucher.maxDiscount && discount > voucher.maxDiscount) {
@@ -3371,25 +3380,26 @@ app.post("/api/vouchers/validate", async (req, res) => {
       discount = voucher.discount;
     }
 
-    console.log(`✅ Voucher valid - discount: ${discount}`);
-
-    res.json({
+    return res.json({
       valid: true,
       voucher: {
         id: voucher.id,
         code: voucher.code,
         discount,
         description: voucher.description,
+        assignmentId, // null if global
       },
     });
   } catch (error) {
-    console.error("❌ Validate voucher error:", error);
-    res.status(500).json({ 
+    console.error("Validate voucher error:", error);
+    return res.status(500).json({
       valid: false,
-      error: "Failed to validate voucher. Please try again." 
+      error: "Failed to validate voucher",
     });
   }
 });
+
+
 // ===== CALCULATE ORDER WITH PROMOTIONS =====
 app.post("/api/orders/calculate", async (req, res) => {
   try {
@@ -4609,143 +4619,7 @@ app.get("/api/vouchers/active", async (req, res) => {
 });
 
 // ===== VALIDATE VOUCHER CODE =====
-app.post("/api/vouchers/validate", async (req, res) => {
-  try {
-    const { code, userId, orderTotal } = req.body;
 
-    console.log("🔍 Validating voucher:", { code, userId, orderTotal });
-
-    if (!code || !userId || orderTotal === undefined) {
-      return res.status(400).json({ 
-        valid: false,
-        error: "Missing required fields" 
-      });
-    }
-
-    const now = new Date();
-
-    let voucher;
-    try {
-      const voucherResult = await db
-        .select()
-        .from(vouchers)
-        .where(
-          and(
-            eq(vouchers.code, code.toUpperCase()),
-            eq(vouchers.isActive, true),
-            lte(vouchers.validFrom, now),
-            gte(vouchers.validUntil, now)
-          )
-        )
-        .limit(1);
-      
-      voucher = voucherResult[0];
-    } catch (dbError) {
-      console.error("❌ Database error finding voucher:", dbError);
-      return res.status(500).json({ 
-        valid: false,
-        error: "Database error, please try again" 
-      });
-    }
-
-    if (!voucher) {
-      console.log("❌ Voucher not found or expired");
-      return res.status(404).json({ 
-        valid: false, 
-        error: "Voucher not found or expired" 
-      });
-    }
-
-    if (voucher.usageLimit && voucher.usedCount >= voucher.usageLimit) {
-      return res.status(400).json({ 
-        valid: false, 
-        error: "Voucher usage limit reached" 
-      });
-    }
-
-    let userUsageCount = 0;
-    try {
-      const userUsageResult: Array<{ count: number }> = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(userVoucherUsage)
-        .where(
-          and(
-            eq(userVoucherUsage.userId, userId),
-            eq(userVoucherUsage.voucherId, voucher.id)
-          )
-        );
-      
-      userUsageCount = userUsageResult[0]?.count || 0;
-    } catch (usageError) {
-      console.error("❌ Error checking user usage:", usageError);
-    }
-
-    if (userUsageCount >= voucher.userLimit) {
-      return res.status(400).json({ 
-        valid: false, 
-        error: "You've already used this voucher" 
-      });
-    }
-
-    if (orderTotal < voucher.minOrder) {
-      return res.status(400).json({ 
-        valid: false, 
-        error: `Minimum order is Rp ${voucher.minOrder.toLocaleString("id-ID")}` 
-      });
-    }
-
-    let user;
-    try {
-      const userResult = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      user = userResult[0];
-    } catch (userError) {
-      console.error("❌ Error fetching user:", userError);
-    }
-
-    if (user) {
-      if (voucher.targetUsers === "new_users" && !user.isNewUser) {
-        return res.status(400).json({ 
-          valid: false, 
-          error: "This voucher is for new users only" 
-        });
-      }
-      if (voucher.targetUsers === "returning_users" && user.isNewUser) {
-        return res.status(400).json({ 
-          valid: false, 
-          error: "This voucher is for returning users only" 
-        });
-      }
-    }
-
-    let discount = 0;
-    if (voucher.discountType === "percentage") {
-      discount = Math.floor((orderTotal * voucher.discount) / 100);
-      if (voucher.maxDiscount && discount > voucher.maxDiscount) {
-        discount = voucher.maxDiscount;
-      }
-    } else {
-      discount = voucher.discount;
-    }
-
-    console.log(`✅ Voucher valid - discount: ${discount}`);
-
-    res.json({
-      valid: true,
-      voucher: {
-        id: voucher.id,
-        code: voucher.code,
-        discount,
-        description: voucher.description,
-      },
-    });
-  } catch (error) {
-    console.error("❌ Validate voucher error:", error);
-    res.status(500).json({ 
-      valid: false,
-      error: "Failed to validate voucher. Please try again." 
-    });
-  }
-});
 
 // ===== HELPER FUNCTION: FIND BEST CLAIMED PROMOTION =====
 async function findBestClaimedPromotion(
@@ -4888,105 +4762,7 @@ app.get("/api/vouchers/history", async (req, res) => {
 });
 
 // ===== VALIDATE VOUCHER =====
-app.post("/api/vouchers/validate", async (req, res) => {
-  try {
-    const { code, userId, orderTotal } = req.body;
 
-    console.log("🔍 Validating voucher:", { code, userId, orderTotal });
-
-    if (!code || !userId || orderTotal === undefined) {
-      return res.status(400).json({ 
-        valid: false,
-        error: "Missing required fields" 
-      });
-    }
-
-    const now = new Date();
-
-    const [voucher] = await db
-      .select()
-      .from(vouchers)
-      .where(
-        and(
-          eq(vouchers.code, code.toUpperCase()),
-          eq(vouchers.isActive, true)
-        )
-      )
-      .limit(1);
-
-    if (!voucher) {
-      console.log("❌ Voucher not found or inactive");
-      return res.status(404).json({ 
-        valid: false, 
-        error: "Voucher not found or expired" 
-      });
-    }
-
-    const [assignment] = await db
-      .select()
-      .from(userAssignedVouchers)
-      .where(
-        and(
-          eq(userAssignedVouchers.userId, userId),
-          eq(userAssignedVouchers.voucherId, voucher.id),
-          eq(userAssignedVouchers.isActive, true),
-          sql`${userAssignedVouchers.expiresAt} > ${now}`
-        )
-      )
-      .limit(1);
-
-    if (!assignment) {
-      console.log("❌ Voucher not assigned to user or expired");
-      return res.status(400).json({ 
-        valid: false, 
-        error: "This voucher is not available to you" 
-      });
-    }
-
-    if (assignment.usageCount >= voucher.userLimit) {
-      return res.status(400).json({ 
-        valid: false, 
-        error: "You've already used this voucher" 
-      });
-    }
-
-    if (orderTotal < voucher.minOrder) {
-      return res.status(400).json({ 
-        valid: false, 
-        error: `Minimum order is Rp ${voucher.minOrder.toLocaleString("id-ID")}` 
-      });
-    }
-
-    let discount = 0;
-    if (voucher.discountType === "percentage") {
-      discount = Math.floor((orderTotal * voucher.discount) / 100);
-      if (voucher.maxDiscount && discount > voucher.maxDiscount) {
-        discount = voucher.maxDiscount;
-      }
-    } else {
-      discount = voucher.discount;
-    }
-
-    console.log(`✅ Voucher valid - discount: ${discount}`);
-
-    res.json({
-      valid: true,
-      voucher: {
-        id: voucher.id,
-        code: voucher.code,
-        discount,
-        description: voucher.description,
-        assignmentId: assignment.id,
-      },
-    });
-  } catch (error) {
-    console.error("❌ Validate voucher error:", error);
-    res.status(500).json({ 
-      valid: false,
-      error: "Failed to validate voucher" 
-    });
-  }
-});
 
 // ===== DAILY CRON JOB =====
 app.post("/api/cron/daily-voucher-check", async (req, res) => {
