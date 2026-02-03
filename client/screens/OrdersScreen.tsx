@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { View, StyleSheet, FlatList, Pressable, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -12,6 +12,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
+import { useSearch } from "@/context/SearchContext";
 import { Spacing } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
@@ -29,6 +30,10 @@ export default function OrdersScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<NavigationProp>();
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
+  
+  // Search state
+  const { isSearchActive, setIsSearchActive, searchScope } = useSearch();
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
 
   const userId = user?.id;
 
@@ -50,6 +55,21 @@ export default function OrdersScreen() {
   const completedOrders = allOrders.filter((o: any) => o.status === "delivered");
   const orders = activeTab === "active" ? activeOrders : completedOrders;
 
+  // Filter orders based on search query
+  const filteredOrders = useMemo(() => {
+    if (!localSearchQuery.trim()) return orders;
+    
+    const query = localSearchQuery.toLowerCase();
+    return orders.filter((order: any) => 
+      order.orderNumber?.toLowerCase().includes(query) ||
+      order.id?.toLowerCase().includes(query) ||
+      order.status?.toLowerCase().includes(query) ||
+      order.items?.some((item: any) => 
+        item.productName?.toLowerCase().includes(query)
+      )
+    );
+  }, [orders, localSearchQuery]);
+
   const formatPrice = (price: any) => `Rp ${(Number(price) || 0).toLocaleString("id-ID")}`;
 
   const formatDate = (dateInput: Date | string) => {
@@ -70,6 +90,11 @@ export default function OrdersScreen() {
       case "delivered": return { color: "#059669", icon: "check-decagram", label: "DELIVERED", progress: 1 };
       default: return { color: BRAND_PURPLE, icon: "dots-horizontal", label: status.toUpperCase(), progress: 0.1 };
     }
+  };
+
+  const handleCloseSearch = () => {
+    setIsSearchActive(false);
+    setLocalSearchQuery('');
   };
 
   const renderOrder = ({ item }: { item: any }) => {
@@ -102,7 +127,6 @@ export default function OrdersScreen() {
             
             {isActiveOrder && (
               <View style={{ marginTop: 12 }}>
-                {/* PROGRESS BAR */}
                 <View style={styles.progressTrack}>
                   <View style={[styles.progressBar, { width: `${statusTheme.progress * 100}%`, backgroundColor: statusTheme.color }]} />
                 </View>
@@ -114,16 +138,6 @@ export default function OrdersScreen() {
                 </View>
               </View>
             )}
-            
-            {/* <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 12 }}>
-              <ThemedText style={{ fontWeight: "900", fontSize: 16, color: '#1e293b' }}>{formatPrice(item.total)}</ThemedText>
-              {!isActiveOrder && (
-                 <Pressable style={styles.reorderBtn}>
-                    <Feather name="rotate-ccw" size={12} color={BRAND_PURPLE} />
-                    <ThemedText style={styles.reorderText}>Reorder</ThemedText>
-                 </Pressable>
-              )}
-            </View> */}
           </View>
         </View>
 
@@ -164,8 +178,76 @@ export default function OrdersScreen() {
         onRefresh={refetch}
         refreshing={isLoading}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 100 }]}
+        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 120 }]}
       />
+
+      {/* SEARCH OVERLAY */}
+      {isSearchActive && searchScope === 'history' && (
+        <View style={styles.searchOverlay}>
+          {/* Backdrop */}
+          <Pressable 
+            style={styles.backdrop} 
+            onPress={handleCloseSearch}
+          />
+          
+          {/* Search Content */}
+          <View style={[styles.searchContent, { backgroundColor: theme.backgroundRoot, paddingTop: insets.top + 20 }]}>
+            {/* Search Header */}
+            <View style={[styles.searchHeader, { backgroundColor: theme.cardBackground }]}>
+              <View style={styles.searchInputWrapper}>
+                <Feather name="search" size={20} color="#64748b" />
+                <input
+                  type="text"
+                  value={localSearchQuery}
+                  onChange={(e) => setLocalSearchQuery(e.target.value)}
+                  placeholder="Search your orders..."
+                  autoFocus
+                  style={{
+                    flex: 1,
+                    border: 'none',
+                    outline: 'none',
+                    fontSize: 16,
+                    marginLeft: 12,
+                    backgroundColor: 'transparent',
+                    color: theme.text,
+                  }}
+                />
+                {localSearchQuery.length > 0 && (
+                  <Pressable
+                    onPress={() => setLocalSearchQuery('')}
+                    style={styles.clearButton}
+                  >
+                    <Feather name="x-circle" size={18} color="#64748b" />
+                  </Pressable>
+                )}
+              </View>
+              
+              <Pressable onPress={handleCloseSearch} style={styles.closeButton}>
+                <Feather name="x" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+            
+            {/* Search Results */}
+            <FlatList
+              data={filteredOrders}
+              renderItem={renderOrder}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Feather name="search" size={48} color="#64748b" />
+                  <ThemedText style={{ color: '#64748b', marginTop: 16, fontSize: 16 }}>
+                    No orders found
+                  </ThemedText>
+                  <ThemedText style={{ color: '#9ca3af', marginTop: 8, fontSize: 13 }}>
+                    Try searching by order number or product name
+                  </ThemedText>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      )}
     </ThemedView>
   );
 }
@@ -190,6 +272,50 @@ const styles = StyleSheet.create({
   activeIndicator: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' },
   trackButtonContainer: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
   trackButtonInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  reorderBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND_PURPLE + '10', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
-  reorderText: { color: BRAND_PURPLE, fontSize: 12, fontWeight: '800' }
+  emptyState: { alignItems: 'center', justifyContent: 'center', padding: 60 },
+  
+  // Search Overlay Styles
+  searchOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  searchContent: {
+    flex: 1,
+  },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  searchInputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 48,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  closeButton: {
+    padding: 8,
+  },
 });

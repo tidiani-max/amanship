@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -17,6 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { useLanguage } from "@/context/LanguageContext";
+import { useSearch } from "@/context/SearchContext";
 import { Spacing } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Product } from "@/types";
@@ -28,7 +29,7 @@ import { CartToast } from "@/components/CartToast";
 
 const { width } = Dimensions.get("window");
 
-// Brand Colors from screenshots
+// Brand Colors
 const BRAND_PURPLE = "#6338f2"; 
 const BRAND_MINT_BG = "#e6fffa";
 const BRAND_MINT_TEXT = "#00bfa5";
@@ -98,6 +99,18 @@ export default function CategoryScreen() {
   const [lastAddedProduct, setLastAddedProduct] = useState<string>("");
   const { items } = useCart(); 
   
+  // Search state
+  const { isSearchActive, setIsSearchActive, searchScope, setActiveCategoryId } = useSearch();
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
+
+  // Register category ID when component mounts
+  useEffect(() => {
+    setActiveCategoryId(category.id);
+    
+    return () => {
+      setActiveCategoryId(null);
+    };
+  }, [category.id]);
 
   React.useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
@@ -127,28 +140,39 @@ export default function CategoryScreen() {
     },
   });
 
-const products: UIProduct[] = (apiProducts || []).map((p) => ({
-  id: String(p.id || ''),
-  name: String(p.name || 'Product'),
-  brand: String(p.brand || 'Brand'),
-  price: Number(p.price) || 0,
-  originalPrice: p.originalPrice ? Number(p.originalPrice) : undefined,
-  image: p.image ? String(p.image) : "",
-  category: String(p.categoryId || ''),
-  description: p.description ? String(p.description) : "",
-  nutrition: p.nutrition,
-  stockCount: Number(p.stockCount) || 0,
-  inStock: p.isAvailable && Number(p.stockCount) > 0,
-  storeName: p.storeName ? String(p.storeName) : undefined,
-  storeDistance: p.distance ? Number(p.distance) : undefined,
-  deliveryMinutes: p.deliveryMinutes ? Number(p.deliveryMinutes) : undefined,
-  storeId: p.storeId ? String(p.storeId) : undefined,
-}));
+  const products: UIProduct[] = (apiProducts || []).map((p) => ({
+    id: String(p.id || ''),
+    name: String(p.name || 'Product'),
+    brand: String(p.brand || 'Brand'),
+    price: Number(p.price) || 0,
+    originalPrice: p.originalPrice ? Number(p.originalPrice) : undefined,
+    image: p.image ? String(p.image) : "",
+    category: String(p.categoryId || ''),
+    description: p.description ? String(p.description) : "",
+    nutrition: p.nutrition,
+    stockCount: Number(p.stockCount) || 0,
+    inStock: p.isAvailable && Number(p.stockCount) > 0,
+    storeName: p.storeName ? String(p.storeName) : undefined,
+    storeDistance: p.distance ? Number(p.distance) : undefined,
+    deliveryMinutes: p.deliveryMinutes ? Number(p.deliveryMinutes) : undefined,
+    storeId: p.storeId ? String(p.storeId) : undefined,
+  }));
 
-const formatPrice = (price: number): string => {
-  const safePrice = Number(price) || 0;
-  return `Rp ${safePrice.toLocaleString("id-ID")}`;
-};
+  // Filter products based on search query
+  const filteredProducts = useMemo(() => {
+    if (!localSearchQuery.trim()) return products;
+    
+    const query = localSearchQuery.toLowerCase();
+    return products.filter(p => 
+      p.name?.toLowerCase().includes(query) ||
+      p.brand?.toLowerCase().includes(query)
+    );
+  }, [products, localSearchQuery]);
+
+  const formatPrice = (price: number): string => {
+    const safePrice = Number(price) || 0;
+    return `Rp ${safePrice.toLocaleString("id-ID")}`;
+  };
 
   const handleProductPress = (product: UIProduct) =>
     navigation.navigate("ProductDetail", { product });
@@ -160,108 +184,113 @@ const formatPrice = (price: number): string => {
     setToastVisible(true);
   };
 
-const renderProduct = ({ item }: { item: UIProduct }) => {
-  const hasDiscount = item.originalPrice && item.originalPrice > item.price;
-  const discountPercent = hasDiscount 
-    ? Math.round(((item.originalPrice! - item.price) / item.originalPrice!) * 100) 
-    : 0;
-  
-  const maxWidth = screenWidth > 1600 ? 1600 : screenWidth;
-  const effectiveWidth = screenWidth > maxWidth ? maxWidth : screenWidth;
-  const cardWidth = getProductCardWidth(effectiveWidth, responsiveColumns, responsivePadding);
+  const handleCloseSearch = () => {
+    setIsSearchActive(false);
+    setLocalSearchQuery('');
+  };
 
-  return (
-    <Pressable
-      style={[
-        styles.productCard,
-        { 
-          backgroundColor: theme.cardBackground,
-          width: cardWidth,
-        },
-        !item.inStock && { opacity: 0.5 }
-      ]}
-      onPress={() => handleProductPress(item)}
-    >
-      {hasDiscount && item.inStock && (
-        <View style={styles.discountBadge}>
-          <ThemedText style={styles.discountText}>{String(discountPercent)}% OFF</ThemedText>
-        </View>
-      )}
-      
-      <View style={styles.productImageContainer}>
-        {item.image ? (
-          <Image
-            source={{ uri: getImageUrl(item.image) }}
-            style={styles.productImage}
-            resizeMode="contain"
-          />
-        ) : (
-          <Feather name="package" size={40} color="#d1d5db" />
+  const renderProduct = ({ item }: { item: UIProduct }) => {
+    const hasDiscount = item.originalPrice && item.originalPrice > item.price;
+    const discountPercent = hasDiscount 
+      ? Math.round(((item.originalPrice! - item.price) / item.originalPrice!) * 100) 
+      : 0;
+    
+    const maxWidth = screenWidth > 1600 ? 1600 : screenWidth;
+    const effectiveWidth = screenWidth > maxWidth ? maxWidth : screenWidth;
+    const cardWidth = getProductCardWidth(effectiveWidth, responsiveColumns, responsivePadding);
+
+    return (
+      <Pressable
+        style={[
+          styles.productCard,
+          { 
+            backgroundColor: theme.cardBackground,
+            width: cardWidth,
+          },
+          !item.inStock && { opacity: 0.5 }
+        ]}
+        onPress={() => handleProductPress(item)}
+      >
+        {hasDiscount && item.inStock && (
+          <View style={styles.discountBadge}>
+            <ThemedText style={styles.discountText}>{String(discountPercent)}% OFF</ThemedText>
+          </View>
         )}
+        
+        <View style={styles.productImageContainer}>
+          {item.image ? (
+            <Image
+              source={{ uri: getImageUrl(item.image) }}
+              style={styles.productImage}
+              resizeMode="contain"
+            />
+          ) : (
+            <Feather name="package" size={40} color="#d1d5db" />
+          )}
 
-        {!item.inStock && (
-          <View style={styles.outOfStockOverlay}>
-            <View style={styles.outOfStockBadge}>
-              <ThemedText style={styles.outOfStockText}>OUT OF STOCK</ThemedText>
+          {!item.inStock && (
+            <View style={styles.outOfStockOverlay}>
+              <View style={styles.outOfStockBadge}>
+                <ThemedText style={styles.outOfStockText}>OUT OF STOCK</ThemedText>
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.productInfo}>
+          <View style={styles.deliveryInfoRow}>
+            <View style={styles.storeBadge}>
+              <Feather name="map-pin" size={9} color="#64748b" />
+              <ThemedText style={styles.storeText} numberOfLines={1}>
+                {String(item.storeName || "Store")}
+              </ThemedText>
+            </View>
+            <View style={styles.timeBadge}>
+              <Feather name="zap" size={9} color={BRAND_MINT_TEXT} />
+              <ThemedText style={styles.timeText}>
+                {String(item.deliveryMinutes || 15)} min
+              </ThemedText>
             </View>
           </View>
-        )}
-      </View>
+          
+          <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
+            {String(item.name || 'Product')}
+          </ThemedText>
+          
+          <ThemedText type="small" style={styles.brandText} numberOfLines={1}>
+            {String(item.brand || 'Brand')}
+          </ThemedText>
 
-      <View style={styles.productInfo}>
-        <View style={styles.deliveryInfoRow}>
-          <View style={styles.storeBadge}>
-            <Feather name="map-pin" size={9} color="#64748b" />
-            <ThemedText style={styles.storeText} numberOfLines={1}>
-              {String(item.storeName || "Store.name")}
-            </ThemedText>
-          </View>
-          <View style={styles.timeBadge}>
-            <Feather name="zap" size={9} color={BRAND_MINT_TEXT} />
-            <ThemedText style={styles.timeText}>
-              {String(item.deliveryMinutes || 15)} min
-            </ThemedText>
-          </View>
-        </View>
-        
-        <ThemedText type="caption" numberOfLines={2} style={styles.productName}>
-          {String(item.name || 'Product')}
-        </ThemedText>
-        
-        <ThemedText type="small" style={styles.brandText} numberOfLines={1}>
-          {String(item.brand || 'Brand')}
-        </ThemedText>
-
-        <View style={styles.productFooter}>
-          <View style={{ flex: 1 }}>
-            <ThemedText type="body" style={styles.priceText}>
-              {formatPrice(item.price)}
-            </ThemedText>
-            {hasDiscount && (
-              <ThemedText type="small" style={styles.originalPriceText}>
-                {formatPrice(item.originalPrice!)}
+          <View style={styles.productFooter}>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="body" style={styles.priceText}>
+                {formatPrice(item.price)}
               </ThemedText>
-            )}
-          </View>
+              {hasDiscount && (
+                <ThemedText type="small" style={styles.originalPriceText}>
+                  {formatPrice(item.originalPrice!)}
+                </ThemedText>
+              )}
+            </View>
 
-          <Pressable
-            disabled={!item.inStock}
-            style={[
-              styles.addButton,
-              { backgroundColor: item.inStock ? BRAND_PURPLE : '#e5e7eb' }
-            ]}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleAddToCart(item);
-            }}
-          >
-            <ThemedText style={styles.addButtonText}>ADD</ThemedText>
-          </Pressable>
+            <Pressable
+              disabled={!item.inStock}
+              style={[
+                styles.addButton,
+                { backgroundColor: item.inStock ? BRAND_PURPLE : '#e5e7eb' }
+              ]}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleAddToCart(item);
+              }}
+            >
+              <ThemedText style={styles.addButtonText}>ADD</ThemedText>
+            </Pressable>
+          </View>
         </View>
-      </View>
-    </Pressable>
-  );
-};
+      </Pressable>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -319,7 +348,6 @@ const renderProduct = ({ item }: { item: UIProduct }) => {
             </ThemedText>
           </View>
 
-          {/* Optional: Add a subtle arrow or decoration like in the "Special Offers" card */}
           <Feather name="chevron-right" size={20} color="rgba(255,255,255,0.5)" />
         </View>
       </View>
@@ -335,7 +363,7 @@ const renderProduct = ({ item }: { item: UIProduct }) => {
           contentContainerStyle={{
             paddingHorizontal: responsivePadding,
             paddingTop: Spacing.md,
-            paddingBottom: insets.bottom + Spacing.xl + 80,
+            paddingBottom: insets.bottom + Spacing.xl + 120,
           }}
           
           columnWrapperStyle={{ gap: Spacing.md }}
@@ -352,15 +380,89 @@ const renderProduct = ({ item }: { item: UIProduct }) => {
         />
       </View>
 
-     
-        <CartToast
+      <CartToast
         visible={toastVisible}
         hasItems={items.length > 0} 
         productName={lastAddedProduct}
         onDismiss={() => setToastVisible(false)}
       />
-    </View>
 
+      {/* SEARCH OVERLAY */}
+      {isSearchActive && searchScope === 'category' && (
+        <View style={styles.searchOverlay}>
+          {/* Backdrop */}
+          <Pressable 
+            style={styles.backdrop} 
+            onPress={handleCloseSearch}
+          />
+          
+          {/* Search Content */}
+          <View style={[styles.searchContent, { backgroundColor: theme.backgroundRoot, paddingTop: insets.top + 12 }]}>
+            {/* Search Header */}
+            <View style={[styles.searchHeader, { backgroundColor: theme.cardBackground }]}>
+              <View style={styles.searchInputWrapper}>
+                <Feather name="search" size={20} color="#64748b" />
+                <input
+                  type="text"
+                  value={localSearchQuery}
+                  onChange={(e) => setLocalSearchQuery(e.target.value)}
+                  placeholder={`Search in ${category.name}...`}
+                  autoFocus
+                  style={{
+                    flex: 1,
+                    border: 'none',
+                    outline: 'none',
+                    fontSize: 16,
+                    marginLeft: 12,
+                    backgroundColor: 'transparent',
+                    color: theme.text,
+                  }}
+                />
+                {localSearchQuery.length > 0 && (
+                  <Pressable
+                    onPress={() => setLocalSearchQuery('')}
+                    style={styles.clearButton}
+                  >
+                    <Feather name="x-circle" size={18} color="#64748b" />
+                  </Pressable>
+                )}
+              </View>
+              
+              <Pressable onPress={handleCloseSearch} style={styles.closeButton}>
+                <Feather name="x" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+            
+            {/* Search Results */}
+            <FlatList
+              data={filteredProducts}
+              renderItem={renderProduct}
+              keyExtractor={(item) => item.id}
+              key={responsiveColumns}
+              numColumns={responsiveColumns}
+              contentContainerStyle={{
+                paddingHorizontal: responsivePadding,
+                paddingTop: Spacing.md,
+                paddingBottom: insets.bottom + 20,
+              }}
+              columnWrapperStyle={{ gap: Spacing.md }}
+              ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Feather name="search" size={48} color="#64748b" />
+                  <ThemedText style={{ color: '#64748b', marginTop: 16, fontSize: 16 }}>
+                    No products found
+                  </ThemedText>
+                  <ThemedText style={{ color: '#9ca3af', marginTop: 8, fontSize: 13 }}>
+                    Try searching with different keywords
+                  </ThemedText>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -424,11 +526,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     marginBottom: 4,
     letterSpacing: 0.3,
-  },
-  productCount: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: '700',
   },
   productCard: {
     borderRadius: 16,
@@ -582,5 +679,50 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  
+  // Search Overlay Styles
+  searchOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  searchContent: {
+    flex: 1,
+  },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  searchInputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 48,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  closeButton: {
+    padding: 8,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { View, StyleSheet, FlatList, Pressable, Clipboard, Alert, Dimensions, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -8,7 +8,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
-
+import { useSearch } from "@/context/SearchContext";
 
 type Tab = "vouchers" | "promotions";
 
@@ -18,7 +18,12 @@ const PURPLE_LIGHT = "#EEF2FF";
 export default function VouchersScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>("vouchers");
+  
+  // Search state
+  const { isSearchActive, setIsSearchActive, searchScope } = useSearch();
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
 
   // Force a minimum top padding so it never hides behind the notch
   const dynamicTopPadding = Platform.OS === 'ios' ? insets.top : insets.top + 10;
@@ -42,6 +47,25 @@ export default function VouchersScreen() {
       return res.ok ? res.json() : [];
     },
   });
+
+  // Filter data based on search query
+  const filteredData = useMemo(() => {
+    const currentData = activeTab === "vouchers" ? vouchersData : historyData;
+    
+    if (!localSearchQuery.trim()) return currentData;
+    
+    const query = localSearchQuery.toLowerCase();
+    return currentData.filter((item: any) => 
+      item.code?.toLowerCase().includes(query) ||
+      item.description?.toLowerCase().includes(query) ||
+      item.title?.toLowerCase().includes(query)
+    );
+  }, [vouchersData, historyData, localSearchQuery, activeTab]);
+
+  const handleCloseSearch = () => {
+    setIsSearchActive(false);
+    setLocalSearchQuery('');
+  };
 
   const renderVoucher = ({ item }: { item: any }) => (
     <Card style={styles.voucherCard}>
@@ -71,7 +95,7 @@ export default function VouchersScreen() {
 
   return (
     <View style={styles.root}>
-      {/* FIXED RESPONSIVE HEADER - This part fixes your visibility issue */}
+      {/* FIXED RESPONSIVE HEADER */}
       <View style={[styles.tabOuterContainer, { paddingTop: dynamicTopPadding }]}>
         <View style={styles.headerTitleRow}>
           <ThemedText style={styles.mainTitle}>My Rewards</ThemedText>
@@ -101,7 +125,7 @@ export default function VouchersScreen() {
         data={activeTab === "vouchers" ? vouchersData : historyData}
         renderItem={renderVoucher}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
+        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 120 }]}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Feather name="gift" size={50} color="#E2E8F0" />
@@ -109,6 +133,74 @@ export default function VouchersScreen() {
           </View>
         }
       />
+
+      {/* SEARCH OVERLAY */}
+      {isSearchActive && searchScope === 'deals' && (
+        <View style={styles.searchOverlay}>
+          {/* Backdrop */}
+          <Pressable 
+            style={styles.backdrop} 
+            onPress={handleCloseSearch}
+          />
+          
+          {/* Search Content */}
+          <View style={[styles.searchContent, { backgroundColor: theme.backgroundRoot, paddingTop: dynamicTopPadding }]}>
+            {/* Search Header */}
+            <View style={[styles.searchHeader, { backgroundColor: theme.cardBackground }]}>
+              <View style={styles.searchInputWrapper}>
+                <Feather name="search" size={20} color="#64748b" />
+                <input
+                  type="text"
+                  value={localSearchQuery}
+                  onChange={(e) => setLocalSearchQuery(e.target.value)}
+                  placeholder="Search vouchers and deals..."
+                  autoFocus
+                  style={{
+                    flex: 1,
+                    border: 'none',
+                    outline: 'none',
+                    fontSize: 16,
+                    marginLeft: 12,
+                    backgroundColor: 'transparent',
+                    color: theme.text,
+                  }}
+                />
+                {localSearchQuery.length > 0 && (
+                  <Pressable
+                    onPress={() => setLocalSearchQuery('')}
+                    style={styles.clearButton}
+                  >
+                    <Feather name="x-circle" size={18} color="#64748b" />
+                  </Pressable>
+                )}
+              </View>
+              
+              <Pressable onPress={handleCloseSearch} style={styles.closeButton}>
+                <Feather name="x" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+            
+            {/* Search Results */}
+            <FlatList
+              data={filteredData}
+              renderItem={renderVoucher}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Feather name="search" size={48} color="#64748b" />
+                  <ThemedText style={{ color: '#64748b', marginTop: 16, fontSize: 16 }}>
+                    No vouchers found
+                  </ThemedText>
+                  <ThemedText style={{ color: '#9ca3af', marginTop: 8, fontSize: 13 }}>
+                    Try searching with different keywords
+                  </ThemedText>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -121,7 +213,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
-    // High Z-Index to stay on top
     zIndex: 999,
   },
   headerTitleRow: {
@@ -166,6 +257,50 @@ const styles = StyleSheet.create({
   descriptionText: { fontSize: 13, color: '#64748B' },
   copyBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: PURPLE_LIGHT, borderRadius: 8 },
   copyText: { fontSize: 11, fontWeight: '900', color: PURPLE_PRIMARY },
-  metaRow: { marginTop: 10 },
-  emptyState: { alignItems: 'center', marginTop: 100 }
+  emptyState: { alignItems: 'center', marginTop: 100 },
+  
+  // Search Overlay Styles
+  searchOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  searchContent: {
+    flex: 1,
+  },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  searchInputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 48,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  closeButton: {
+    padding: 8,
+  },
 });
