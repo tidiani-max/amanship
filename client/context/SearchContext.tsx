@@ -1,30 +1,29 @@
-import React, { createContext, useContext, useState, useRef } from 'react';
-import { useNavigation } from '@react-navigation/native';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 
 export type SearchScope = 'global' | 'category' | 'history' | 'deals' | 'profile';
 
+interface SearchState {
+  isActive: boolean;
+  scope: SearchScope;
+  query: string;
+}
+
 interface SearchContextType {
-  // Search state
   isSearchActive: boolean;
   setIsSearchActive: (active: boolean) => void;
   
-  // Search scope (which page we're searching from)
   searchScope: SearchScope;
   setSearchScope: (scope: SearchScope) => void;
   
-  // Search query - GLOBAL state only for home screen
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   
-  // Reference to home screen search input (for auto-focus)
   homeSearchRef: React.RefObject<any> | null;
   setHomeSearchRef: (ref: React.RefObject<any> | null) => void;
   
-  // Category-specific search context
   activeCategoryId: string | null;
   setActiveCategoryId: (id: string | null) => void;
   
-  // Methods
   triggerSearch: (scope: SearchScope) => void;
   clearSearch: () => void;
 }
@@ -32,23 +31,58 @@ interface SearchContextType {
 const SearchContext = createContext<SearchContextType | undefined>(undefined);
 
 export function SearchProvider({ children }: { children: React.ReactNode }) {
-  const [isSearchActive, setIsSearchActive] = useState(false);
-  const [searchScope, setSearchScope] = useState<SearchScope>('global');
-  const [searchQuery, setSearchQuery] = useState('');
+  // CRITICAL FIX: Combine related states to avoid race conditions
+  const [searchState, setSearchState] = useState<SearchState>({
+    isActive: false,
+    scope: 'global',
+    query: '',
+  });
+  
   const [homeSearchRef, setHomeSearchRef] = useState<React.RefObject<any> | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
 
-  const triggerSearch = (scope: SearchScope) => {
-    console.log('🔍 Search triggered for scope:', scope);
-    setSearchScope(scope);
-    setIsSearchActive(true);
-  };
+  // Expose individual values for backward compatibility
+  const isSearchActive = searchState.isActive;
+  const searchScope = searchState.scope;
+  const searchQuery = searchState.query;
 
-  const clearSearch = () => {
-    setSearchQuery('');
-    setIsSearchActive(false);
-    setSearchScope('global');
-  };
+  const setIsSearchActive = useCallback((active: boolean) => {
+    // DEBUGGING: Log the call stack to find who's setting it to false
+    console.log('🔄 setIsSearchActive called:', active, 'from:', new Error().stack?.split('\n')[2]);
+    setSearchState(prev => ({ ...prev, isActive: active }));
+  }, []);
+
+  const setSearchScope = useCallback((scope: SearchScope) => {
+    console.log('🔄 setSearchScope called:', scope);
+    setSearchState(prev => ({ ...prev, scope }));
+  }, []);
+
+  const setSearchQuery = useCallback((query: string) => {
+    console.log('🔄 setSearchQuery called:', query);
+    setSearchState(prev => ({ ...prev, query }));
+  }, []);
+
+  const triggerSearch = useCallback((scope: SearchScope) => {
+    console.log('🔍 triggerSearch called with scope:', scope);
+    
+    // CRITICAL FIX: Single state update = single render cycle
+    setSearchState({
+      isActive: true,
+      scope: scope,
+      query: '',
+    });
+    
+    console.log('✅ Search state updated to active');
+  }, []);
+
+  const clearSearch = useCallback(() => {
+    console.log('🧹 clearSearch called');
+    setSearchState({
+      isActive: false,
+      scope: 'global',
+      query: '',
+    });
+  }, []);
 
   const value: SearchContextType = {
     isSearchActive,

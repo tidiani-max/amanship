@@ -13,25 +13,25 @@ interface SearchInputProps {
   onChangeText: (text: string) => void;
   placeholder?: string;
   theme: any;
+  isVisible: boolean; // NEW: Only focus/blur based on parent visibility
 }
 
 // Custom search input component that works on both web and mobile
-function SearchInput({ value, onChangeText, placeholder, theme }: SearchInputProps) {
+function SearchInput({ value, onChangeText, placeholder, theme, isVisible }: SearchInputProps) {
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
-    // Focus the input when the component mounts
-    const timer = setTimeout(() => {
-      inputRef.current?.focus();
-    }, 100);
-
-    // CRITICAL: Blur the input when the component unmounts
-    // This removes the focus BEFORE the parent can be hidden
-    return () => {
-      inputRef.current?.blur();
-      clearTimeout(timer);
-    };
-  }, []);
+    // Only focus when the parent overlay becomes visible
+    if (isVisible) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 150); // Slightly longer delay to ensure overlay is mounted
+      
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+  }, [isVisible]); // Only depend on visibility
 
   // Use TextInput for BOTH Web and Mobile
   return (
@@ -41,7 +41,6 @@ function SearchInput({ value, onChangeText, placeholder, theme }: SearchInputPro
       onChangeText={onChangeText}
       placeholder={placeholder}
       placeholderTextColor="#64748b"
-      autoFocus={true}
       returnKeyType="search"
       style={{
         flex: 1,
@@ -63,6 +62,7 @@ interface SearchOverlayHeaderProps {
   onClose: () => void;
   placeholder?: string;
   theme: any;
+  isVisible?: boolean; // NEW: Track parent visibility
 }
 
 export const SearchOverlayHeader = React.memo(function SearchOverlayHeader({
@@ -71,6 +71,7 @@ export const SearchOverlayHeader = React.memo(function SearchOverlayHeader({
   onClose,
   placeholder = 'Search...',
   theme,
+  isVisible = true,
 }: SearchOverlayHeaderProps) {
   return (
     <View style={[styles.searchHeader, { backgroundColor: theme.cardBackground || '#fff' }]}>
@@ -82,6 +83,7 @@ export const SearchOverlayHeader = React.memo(function SearchOverlayHeader({
           onChangeText={onChangeText}
           placeholder={placeholder}
           theme={theme}
+          isVisible={isVisible}
         />
         
         {value.length > 0 && (

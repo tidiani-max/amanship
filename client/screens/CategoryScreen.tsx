@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   View,
   StyleSheet,
@@ -103,18 +103,40 @@ export default function CategoryScreen() {
   // Search state
   const { isSearchActive, setIsSearchActive, searchScope, setSearchScope, setActiveCategoryId } = useSearch();
   const [localSearchQuery, setLocalSearchQuery] = useState('');
+  
+  // CRITICAL FIX: Track if component is actually mounted
+  const isMountedRef = useRef(true);
+  const hasSetScopeRef = useRef(false);
 
-  // Set search scope for this screen
+  // FIXED: Set search scope ONCE on mount, cleanup ONLY on unmount
   useEffect(() => {
-    console.log('📂 CategoryScreen - Setting search scope to category');
-    setSearchScope('category');
-    setActiveCategoryId(category.id);
+    console.log('📂 CategoryScreen - MOUNTED');
+    isMountedRef.current = true;
+    
+    if (!hasSetScopeRef.current) {
+      console.log('📂 CategoryScreen - Setting search scope to category');
+      setSearchScope('category');
+      setActiveCategoryId(category.id);
+      hasSetScopeRef.current = true;
+    }
     
     return () => {
-      console.log('📂 CategoryScreen - Cleaning up');
+      console.log('📂 CategoryScreen - UNMOUNTING (actual cleanup)');
+      isMountedRef.current = false;
+      hasSetScopeRef.current = false;
       setActiveCategoryId(null);
+      // Only reset if we're actually unmounting
+      setIsSearchActive(false);
     };
-  }, [category.id, setSearchScope, setActiveCategoryId]);
+  }, []); // Empty deps - only run on mount/unmount
+
+  // Separate effect to handle category changes
+  useEffect(() => {
+    if (hasSetScopeRef.current && category.id) {
+      console.log('📂 CategoryScreen - Category changed, updating activeCategoryId');
+      setActiveCategoryId(category.id);
+    }
+  }, [category.id]);
 
   React.useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
@@ -310,9 +332,16 @@ export default function CategoryScreen() {
 
   const maxWidth = screenWidth > 1600 ? 1600 : screenWidth;
   const containerPadding = screenWidth > maxWidth ? (screenWidth - maxWidth) / 2 : 0;
+  
+  // Use both conditions explicitly
   const shouldShowOverlay = isSearchActive && searchScope === 'category';
 
-  console.log('🎨 CategoryScreen - Rendering, shouldShowOverlay:', shouldShowOverlay);
+  console.log('🎨 CategoryScreen - Rendering:', {
+    isSearchActive,
+    searchScope,
+    shouldShowOverlay,
+    isMounted: isMountedRef.current
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
@@ -396,16 +425,20 @@ export default function CategoryScreen() {
 
       {/* SEARCH OVERLAY */}
       {shouldShowOverlay && (
-        <View style={styles.searchOverlay}>
+        <View key="search-overlay" style={styles.searchOverlay} pointerEvents="box-none">
           <Pressable style={styles.backdrop} onPress={handleCloseSearch} />
           
-          <View style={[styles.searchContent, { backgroundColor: theme.backgroundRoot, paddingTop: insets.top + 12 }]}>
+          <View 
+            style={[styles.searchContent, { backgroundColor: theme.backgroundRoot, paddingTop: insets.top + 12 }]}
+            pointerEvents="box-none"
+          >
             <SearchOverlayHeader
               value={localSearchQuery}
               onChangeText={setLocalSearchQuery}
               onClose={handleCloseSearch}
               placeholder={`Search in ${category.name}...`}
               theme={theme}
+              isVisible={shouldShowOverlay}
             />
             
             {/* Search Results */}

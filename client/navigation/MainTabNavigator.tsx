@@ -3,7 +3,7 @@ import { View, StyleSheet, Pressable } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useNavigation, NavigationState, CommonActions, getFocusedRouteNameFromRoute } from "@react-navigation/native";
+import { useNavigation, NavigationState, getFocusedRouteNameFromRoute } from "@react-navigation/native";
 
 import HomeStackNavigator from "@/navigation/HomeStackNavigator";
 import OrdersScreen from "@/screens/OrdersScreen";
@@ -23,7 +23,7 @@ function getActiveRouteName(state: NavigationState | undefined): string {
 
 export default function MainTabNavigator() {
   const navigation = useNavigation();
-  const { setIsSearchActive, setSearchScope, homeSearchRef } = useSearch();
+  const { triggerSearch, homeSearchRef } = useSearch(); // CHANGED: Use triggerSearch instead
 
   const handleSearchPress = () => {
     const state = navigation.getState();
@@ -39,8 +39,7 @@ export default function MainTabNavigator() {
 
     // 2. Logic for Category
     if (activeRouteName === 'Category') {
-      setSearchScope('category');
-      setIsSearchActive(true);
+      triggerSearch('category'); // CHANGED: Single call
       return;
     }
 
@@ -53,8 +52,7 @@ export default function MainTabNavigator() {
     };
 
     const scope = scopeMap[activeRouteName] || 'global';
-    setSearchScope(scope);
-    setIsSearchActive(true);
+    triggerSearch(scope); // CHANGED: Single call
   };
 
   return (
@@ -66,7 +64,6 @@ export default function MainTabNavigator() {
           tabBarInactiveTintColor: '#64748b',
           tabBarStyle: ((route) => {
             const routeName = getFocusedRouteNameFromRoute(route) ?? "";
-            // HIDE TAB BAR on screens that ARE NOT Home, Category, Account, Orders, Vouchers
             const hideOnScreens = ["ProductDetail", "Cart", "Checkout"]; 
             if (hideOnScreens.includes(routeName)) return { display: "none" };
             
@@ -89,7 +86,7 @@ export default function MainTabNavigator() {
       >
         <Tab.Screen
           name="HomeTab"
-          component={HomeStackNavigator} // Ensure CategoryScreen is INSIDE this Navigator!
+          component={HomeStackNavigator}
           options={{
             tabBarLabel: "SHOP",
             tabBarIcon: ({ color }) => <Feather name="shopping-bag" size={20} color={color} />,
