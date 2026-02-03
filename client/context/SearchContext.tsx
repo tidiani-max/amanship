@@ -31,7 +31,6 @@ interface SearchContextType {
 const SearchContext = createContext<SearchContextType | undefined>(undefined);
 
 export function SearchProvider({ children }: { children: React.ReactNode }) {
-  // CRITICAL FIX: Combine related states to avoid race conditions
   const [searchState, setSearchState] = useState<SearchState>({
     isActive: false,
     scope: 'global',
@@ -41,15 +40,26 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
   const [homeSearchRef, setHomeSearchRef] = useState<React.RefObject<any> | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
 
-  // Expose individual values for backward compatibility
   const isSearchActive = searchState.isActive;
   const searchScope = searchState.scope;
   const searchQuery = searchState.query;
 
   const setIsSearchActive = useCallback((active: boolean) => {
-    // DEBUGGING: Log the call stack to find who's setting it to false
-    console.log('🔄 setIsSearchActive called:', active, 'from:', new Error().stack?.split('\n')[2]);
-    setSearchState(prev => ({ ...prev, isActive: active }));
+    // ENHANCED: Log the FULL call stack to find the culprit
+    const stack = new Error().stack;
+    console.log('🔄 setIsSearchActive called:', active);
+    console.log('📍 Full Stack Trace:');
+    if (stack) {
+      const lines = stack.split('\n').slice(1, 10); // First 10 lines
+      lines.forEach((line, i) => {
+        console.log(`   ${i}: ${line.trim()}`);
+      });
+    }
+    
+    setSearchState(prev => {
+      console.log('   Previous state:', prev.isActive, '→ New state:', active);
+      return { ...prev, isActive: active };
+    });
   }, []);
 
   const setSearchScope = useCallback((scope: SearchScope) => {
@@ -65,7 +75,6 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
   const triggerSearch = useCallback((scope: SearchScope) => {
     console.log('🔍 triggerSearch called with scope:', scope);
     
-    // CRITICAL FIX: Single state update = single render cycle
     setSearchState({
       isActive: true,
       scope: scope,

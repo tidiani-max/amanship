@@ -1,201 +1,118 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
-  Modal,
+  TextInput,
   Pressable,
   StyleSheet,
-  Animated,
-  ScrollView,
   Platform,
-  KeyboardAvoidingView,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
-import { SearchBar } from '@/components/SearchBar';
-import { ThemedText } from '@/components/ThemedText';
-import { useTheme } from '@/hooks/useTheme';
-
-interface SearchOverlayProps {
-  visible: boolean;
-  onClose: () => void;
+interface SearchInputProps {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
-  children?: React.ReactNode;
+  theme: any;
 }
 
-export function SearchOverlay({
-  visible,
-  onClose,
-  value,
-  onChangeText,
-  placeholder = 'Search...',
-  children,
-}: SearchOverlayProps) {
-  const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
+// Simplified search input - NO effects, NO cleanup
+function SearchInput({ value, onChangeText, placeholder, theme }: SearchInputProps) {
+  const inputRef = useRef<TextInput>(null);
 
+  // SAFE: Only focus on mount, NO cleanup
   useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          tension: 50,
-          friction: 8,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 50,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [visible]);
-
-  if (!visible) return null;
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 200);
+    
+    return () => {
+      clearTimeout(timer);
+      // CRITICAL: Do NOT blur here - let the parent handle unmounting
+    };
+  }, []); // Run once
 
   return (
-    <Modal
-      visible={visible}
-      animationType="none"
-      transparent
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
-      >
-        <Animated.View
-          style={[
-            styles.overlay,
-            {
-              opacity: fadeAnim,
-            },
-          ]}
-        >
-          {/* Backdrop */}
+    <TextInput
+      ref={inputRef}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor="#64748b"
+      returnKeyType="search"
+      style={{
+        flex: 1,
+        fontSize: 16,
+        marginLeft: 12,
+        color: theme.text || '#000',
+        ...Platform.select({
+          web: { outlineStyle: 'none' } as any,
+        }),
+      }}
+    />
+  );
+}
+
+interface SearchOverlayHeaderProps {
+  value: string;
+  onChangeText: (text: string) => void;
+  onClose: () => void;
+  placeholder?: string;
+  theme: any;
+}
+
+// NO memo - keep it simple and predictable
+export function SearchOverlayHeader({
+  value,
+  onChangeText,
+  onClose,
+  placeholder = 'Search...',
+  theme,
+}: SearchOverlayHeaderProps) {
+  console.log('🔎 SearchOverlayHeader - Rendering');
+  
+  return (
+    <View style={[styles.searchHeader, { backgroundColor: theme.cardBackground || '#fff' }]}>
+      <View style={styles.searchInputWrapper}>
+        <Feather name="search" size={20} color="#64748b" />
+        
+        <SearchInput
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          theme={theme}
+        />
+        
+        {value.length > 0 && (
           <Pressable
-            style={styles.backdrop}
-            onPress={onClose}
-            accessible={false}
-          />
-
-          {/* Content */}
-          <Animated.View
-            style={[
-              styles.content,
-              {
-                backgroundColor: theme.backgroundRoot,
-                paddingTop: insets.top,
-                transform: [{ translateY: slideAnim }],
-              },
-            ]}
+            onPress={() => onChangeText('')}
+            style={styles.clearButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            {/* Header with Search Bar */}
-            <View
-              style={[
-                styles.header,
-                { 
-                  backgroundColor: theme.cardBackground,
-                  borderBottomWidth: 1,
-                  borderBottomColor: theme.border || '#e5e7eb',
-                }
-              ]}
-            >
-              <View style={styles.searchBarContainer}>
-                <View style={styles.searchInputWrapper}>
-                  <Feather name="search" size={20} color="#64748b" />
-                  <input
-                    type="text"
-                    value={value}
-                    onChange={(e) => onChangeText(e.target.value)}
-                    placeholder={placeholder}
-                    autoFocus
-                    style={{
-                      flex: 1,
-                      border: 'none',
-                      outline: 'none',
-                      fontSize: 16,
-                      marginLeft: 12,
-                      backgroundColor: 'transparent',
-                      color: theme.text,
-                    }}
-                  />
-                  {value.length > 0 && (
-                    <Pressable
-                      onPress={() => onChangeText('')}
-                      style={styles.clearButton}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Feather name="x-circle" size={18} color="#64748b" />
-                    </Pressable>
-                  )}
-                </View>
-
-                <Pressable
-                  onPress={onClose}
-                  style={styles.closeButton}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Feather name="x" size={24} color={theme.text} />
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Search Results */}
-            <View style={{ flex: 1 }}>
-              {children}
-            </View>
-          </Animated.View>
-        </Animated.View>
-      </KeyboardAvoidingView>
-    </Modal>
+            <Feather name="x-circle" size={18} color="#64748b" />
+          </Pressable>
+        )}
+      </View>
+      
+      <Pressable 
+        onPress={onClose} 
+        style={styles.closeButton}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <Feather name="x" size={24} color={theme.text || '#000'} />
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-  },
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  content: {
-    flex: 1,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  searchBarContainer: {
+  searchHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
   searchInputWrapper: {
     flex: 1,

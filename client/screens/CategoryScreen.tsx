@@ -86,6 +86,67 @@ interface APIProduct {
   storeId?: string;
 }
 
+// CRITICAL: Separate overlay component to prevent unmounting issues
+const SearchOverlay = React.memo(({ 
+  visible,
+  localSearchQuery,
+  setLocalSearchQuery,
+  handleCloseSearch,
+  filteredProducts,
+  renderProduct,
+  responsiveColumns,
+  responsivePadding,
+  insets,
+  theme,
+  categoryName
+}: any) => {
+  console.log('🎨 SearchOverlay - Rendering, visible:', visible);
+  
+  if (!visible) return null;
+  
+  return (
+    <View style={styles.searchOverlay}>
+      <Pressable style={styles.backdrop} onPress={handleCloseSearch} />
+      
+      <View style={[styles.searchContent, { backgroundColor: theme.backgroundRoot, paddingTop: insets.top + 12 }]}>
+        <SearchOverlayHeader
+          value={localSearchQuery}
+          onChangeText={setLocalSearchQuery}
+          onClose={handleCloseSearch}
+          placeholder={`Search in ${categoryName}...`}
+          theme={theme}
+        />
+        
+        <FlatList
+          data={filteredProducts}
+          renderItem={renderProduct}
+          keyExtractor={(item) => item.id}
+          key={responsiveColumns}
+          numColumns={responsiveColumns}
+          contentContainerStyle={{
+            paddingHorizontal: responsivePadding,
+            paddingTop: Spacing.md,
+            paddingBottom: insets.bottom + 20,
+          }}
+          columnWrapperStyle={{ gap: Spacing.md }}
+          ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Feather name="search" size={48} color="#64748b" />
+              <ThemedText style={{ color: '#64748b', marginTop: 16, fontSize: 16 }}>
+                No products found
+              </ThemedText>
+              <ThemedText style={{ color: '#9ca3af', marginTop: 8, fontSize: 13 }}>
+                Try searching with different keywords
+              </ThemedText>
+            </View>
+          }
+        />
+      </View>
+    </View>
+  );
+});
+
 export default function CategoryScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -104,36 +165,31 @@ export default function CategoryScreen() {
   const { isSearchActive, setIsSearchActive, searchScope, setSearchScope, setActiveCategoryId } = useSearch();
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   
-  // CRITICAL FIX: Track if component is actually mounted
-  const isMountedRef = useRef(true);
-  const hasSetScopeRef = useRef(false);
+  // Track if we've initialized
+  const isInitializedRef = useRef(false);
 
-  // FIXED: Set search scope ONCE on mount, cleanup ONLY on unmount
+  // CRITICAL FIX: Initialize ONCE and ONLY cleanup on actual unmount
   useEffect(() => {
-    console.log('📂 CategoryScreen - MOUNTED');
-    isMountedRef.current = true;
-    
-    if (!hasSetScopeRef.current) {
-      console.log('📂 CategoryScreen - Setting search scope to category');
+    if (!isInitializedRef.current) {
+      console.log('📂 CategoryScreen - INITIALIZING');
       setSearchScope('category');
       setActiveCategoryId(category.id);
-      hasSetScopeRef.current = true;
+      isInitializedRef.current = true;
     }
     
+    // This ONLY runs when the component actually unmounts
     return () => {
-      console.log('📂 CategoryScreen - UNMOUNTING (actual cleanup)');
-      isMountedRef.current = false;
-      hasSetScopeRef.current = false;
+      console.log('📂 CategoryScreen - UNMOUNTING (cleanup)');
+      isInitializedRef.current = false;
       setActiveCategoryId(null);
-      // Only reset if we're actually unmounting
+      // Reset search state
       setIsSearchActive(false);
     };
-  }, []); // Empty deps - only run on mount/unmount
+  }, []); // Empty deps - mount/unmount only
 
-  // Separate effect to handle category changes
+  // Update category ID if it changes
   useEffect(() => {
-    if (hasSetScopeRef.current && category.id) {
-      console.log('📂 CategoryScreen - Category changed, updating activeCategoryId');
+    if (isInitializedRef.current) {
       setActiveCategoryId(category.id);
     }
   }, [category.id]);
@@ -184,7 +240,6 @@ export default function CategoryScreen() {
     storeId: p.storeId ? String(p.storeId) : undefined,
   }));
 
-  // Filter products based on search query
   const filteredProducts = useMemo(() => {
     if (!localSearchQuery.trim()) return products;
     
@@ -333,19 +388,16 @@ export default function CategoryScreen() {
   const maxWidth = screenWidth > 1600 ? 1600 : screenWidth;
   const containerPadding = screenWidth > maxWidth ? (screenWidth - maxWidth) / 2 : 0;
   
-  // Use both conditions explicitly
   const shouldShowOverlay = isSearchActive && searchScope === 'category';
 
   console.log('🎨 CategoryScreen - Rendering:', {
     isSearchActive,
     searchScope,
     shouldShowOverlay,
-    isMounted: isMountedRef.current
   });
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundRoot }}>
-      {/* ===== FIXED HEADER WITH SAFE AREA ===== */}
       <View style={[
         styles.headerContainer,
         { 
@@ -364,7 +416,6 @@ export default function CategoryScreen() {
         </ThemedText>
       </View>
 
-      {/* ===== CATEGORY BANNER ===== */}
       <View style={[styles.bannerSection, { paddingHorizontal: responsivePadding + containerPadding }]}>
         <View style={[styles.categoryBanner, { backgroundColor: BRAND_PURPLE }]}>
           <View style={[styles.categoryIconLarge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
@@ -389,7 +440,6 @@ export default function CategoryScreen() {
         </View>
       </View>
 
-      {/* ===== PRODUCTS GRID ===== */}
       <View style={{ flex: 1, paddingHorizontal: containerPadding }}>
         <FlatList
           data={products}
@@ -423,53 +473,20 @@ export default function CategoryScreen() {
         onDismiss={() => setToastVisible(false)}
       />
 
-      {/* SEARCH OVERLAY */}
-      {shouldShowOverlay && (
-        <View key="search-overlay" style={styles.searchOverlay} pointerEvents="box-none">
-          <Pressable style={styles.backdrop} onPress={handleCloseSearch} />
-          
-          <View 
-            style={[styles.searchContent, { backgroundColor: theme.backgroundRoot, paddingTop: insets.top + 12 }]}
-            pointerEvents="box-none"
-          >
-            <SearchOverlayHeader
-              value={localSearchQuery}
-              onChangeText={setLocalSearchQuery}
-              onClose={handleCloseSearch}
-              placeholder={`Search in ${category.name}...`}
-              theme={theme}
-              isVisible={shouldShowOverlay}
-            />
-            
-            {/* Search Results */}
-            <FlatList
-              data={filteredProducts}
-              renderItem={renderProduct}
-              keyExtractor={(item) => item.id}
-              key={responsiveColumns}
-              numColumns={responsiveColumns}
-              contentContainerStyle={{
-                paddingHorizontal: responsivePadding,
-                paddingTop: Spacing.md,
-                paddingBottom: insets.bottom + 20,
-              }}
-              columnWrapperStyle={{ gap: Spacing.md }}
-              ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
-              ListEmptyComponent={
-                <View style={styles.emptyState}>
-                  <Feather name="search" size={48} color="#64748b" />
-                  <ThemedText style={{ color: '#64748b', marginTop: 16, fontSize: 16 }}>
-                    No products found
-                  </ThemedText>
-                  <ThemedText style={{ color: '#9ca3af', marginTop: 8, fontSize: 13 }}>
-                    Try searching with different keywords
-                  </ThemedText>
-                </View>
-              }
-            />
-          </View>
-        </View>
-      )}
+      {/* CRITICAL: Overlay as separate memoized component */}
+      <SearchOverlay
+        visible={shouldShowOverlay}
+        localSearchQuery={localSearchQuery}
+        setLocalSearchQuery={setLocalSearchQuery}
+        handleCloseSearch={handleCloseSearch}
+        filteredProducts={filteredProducts}
+        renderProduct={renderProduct}
+        responsiveColumns={responsiveColumns}
+        responsivePadding={responsivePadding}
+        insets={insets}
+        theme={theme}
+        categoryName={category.name}
+      />
     </View>
   );
 }
@@ -688,8 +705,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  
-  // Search Overlay Styles
   searchOverlay: {
     position: 'absolute',
     top: 0,
