@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import {
   View,
   TextInput,
@@ -8,82 +8,58 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
-interface SearchInputProps {
-  value: string;
-  onChangeText: (text: string) => void;
-  placeholder?: string;
-  theme: any;
-  isVisible: boolean; // NEW: Only focus/blur based on parent visibility
-}
-
-// Custom search input component that works on both web and mobile
-function SearchInput({ value, onChangeText, placeholder, theme, isVisible }: SearchInputProps) {
-  const inputRef = useRef<TextInput>(null);
-
-  useEffect(() => {
-    // Only focus when the parent overlay becomes visible
-    if (isVisible) {
-      const timer = setTimeout(() => {
-        inputRef.current?.focus();
-      }, 150); // Slightly longer delay to ensure overlay is mounted
-      
-      return () => {
-        clearTimeout(timer);
-      };
-    }
-  }, [isVisible]); // Only depend on visibility
-
-  // Use TextInput for BOTH Web and Mobile
-  return (
-    <TextInput
-      ref={inputRef}
-      value={value}
-      onChangeText={onChangeText}
-      placeholder={placeholder}
-      placeholderTextColor="#64748b"
-      returnKeyType="search"
-      style={{
-        flex: 1,
-        fontSize: 16,
-        marginLeft: 12,
-        color: theme.text || '#000',
-        // This removes the blue outline on Web
-        ...Platform.select({
-          web: { outlineStyle: 'none' } as any,
-        }),
-      }}
-    />
-  );
-}
-
 interface SearchOverlayHeaderProps {
   value: string;
   onChangeText: (text: string) => void;
   onClose: () => void;
   placeholder?: string;
   theme: any;
-  isVisible?: boolean; // NEW: Track parent visibility
 }
 
-export const SearchOverlayHeader = React.memo(function SearchOverlayHeader({
+export function SearchOverlayHeader({
   value,
   onChangeText,
   onClose,
   placeholder = 'Search...',
   theme,
-  isVisible = true,
 }: SearchOverlayHeaderProps) {
+  const inputRef = useRef<TextInput>(null);
+  
+  console.log('🔎 SearchOverlayHeader - Rendering');
+  
+  // NO useEffect at all - handle focus manually via ref callback
+  const handleInputMount = (ref: TextInput | null) => {
+    if (ref) {
+      // Use requestAnimationFrame to focus AFTER React finishes rendering
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          ref.focus();
+        });
+      });
+    }
+  };
+  
   return (
     <View style={[styles.searchHeader, { backgroundColor: theme.cardBackground || '#fff' }]}>
       <View style={styles.searchInputWrapper}>
         <Feather name="search" size={20} color="#64748b" />
         
-        <SearchInput
+        <TextInput
+          ref={handleInputMount}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          theme={theme}
-          isVisible={isVisible}
+          placeholderTextColor="#64748b"
+          returnKeyType="search"
+          style={{
+            flex: 1,
+            fontSize: 16,
+            marginLeft: 12,
+            color: theme.text || '#000',
+            ...Platform.select({
+              web: { outlineStyle: 'none' } as any,
+            }),
+          }}
         />
         
         {value.length > 0 && (
@@ -106,7 +82,7 @@ export const SearchOverlayHeader = React.memo(function SearchOverlayHeader({
       </Pressable>
     </View>
   );
-});
+}
 
 const styles = StyleSheet.create({
   searchHeader: {

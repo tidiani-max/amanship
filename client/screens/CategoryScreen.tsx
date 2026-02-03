@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -86,7 +86,7 @@ interface APIProduct {
   storeId?: string;
 }
 
-// CRITICAL: Separate overlay component to prevent unmounting issues
+// CRITICAL FIX: Separate overlay component that manages its own lifecycle
 const SearchOverlay = React.memo(({ 
   visible,
   localSearchQuery,
@@ -100,7 +100,20 @@ const SearchOverlay = React.memo(({
   theme,
   categoryName
 }: any) => {
-  console.log('🎨 SearchOverlay - Rendering, visible:', visible);
+  const mountedRef = useRef(false);
+  
+  // CRITICAL: Track when this component is actually mounted
+  useEffect(() => {
+    console.log('🎨 SearchOverlay - MOUNTING');
+    mountedRef.current = true;
+    
+    return () => {
+      console.log('🎨 SearchOverlay - UNMOUNTING');
+      mountedRef.current = false;
+    };
+  }, []);
+  
+  console.log('🎨 SearchOverlay - Rendering, visible:', visible, 'mounted:', mountedRef.current);
   
   if (!visible) return null;
   
@@ -165,31 +178,45 @@ export default function CategoryScreen() {
   const { isSearchActive, setIsSearchActive, searchScope, setSearchScope, setActiveCategoryId } = useSearch();
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   
-  // Track if we've initialized
-  const isInitializedRef = useRef(false);
+  // Track component lifecycle
+  const componentMountedRef = useRef(false);
+  const cleanupTimerRef = useRef<any>(null);
 
-  // CRITICAL FIX: Initialize ONCE and ONLY cleanup on actual unmount
+  // CRITICAL FIX: Only run cleanup when component ACTUALLY unmounts
   useEffect(() => {
-    if (!isInitializedRef.current) {
-      console.log('📂 CategoryScreen - INITIALIZING');
-      setSearchScope('category');
-      setActiveCategoryId(category.id);
-      isInitializedRef.current = true;
-    }
+    console.log('📂 CategoryScreen - MOUNTING');
+    componentMountedRef.current = true;
     
-    // This ONLY runs when the component actually unmounts
+    // Set scope on mount
+    setSearchScope('category');
+    setActiveCategoryId(category.id);
+    
     return () => {
-      console.log('📂 CategoryScreen - UNMOUNTING (cleanup)');
-      isInitializedRef.current = false;
-      setActiveCategoryId(null);
-      // Reset search state
-      setIsSearchActive(false);
+      console.log('📂 CategoryScreen - UNMOUNTING (will cleanup in 100ms)');
+      componentMountedRef.current = false;
+      
+      // CRITICAL: Delay cleanup to prevent race condition
+      // This ensures we don't reset state while the overlay is mounting
+      cleanupTimerRef.current = setTimeout(() => {
+        console.log('📂 CategoryScreen - Executing delayed cleanup');
+        setActiveCategoryId(null);
+        setIsSearchActive(false);
+      }, 100);
     };
-  }, []); // Empty deps - mount/unmount only
+  }, []); // Run once on mount
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (cleanupTimerRef.current) {
+        clearTimeout(cleanupTimerRef.current);
+      }
+    };
+  }, []);
 
   // Update category ID if it changes
   useEffect(() => {
-    if (isInitializedRef.current) {
+    if (componentMountedRef.current) {
       setActiveCategoryId(category.id);
     }
   }, [category.id]);
@@ -255,23 +282,24 @@ export default function CategoryScreen() {
     return `Rp ${safePrice.toLocaleString("id-ID")}`;
   };
 
-  const handleProductPress = (product: UIProduct) =>
+  const handleProductPress = useCallback((product: UIProduct) => {
     navigation.navigate("ProductDetail", { product });
+  }, [navigation]);
 
-  const handleAddToCart = (product: UIProduct) => {
+  const handleAddToCart = useCallback((product: UIProduct) => {
     if (!product.inStock) return;
     addToCart(product, 1);
     setLastAddedProduct(product.name);
     setToastVisible(true);
-  };
+  }, [addToCart]);
 
-  const handleCloseSearch = () => {
+  const handleCloseSearch = useCallback(() => {
     console.log('🔴 CategoryScreen - Closing search overlay');
     setIsSearchActive(false);
     setLocalSearchQuery('');
-  };
+  }, [setIsSearchActive]);
 
-  const renderProduct = ({ item }: { item: UIProduct }) => {
+  const renderProduct = useCallback(({ item }: { item: UIProduct }) => {
     const hasDiscount = item.originalPrice && item.originalPrice > item.price;
     const discountPercent = hasDiscount 
       ? Math.round(((item.originalPrice! - item.price) / item.originalPrice!) * 100) 
@@ -372,7 +400,7 @@ export default function CategoryScreen() {
         </View>
       </Pressable>
     );
-  };
+  }, [screenWidth, responsiveColumns, responsivePadding, theme, handleProductPress, handleAddToCart]);
 
   if (isLoading) {
     return (
@@ -394,6 +422,7 @@ export default function CategoryScreen() {
     isSearchActive,
     searchScope,
     shouldShowOverlay,
+    componentMounted: componentMountedRef.current,
   });
 
   return (
@@ -473,7 +502,7 @@ export default function CategoryScreen() {
         onDismiss={() => setToastVisible(false)}
       />
 
-      {/* CRITICAL: Overlay as separate memoized component */}
+      {/* OVERLAY: Render when needed */}
       <SearchOverlay
         visible={shouldShowOverlay}
         localSearchQuery={localSearchQuery}
