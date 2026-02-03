@@ -16,6 +16,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useCart } from '@/context/CartContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface Message {
   id: string;
@@ -37,6 +38,8 @@ interface GroceryChatBotProps {
     brand: string;
     price: number;
     category: string;
+    storeName?: string;
+    deliveryMinutes?: number;
   }>;
 }
 
@@ -44,17 +47,37 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
   const { theme } = useTheme();
   const { addToCart } = useCart();
   const insets = useSafeAreaInsets();
+  const { language } = useLanguage();
   
+  // Initial message based on language
+  const getInitialMessage = () => {
+    if (language === 'id') {
+      return "👋 Hai! Saya asisten belanja AI Anda. Beri tahu saya apa yang ingin Anda masak, dan saya akan membantu Anda menemukan bahan-bahannya!\n\nCoba katakan:\n• \"Saya ingin membuat pasta carbonara\"\n• \"Saya butuh bahan untuk kari ayam\"\n• \"Apa yang bisa saya buat dengan telur dan nasi?\"";
+    }
+    return "👋 Hi! I'm your AI grocery assistant. Tell me what you want to cook, and I'll help you find ingredients!\n\nTry saying:\n• \"I want to make pasta carbonara\"\n• \"I need ingredients for chicken curry\"\n• \"What can I make with eggs and rice?\"";
+  };
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       role: 'assistant',
-      content: "👋 Hi! I'm your AI grocery assistant. Tell me what you want to cook, and I'll help you find ingredients!\n\nTry saying:\n• \"I want to make pasta carbonara\"\n• \"I need ingredients for chicken curry\"\n• \"What can I make with eggs and rice?\"",
+      content: getInitialMessage(),
     },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+
+  // Update initial message when language changes
+  useEffect(() => {
+    if (messages.length === 1) {
+      setMessages([{
+        id: '1',
+        role: 'assistant',
+        content: getInitialMessage(),
+      }]);
+    }
+  }, [language]);
 
   useEffect(() => {
     if (visible) {
@@ -78,12 +101,30 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
     setLoading(true);
 
     try {
-      // Build product catalog for AI
-      const productCatalog = availableProducts
-        .map((p) => `${p.name} (${p.brand}) - ${p.category} - ID: ${p.id}`)
+      // Filter products: Only include those with 15-minute delivery or less
+      const fastDeliveryProducts = availableProducts.filter(
+        p => (p.deliveryMinutes ?? 999) <= 15
+      );
+
+      // Sort by delivery time (fastest first)
+      const sortedProducts = fastDeliveryProducts.sort(
+        (a, b) => (a.deliveryMinutes ?? 999) - (b.deliveryMinutes ?? 999)
+      );
+
+      // Build product catalog without IDs (more natural for AI)
+      const productCatalog = sortedProducts
+        .map((p) => {
+          const deliveryTime = p.deliveryMinutes ?? 15;
+          const store = p.storeName ?? 'Store';
+          return `${p.name} by ${p.brand} - ${p.category} (${store}, ${deliveryTime} min delivery)`;
+        })
         .join('\n');
 
-      // ✅ FIXED: Call YOUR backend API instead of Anthropic directly
+      // Also keep a map for matching products later
+      const productMap = new Map(
+        sortedProducts.map(p => [p.name.toLowerCase(), p])
+      );
+
       const response = await fetch(
         `${process.env.EXPO_PUBLIC_DOMAIN}/api/chatbot/grocery-assistant`,
         {
@@ -94,6 +135,7 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
           body: JSON.stringify({
             userMessage: userMessage.content,
             productCatalog: productCatalog,
+            language: language, // Send current language
           }),
         }
       );
@@ -103,7 +145,9 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
       }
 
       const data = await response.json();
-      const aiResponse = data.content || 'Sorry, I had trouble understanding that.';
+      const aiResponse = data.content || (language === 'id' 
+        ? 'Maaf, saya kesulitan memahami itu.' 
+        : 'Sorry, I had trouble understanding that.');
 
       // Parse products from response
       let productsToAdd: Array<{ id: string; name: string; quantity: number }> = [];
@@ -111,7 +155,26 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
       
       if (match) {
         try {
-          productsToAdd = JSON.parse(match[1]);
+          const parsedProducts = JSON.parse(match[1]);
+          
+          // Match products by name to get correct IDs
+          productsToAdd = parsedProducts.map((item: any) => {
+            const productName = item.name.toLowerCase();
+            const matchedProduct = productMap.get(productName) || 
+                                 sortedProducts.find(p => 
+                                   p.name.toLowerCase().includes(productName) ||
+                                   productName.includes(p.name.toLowerCase())
+                                 );
+            
+            if (matchedProduct) {
+              return {
+                id: matchedProduct.id,
+                name: matchedProduct.name,
+                quantity: item.quantity || 1,
+              };
+            }
+            return null;
+          }).filter(Boolean);
         } catch (e) {
           console.error('Failed to parse products:', e);
         }
@@ -130,12 +193,16 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error('AI Chat Error:', error);
+      const errorMessage = language === 'id'
+        ? '❌ Maaf, terjadi kesalahan. Silakan coba lagi!'
+        : '❌ Sorry, I encountered an error. Please try again!';
+      
       setMessages((prev) => [
         ...prev,
         {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: '❌ Sorry, I encountered an error. Please try again!',
+          content: errorMessage,
         },
       ]);
     } finally {
@@ -150,7 +217,33 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
         addToCart(product as any, item.quantity);
       }
     });
+    
+    // Show success message
+    const successMsg = language === 'id'
+      ? `✅ ${products.length} item berhasil ditambahkan ke keranjang!`
+      : `✅ ${products.length} items added to cart!`;
+    
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: successMsg,
+      },
+    ]);
   };
+
+  const placeholder = language === 'id' 
+    ? 'Apa yang ingin Anda masak?'
+    : 'What do you want to cook?';
+  
+  const thinkingText = language === 'id'
+    ? 'AI sedang berpikir...'
+    : 'AI is thinking...';
+  
+  const addToCartText = (count: number) => language === 'id'
+    ? `Tambah ${count} item ke keranjang`
+    : `Add ${count} items to cart`;
 
   return (
     <Modal
@@ -177,7 +270,9 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
           <LinearGradient colors={['#6366f1', '#8b5cf6']} style={styles.headerIcon}>
             <Feather name="message-circle" size={20} color="white" />
           </LinearGradient>
-          <ThemedText style={styles.headerTitle}>AI Grocery Assistant</ThemedText>
+          <ThemedText style={styles.headerTitle}>
+            {language === 'id' ? 'Asisten Belanja AI' : 'AI Grocery Assistant'}
+          </ThemedText>
           <Pressable onPress={onClose} style={styles.closeBtn}>
             <Feather name="x" size={24} color={theme.text} />
           </Pressable>
@@ -219,7 +314,7 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
                   >
                     <Feather name="shopping-cart" size={16} color="white" />
                     <ThemedText style={styles.addToCartText}>
-                      Add {msg.products.length} items to cart
+                      {addToCartText(msg.products.length)}
                     </ThemedText>
                   </LinearGradient>
                 </Pressable>
@@ -230,7 +325,7 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
           {loading && (
             <View style={styles.loadingBubble}>
               <ActivityIndicator color="#6366f1" />
-              <ThemedText style={styles.loadingText}>AI is thinking...</ThemedText>
+              <ThemedText style={styles.loadingText}>{thinkingText}</ThemedText>
             </View>
           )}
         </ScrollView>
@@ -247,7 +342,7 @@ export function GroceryChatBot({ visible, onClose, availableProducts }: GroceryC
         >
           <TextInput
             style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundDefault }]}
-            placeholder="What do you want to cook?"
+            placeholder={placeholder}
             placeholderTextColor={theme.textSecondary}
             value={input}
             onChangeText={setInput}
