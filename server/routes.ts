@@ -20,6 +20,8 @@ import path from 'path';
 import multer from "multer";
 import { driverLocations } from "../shared/schema";
 import { userClaimedPromotions } from "../shared/schema";
+import chatbotRouter from "../server/routes/chatbot"; 
+
 
 
 // ✅ IMPORT NOTIFICATION FUNCTIONS (removed local duplicate)
@@ -219,6 +221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
 
+
 // 🟢 HEALTH CHECK & DEBUG ROUTE
 app.get("/api/health", (req, res) => {
   res.json({ 
@@ -227,6 +230,12 @@ app.get("/api/health", (req, res) => {
     env: process.env.NODE_ENV || "not set"
   });
 });
+
+
+app.use("/api/chatbot", chatbotRouter);
+console.log("✅ Chatbot routes mounted at /api/chatbot");
+
+
 
 // ==================== PUSH TOKEN REGISTRATION ====================
 app.post("/api/users/push-token", async (req, res) => {

@@ -4,7 +4,6 @@ import { registerRoutes } from "./routes";
 import * as fs from "fs";
 import * as path from "path";
 import cors from 'cors';
-
 const app = express();
 const log = console.log;
 
