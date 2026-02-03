@@ -23,56 +23,20 @@ router.post("/grocery-assistant", async (req, res) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-  model: 'claude-sonnet-4-20250514',
-  max_tokens: 900,
-  messages: [
-    {
-      role: 'system',
-      content: `
-You are an AI grocery assistant inside a shopping app.
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [
+          {
+            role: "user",
+            content: `You are a helpful grocery shopping assistant.
 
-CRITICAL RULES:
-- Always reply in the SAME language as the user's last message
-- NEVER change language unless the user changes it
-- DO NOT show product IDs to the user
-- Products must be added ONLY from the provided catalog
-- Delivery time is ALWAYS under 15 minutes
-- If the user confirms, mark items as ready_to_add = true
-- Be concise and friendly
-`
-    },
-    {
-      role: 'user',
-      content: `
-User message:
-"${userMessage}"
-
-Available products (JSON):
+Available products in store:
 ${productCatalog}
 
-RESPONSE FORMAT (STRICT JSON ONLY):
-
-{
-  "message": "Friendly text shown to user (NO product IDs)",
-  "language": "detected language code (id / en / etc)",
-  "ready_to_add": true | false,
-  "products": [
-    {
-      "productId": "id-from-catalog",
-      "quantity": 1
-    }
-  ]
-}
-
-RULES:
-- If user says yes/ya/ok → ready_to_add = true
-- If just suggesting → ready_to_add = false
-- products must be empty if nothing matches
-`
-    }
-  ]
-}),
-
+User request: "${userMessage}"`,
+          },
+        ],
+      }),
     });
 
     if (!response.ok) {
