@@ -18,49 +18,22 @@ interface SearchInputProps {
 // Custom search input component that works on both web and mobile
 function SearchInput({ value, onChangeText, placeholder, theme }: SearchInputProps) {
   const inputRef = useRef<TextInput>(null);
-  const hasFocused = useRef(false);
 
   useEffect(() => {
-    // Only focus once when component first mounts
-    if (!hasFocused.current) {
-      const timer = setTimeout(() => {
-        inputRef.current?.focus();
-        hasFocused.current = true;
-      }, 100);
-      return () => clearTimeout(timer);
-    }
+    // Focus the input when the component mounts
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+
+    // CRITICAL: Blur the input when the component unmounts
+    // This removes the focus BEFORE the parent can be hidden
+    return () => {
+      inputRef.current?.blur();
+      clearTimeout(timer);
+    };
   }, []);
 
-  if (Platform.OS === 'web') {
-    // For web, create a custom div-based input to avoid aria-hidden issues
-    return (
-      <div
-        style={{
-          flex: 1,
-          marginLeft: 12,
-        }}
-      >
-        <input
-          type="text"
-          value={value}
-          onChange={(e: any) => onChangeText(e.target.value)}
-          placeholder={placeholder}
-          autoFocus
-          style={{
-            width: '100%',
-            border: 'none',
-            outline: 'none',
-            fontSize: 16,
-            backgroundColor: 'transparent',
-            color: theme.text || '#000',
-            fontFamily: 'System',
-          }}
-        />
-      </div>
-    );
-  }
-
-  // For mobile, use regular TextInput
+  // Use TextInput for BOTH Web and Mobile
   return (
     <TextInput
       ref={inputRef}
@@ -68,13 +41,17 @@ function SearchInput({ value, onChangeText, placeholder, theme }: SearchInputPro
       onChangeText={onChangeText}
       placeholder={placeholder}
       placeholderTextColor="#64748b"
-      autoFocus
+      autoFocus={true}
       returnKeyType="search"
       style={{
         flex: 1,
         fontSize: 16,
         marginLeft: 12,
         color: theme.text || '#000',
+        // This removes the blue outline on Web
+        ...Platform.select({
+          web: { outlineStyle: 'none' } as any,
+        }),
       }}
     />
   );
