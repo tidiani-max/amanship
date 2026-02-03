@@ -201,14 +201,7 @@ export default function HomeScreen() {
     };
   }, []);
   
-  // Auto-focus when search is triggered from tab bar
-  useEffect(() => {
-    if (isSearchActive && searchInputRef.current) {
-      searchInputRef.current.focus();
-      setIsSearchActive(false); // Reset the trigger
-    }
-  }, [isSearchActive]);
-  
+ 
 
   const getLocationDisplayName = (): string => {
     if (isManualLocation && addressLabel) return String(addressLabel);
