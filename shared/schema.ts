@@ -112,10 +112,10 @@ export const products = pgTable("products", {
   
   // ✅ Price will be auto-calculated by database trigger
   // BUT we keep it as required in schema because it will always have a value
-  price: integer("price").notNull(),
-  
+  price: integer("price").notNull(),  
   // ✅ Margin defaults to 15% but can be customized per product
   margin: decimal("margin", { precision: 5, scale: 2 }).default("15.00").notNull(),
+  
   
   // Optional fields
   originalPrice: integer("original_price"), // For showing "Was $X, Now $Y" discounts
@@ -533,10 +533,10 @@ export const insertStoreInventorySchema = createInsertSchema(storeInventory).omi
 export const insertCategorySchema = createInsertSchema(categories).pick({ name: true, icon: true, color: true, image: true });
 export const insertProductSchema = createInsertSchema(products).omit({ 
   id: true,
-  price: true,      // ❌ Don't allow manual price input - auto-calculated
+  price: true,
 }).extend({
-  costPrice: z.number().int().positive(), // ✅ REQUIRED and must be positive
-  margin: z.number().optional(), // ✅ Optional - defaults to 15% if not provided
+  costPrice: z.number().int().positive(),
+  margin: z.number().optional().transform(val => val !== undefined ? String(val) : undefined),
 });
 export const insertAddressSchema = createInsertSchema(addresses).omit({ id: true });
 export const insertCartItemSchema = createInsertSchema(cartItems).omit({ id: true });

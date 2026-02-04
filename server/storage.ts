@@ -198,10 +198,17 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(products).where(eq(products.categoryId, categoryId));
   }
 
-  async createProduct(product: InsertProduct): Promise<Product> {
-    const [result] = await db.insert(products).values(product).returning();
-    return result;
-  }
+async createProduct(product: InsertProduct): Promise<Product> {
+  // ✅ Convert margin to string and provide temporary price
+  const productWithPrice = {
+    ...product,
+    margin: product.margin !== undefined ? String(product.margin) : undefined,
+    price: 0, // Temporary value - will be calculated by DB trigger
+  };
+  
+  const [result] = await db.insert(products).values(productWithPrice).returning();
+  return result;
+}
 
   async updateProduct(id: string, updates: Partial<Product>): Promise<Product | undefined> {
   const [result] = await db.update(products)
