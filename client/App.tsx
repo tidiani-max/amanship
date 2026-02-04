@@ -14,12 +14,18 @@ import { queryClient, apiRequest } from "@/lib/query-client";
 import RootStackNavigator from "@/navigation/RootStackNavigator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CartProvider } from "@/context/CartContext";
-import { LocationProvider } from "@/context/LocationContext";
-import { AuthProvider } from "@/context/AuthContext";
 import { LanguageProvider } from "@/context/LanguageContext";
+import { AuthProvider } from "@/context/AuthContext";
+import { LocationProvider } from "@/context/LocationContext";
 import { OnboardingProvider } from "@/context/OnboardingContext";
 import { SearchProvider } from "@/context/SearchContext";
 import { NotificationAlertProvider } from "@/components/NotificationAlertProvider";
+
+
+
+
+
+
 
 // 1. SILENCE ALL ERRORS & WARNINGS (This stops the red/yellow boxes)
 LogBox.ignoreAllLogs();
@@ -88,7 +94,10 @@ function AppContent() {
 
 /**
  * Root App Component
- * Organized with Data Providers -> Auth -> Content
+ * Organized with Data Providers -> Auth -> Location -> Cart -> Content
+ * 
+ * ✅ CORRECT ORDER:
+ * - LocationProvider BEFORE CartProvider (CartProvider uses useLocation)
  */
 export default function App() {
   return (
@@ -97,14 +106,14 @@ export default function App() {
         <OnboardingProvider>
           <LanguageProvider>
             <SearchProvider>
-              <CartProvider>
-                <LocationProvider>
+              <LocationProvider>  {/* ✅ MOVED UP - Must come before CartProvider */}
+                <CartProvider>    {/* ✅ Now this can use useLocation() */}
                   {/* ErrorBoundary wraps the content to prevent total app crash */}
                   <ErrorBoundary>
                     <AppContent />
                   </ErrorBoundary>
-                </LocationProvider>
-              </CartProvider>
+                </CartProvider>
+              </LocationProvider>
             </SearchProvider>
           </LanguageProvider>
         </OnboardingProvider>
@@ -119,3 +128,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

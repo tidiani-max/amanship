@@ -36,29 +36,69 @@ async function handleResponse(res: Response) {
   return res;
 }
 
+// ✅ POTENTIAL FIX: query-client.ts apiRequest function
+// If you're getting "body stream already read" errors, your apiRequest might be reading the body twice
+// Replace your apiRequest function with this safer version:
+
 export async function apiRequest(
   method: string,
-  route: string,
-  data?: unknown | undefined,
+  url: string,
+  body?: any
 ): Promise<Response> {
-  const baseUrl = getApiUrl();
-  // Ensure the route starts with a slash
-  const cleanRoute = route.startsWith("/") ? route : `/${route}`;
-  const url = `${baseUrl}${cleanRoute}`;
-
-  const res = await fetch(url, {
+  const options: RequestInit = {
     method,
     headers: {
-      "Accept": "application/json",
-      ...(data ? { "Content-Type": "application/json" } : {}),
+      "Content-Type": "application/json",
     },
-    body: data ? JSON.stringify(data) : undefined,
-    // Note: Use "omit" or "same-origin" if you aren't using cookie-based sessions
-    // to avoid some strict CORS preflight issues.
-    credentials: "omit", 
-  });
+  };
 
-  return await handleResponse(res);
+  if (body && method !== "GET") {
+    options.body = JSON.stringify(body);
+  }
+
+  const fullUrl = url.startsWith("http") 
+    ? url 
+    : `${process.env.EXPO_PUBLIC_DOMAIN}${url}`;
+
+  console.log(`🌐 API Request: ${method} ${fullUrl}`);
+
+  try {
+    const response = await fetch(fullUrl, options);
+    
+    // ✅ FIX: Don't read the body here - let the caller handle it
+    // This prevents "body stream already read" errors
+    
+    console.log(`📡 API Response: ${response.status} ${response.statusText}`);
+    
+    return response;
+  } catch (error) {
+    console.error(`❌ API Request failed: ${method} ${url}`, error);
+    throw error;
+  }
+}
+
+// Alternative safer helper function:
+export async function apiRequestJSON(
+  method: string,
+  url: string,
+  body?: any
+): Promise<any> {
+  const response = await apiRequest(method, url, body);
+  
+  // ✅ Handle non-OK responses before trying to parse JSON
+  if (!response.ok) {
+    let errorMessage = `Request failed: ${response.status} ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.error || errorMessage;
+    } catch {
+      // If JSON parsing fails, use the status text
+    }
+    throw new Error(errorMessage);
+  }
+  
+  // ✅ Only parse JSON if response is OK
+  return response.json();
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";

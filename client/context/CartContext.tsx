@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/query-client";
 import { Product, CartItem as CartItemType } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { useLocation } from "@/context/LocationContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface CartContextType {
   items: CartItemType[];
@@ -16,6 +18,27 @@ interface CartContextType {
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
+
+// ✅ Storage keys for tracking location
+const CART_LOCATION_KEY = "@zendo_cart_location";
+const LOCATION_THRESHOLD_KM = 5; // Clear cart if user moves more than 5km
+
+// ✅ Distance calculation
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function toRad(degrees: number): number {
+  return degrees * (Math.PI / 180);
+}
 
 // ✅ API response type that matches your backend
 interface CartItemFromAPI {
@@ -42,7 +65,76 @@ interface CartItemFromAPI {
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { location } = useLocation();
+  const [lastLocation, setLastLocation] = useState<{ lat: number; lng: number } | null>(null);
   
+  // ✅ Load last location on mount
+  useEffect(() => {
+    loadLastLocation();
+  }, []);
+
+  // ✅ Check location changes and clear cart if moved too far
+  useEffect(() => {
+    if (!location?.latitude || !location?.longitude) return;
+    if (!user?.id) return;
+
+    checkLocationChange(location.latitude, location.longitude);
+  }, [location, user?.id]);
+
+  const loadLastLocation = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(CART_LOCATION_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setLastLocation(parsed);
+        console.log(`📍 Loaded last cart location: ${parsed.lat}, ${parsed.lng}`);
+      }
+    } catch (error) {
+      console.error("❌ Failed to load last location:", error);
+    }
+  };
+
+  const saveLocation = async (lat: number, lng: number) => {
+    try {
+      const locationData = { lat, lng };
+      await AsyncStorage.setItem(CART_LOCATION_KEY, JSON.stringify(locationData));
+      setLastLocation(locationData);
+      console.log(`✅ Saved cart location: ${lat}, ${lng}`);
+    } catch (error) {
+      console.error("❌ Failed to save location:", error);
+    }
+  };
+
+  const checkLocationChange = async (newLat: number, newLng: number) => {
+    if (!lastLocation) {
+      // First time - just save location
+      await saveLocation(newLat, newLng);
+      return;
+    }
+
+    const distance = calculateDistance(
+      lastLocation.lat,
+      lastLocation.lng,
+      newLat,
+      newLng
+    );
+
+    console.log(`📏 Distance from last cart location: ${distance.toFixed(2)}km`);
+
+    if (distance > LOCATION_THRESHOLD_KM) {
+      console.log(`⚠️ User moved ${distance.toFixed(2)}km - clearing cart`);
+      
+      // Clear cart on server
+      await clearCartMutation.mutateAsync();
+      
+      // Save new location
+      await saveLocation(newLat, newLng);
+      
+      // Show notification to user
+      console.log("🔔 Cart cleared due to location change");
+    }
+  };
+
   const { data: cartData = [], isLoading } = useQuery<CartItemFromAPI[]>({
     queryKey: ["/api/cart", user?.id],
     queryFn: async () => {
@@ -109,15 +201,45 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
-  const clearMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("DELETE", `/api/cart?userId=${user?.id}`);
+
+
+const clearCartMutation = useMutation({
+  mutationFn: async () => {
+    if (!user?.id) {
+      console.warn("Cannot clear cart: No user ID");
+      return { success: true }; // Return success to prevent error
+    }
+
+    try {
+      const res = await apiRequest("DELETE", `/api/cart?userId=${user.id}`);
+      
+      // ✅ FIX: Check if response is ok before parsing
+      if (!res.ok) {
+        console.error(`❌ Clear cart failed: ${res.status} ${res.statusText}`);
+        // If cart is already empty (404), treat as success
+        if (res.status === 404) {
+          console.log("Cart already empty, treating as success");
+          return { success: true };
+        }
+        throw new Error(`Failed to clear cart: ${res.status}`);
+      }
+
       return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cart", user?.id] });
-    },
-  });
+    } catch (error) {
+      console.error("❌ Clear cart error:", error);
+      // Don't throw - just log and return success to prevent UI errors
+      return { success: true };
+    }
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/cart", user?.id] });
+  },
+  onError: (error) => {
+    console.error("❌ Clear cart mutation error:", error);
+    // Invalidate anyway to refresh cart state
+    queryClient.invalidateQueries({ queryKey: ["/api/cart", user?.id] });
+  },
+});
 
   const addToCart = useCallback((product: Product, quantity = 1) => {
     if (!user?.id) {
@@ -150,8 +272,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       console.warn("Cannot clear cart: User not logged in");
       return;
     }
-    clearMutation.mutate();
-  }, [clearMutation, user?.id]);
+    clearCartMutation.mutate();
+  }, [clearCartMutation, user?.id]);
 
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);

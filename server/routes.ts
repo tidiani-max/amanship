@@ -1952,57 +1952,141 @@ app.get("/api/products/:id/store", async (req, res) => {
 
 
   // ==================== 8. CART ====================
-  console.log("🛒 Registering cart routes...");
-  
-  app.get("/api/cart", async (req, res) => {
-    try {
-      const userId = req.query.userId as string;
-      if (!userId) return res.status(400).json({ error: "userId required" });
-      const items = await storage.getCartItems(userId);
-      const itemsWithProducts = await Promise.all(items.map(async (item) => {
-        const product = await storage.getProductById(item.productId);
-        return { ...item, product };
-      }));
-      res.json(itemsWithProducts);
-    } catch (error) {
-      console.error("❌ Cart error:", error);
-      res.status(500).json({ error: "Failed to fetch cart" });
-    }
-  });
+ console.log("🛒 Registering cart routes...");
 
-  app.post("/api/cart", async (req, res) => {
-    try {
-      const { productId, quantity = 1, userId } = req.body;
-      if (!userId) return res.status(400).json({ error: "User must be logged in" });
-      const item = await storage.addToCart({ userId, productId, quantity });
-      res.json(item);
-    } catch (error) {
-      console.error("❌ Add to cart error:", error);
-      res.status(500).json({ error: "Failed to add to cart" });
-    }
-  });
+// GET CART
+app.get("/api/cart", async (req, res) => {
+  try {
+    const userId = req.query.userId as string;
+    if (!userId) return res.status(400).json({ error: "userId required" });
+    
+    const items = await storage.getCartItems(userId);
+    const itemsWithProducts = await Promise.all(items.map(async (item) => {
+      const product = await storage.getProductById(item.productId);
+      
+      // ✅ Get the storeId from inventory
+      let storeId = null;
+      if (product) {
+        const [inventory] = await db
+          .select({ storeId: storeInventory.storeId })
+          .from(storeInventory)
+          .where(eq(storeInventory.productId, product.id))
+          .limit(1);
+        storeId = inventory?.storeId;
+      }
+      
+      return { 
+        ...item, 
+        product,
+        storeId // ✅ Include storeId in response
+      };
+    }));
+    
+    res.json(itemsWithProducts);
+  } catch (error) {
+    console.error("❌ Cart error:", error);
+    res.status(500).json({ error: "Failed to fetch cart" });
+  }
+});
 
-  app.put("/api/cart/:id", async (req, res) => {
-    try {
-      const { quantity } = req.body;
-      const item = await storage.updateCartItemQuantity(req.params.id, quantity);
-      if (!item) return res.status(404).json({ error: "Cart item not found" });
-      res.json(item);
-    } catch (error) {
-      console.error("❌ Update cart error:", error);
-      res.status(500).json({ error: "Failed to update cart item" });
+// ADD TO CART
+app.post("/api/cart", async (req, res) => {
+  try {
+    const { productId, quantity = 1, userId } = req.body;
+    if (!userId) return res.status(400).json({ error: "User must be logged in" });
+    
+    // ✅ Get the product's store
+    const [inventory] = await db
+      .select({ storeId: storeInventory.storeId })
+      .from(storeInventory)
+      .where(eq(storeInventory.productId, productId))
+      .limit(1);
+    
+    if (!inventory) {
+      return res.status(404).json({ error: "Product not available in any store" });
     }
-  });
+    
+    const item = await storage.addToCart({ userId, productId, quantity });
+    
+    // Return with storeId
+    res.json({ ...item, storeId: inventory.storeId });
+  } catch (error) {
+    console.error("❌ Add to cart error:", error);
+    res.status(500).json({ error: "Failed to add to cart" });
+  }
+});
 
-  app.delete("/api/cart/:id", async (req, res) => {
-    try {
-      await db.delete(cartItems).where(eq(cartItems.id, req.params.id));
-      res.json({ success: true });
-    } catch (error) {
-      console.error("❌ Delete cart error:", error);
-      res.status(500).json({ error: "Failed to remove item" });
+// UPDATE CART ITEM
+app.put("/api/cart/:id", async (req, res) => {
+  try {
+    const { quantity } = req.body;
+    const item = await storage.updateCartItemQuantity(req.params.id, quantity);
+    if (!item) return res.status(404).json({ error: "Cart item not found" });
+    res.json(item);
+  } catch (error) {
+    console.error("❌ Update cart error:", error);
+    res.status(500).json({ error: "Failed to update cart item" });
+  }
+});
+
+// DELETE CART ITEM
+app.delete("/api/cart/:id", async (req, res) => {
+  try {
+    await db.delete(cartItems).where(eq(cartItems.id, req.params.id));
+    res.json({ success: true });
+  } catch (error) {
+    console.error("❌ Delete cart error:", error);
+    res.status(500).json({ error: "Failed to remove item" });
+  }
+});
+
+// CLEAR ENTIRE CART
+
+app.delete("/api/cart", async (req, res) => {
+  try {
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
     }
-  });
+
+    console.log(`🗑️ Clearing cart for user ${userId}`);
+    
+    // ✅ Check if cart exists first
+    const existingItems = await db
+      .select()
+      .from(cartItems)
+      .where(eq(cartItems.userId, userId as string));
+
+    if (existingItems.length === 0) {
+      console.log(`✅ Cart already empty for user ${userId}`);
+      // Return success even if cart is already empty
+      return res.json({ 
+        success: true, 
+        message: "Cart already empty",
+        deleted: 0 
+      });
+    }
+
+    // Delete cart items
+    const deleted = await db
+      .delete(cartItems)
+      .where(eq(cartItems.userId, userId as string))
+      .returning();
+
+    console.log(`✅ Cleared ${deleted.length} items from cart for user ${userId}`);
+    
+    res.json({ 
+      success: true, 
+      message: "Cart cleared successfully",
+      deleted: deleted.length 
+    });
+  } catch (error) {
+    console.error("❌ Clear cart error:", error);
+    res.status(500).json({ error: "Failed to clear cart" });
+  }
+});
+
   // ==================== CART VALIDATION ====================
 app.post("/api/cart/validate", async (req, res) => {
   try {
@@ -2998,136 +3082,216 @@ console.log("👑 Registering admin routes...");
 
 // ============================================
 // ADMIN METRICS ENDPOINT - Enhanced with financials
-// ============================================
+
 app.get("/api/admin/metrics", async (req, res) => {
   try {
-    const allStores = await storage.getStores();
-    const allOrders = await storage.getAllOrders();
+    console.log("📊 Fetching admin metrics...");
+    
+    // ✅ FIX 1: Get stores directly from DB instead of storage
+    const allStores = await db.select().from(stores);
+    console.log(`✅ Found ${allStores.length} stores`);
+    
+    // ✅ FIX 2: Get orders directly from DB instead of storage
+    const allOrders = await db.select().from(orders);
+    console.log(`✅ Found ${allOrders.length} orders`);
     
     const metrics = await Promise.all(allStores.map(async (store) => {
-      const staff = await storage.getStoreStaff(store.id);
-      const storeOrders = allOrders.filter((o) => o.storeId === store.id);
-      
-      // Calculate financials
-      const totalRevenue = storeOrders
-        .filter(o => o.status === "delivered")
-        .reduce((sum, o) => sum + (o.total || 0), 0);
-      
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      
-      const todayOrders = storeOrders.filter(o => 
-        new Date(o.createdAt) >= todayStart
-      );
-      
-      const todayRevenue = todayOrders
-        .filter(o => o.status === "delivered")
-        .reduce((sum, o) => sum + (o.total || 0), 0);
-      
-      const thisMonthStart = new Date();
-      thisMonthStart.setDate(1);
-      thisMonthStart.setHours(0, 0, 0, 0);
-      
-      const monthOrders = storeOrders.filter(o => 
-        new Date(o.createdAt) >= thisMonthStart
-      );
-      
-      const monthRevenue = monthOrders
-        .filter(o => o.status === "delivered")
-        .reduce((sum, o) => sum + (o.total || 0), 0);
-      
-      // Calculate average order value
-      const deliveredOrders = storeOrders.filter(o => o.status === "delivered");
-      const avgOrderValue = deliveredOrders.length > 0
-        ? totalRevenue / deliveredOrders.length
-        : 0;
-      
-      // Calculate completion rate
-      const completedOrders = storeOrders.filter(o => 
-        ["delivered", "cancelled"].includes(o.status || "")
-      );
-      const completionRate = completedOrders.length > 0
-        ? (deliveredOrders.length / completedOrders.length) * 100
-        : 0;
-      
-      // COD collection stats
-      const codOrders = storeOrders.filter(o => o.paymentMethod === "cod");
-      const codCollected = codOrders
-        .filter(o => o.codCollected)
-        .reduce((sum, o) => sum + (o.total || 0), 0);
-      const codPending = codOrders
-        .filter(o => !o.codCollected && o.status === "delivered")
-        .reduce((sum, o) => sum + (o.total || 0), 0);
-      
-      const enriched = await Promise.all(staff.map(async (s) => {
-        const u = await storage.getUser(s.userId);
+      try {
+        // Get store staff
+        const staff = await db
+          .select()
+          .from(storeStaff)
+          .where(eq(storeStaff.storeId, store.id));
         
-        // Get staff-specific stats
-        let staffOrders: any[] = [];
-        if (s.role === "picker") {
-          staffOrders = await storage.getOrdersByPicker(s.userId);
-        } else if (s.role === "driver") {
-          staffOrders = await storage.getOrdersByDriver(s.userId);
-        }
+        // Get store orders
+        const storeOrders = allOrders.filter((o) => o.storeId === store.id);
         
-        const staffDelivered = staffOrders.filter(o => o.status === "delivered").length;
-        const staffActive = staffOrders.filter(o => 
-          !["delivered", "cancelled"].includes(o.status || "")
-        ).length;
+        // ✅ FIX 3: Safe calculation of total revenue
+        const totalRevenue = storeOrders
+          .filter(o => o.status === "delivered")
+          .reduce((sum, o) => {
+            const orderTotal = Number(o.total);
+            return sum + (isNaN(orderTotal) ? 0 : orderTotal);
+          }, 0);
         
-        return { 
-          ...s, 
-          user: u ? { 
-            id: u.id, 
-            username: u.username, 
-            phone: u.phone, 
-            email: u.email,
-            name: u.name 
-          } : null,
-          stats: {
-            totalOrders: staffOrders.length,
-            delivered: staffDelivered,
-            active: staffActive,
+        // Calculate today's metrics
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        
+        const todayOrders = storeOrders.filter(o => {
+          if (!o.createdAt) return false;
+          const orderDate = new Date(o.createdAt);
+          return orderDate >= todayStart;
+        });
+        
+        const todayRevenue = todayOrders
+          .filter(o => o.status === "delivered")
+          .reduce((sum, o) => {
+            const orderTotal = Number(o.total);
+            return sum + (isNaN(orderTotal) ? 0 : orderTotal);
+          }, 0);
+        
+        // Calculate month metrics
+        const thisMonthStart = new Date();
+        thisMonthStart.setDate(1);
+        thisMonthStart.setHours(0, 0, 0, 0);
+        
+        const monthOrders = storeOrders.filter(o => {
+          if (!o.createdAt) return false;
+          const orderDate = new Date(o.createdAt);
+          return orderDate >= thisMonthStart;
+        });
+        
+        const monthRevenue = monthOrders
+          .filter(o => o.status === "delivered")
+          .reduce((sum, o) => {
+            const orderTotal = Number(o.total);
+            return sum + (isNaN(orderTotal) ? 0 : orderTotal);
+          }, 0);
+        
+        // Calculate average order value
+        const deliveredOrders = storeOrders.filter(o => o.status === "delivered");
+        const avgOrderValue = deliveredOrders.length > 0
+          ? totalRevenue / deliveredOrders.length
+          : 0;
+        
+        // Calculate completion rate
+        const completedOrders = storeOrders.filter(o => 
+          ["delivered", "cancelled"].includes(o.status || "")
+        );
+        const completionRate = completedOrders.length > 0
+          ? (deliveredOrders.length / completedOrders.length) * 100
+          : 0;
+        
+        // COD collection stats
+        const codOrders = storeOrders.filter(o => o.paymentMethod === "cod");
+        const codCollected = codOrders
+          .filter(o => o.codCollected === true)
+          .reduce((sum, o) => {
+            const orderTotal = Number(o.total);
+            return sum + (isNaN(orderTotal) ? 0 : orderTotal);
+          }, 0);
+        
+        const codPending = codOrders
+          .filter(o => !o.codCollected && o.status === "delivered")
+          .reduce((sum, o) => {
+            const orderTotal = Number(o.total);
+            return sum + (isNaN(orderTotal) ? 0 : orderTotal);
+          }, 0);
+        
+        // ✅ FIX 4: Enrich staff with user data safely
+        const enriched = await Promise.all(staff.map(async (s) => {
+          try {
+            const [u] = await db
+              .select()
+              .from(users)
+              .where(eq(users.id, s.userId))
+              .limit(1);
+            
+            // Get staff-specific orders
+            let staffOrders: any[] = [];
+            if (s.role === "picker") {
+              staffOrders = allOrders.filter(o => o.pickerId === s.userId);
+            } else if (s.role === "driver") {
+              staffOrders = allOrders.filter(o => o.driverId === s.userId);
+            }
+            
+            const staffDelivered = staffOrders.filter(o => o.status === "delivered").length;
+            const staffActive = staffOrders.filter(o => 
+              !["delivered", "cancelled"].includes(o.status || "")
+            ).length;
+            
+            return { 
+              ...s, 
+              user: u ? { 
+                id: u.id, 
+                username: u.username, 
+                phone: u.phone, 
+                email: u.email,
+                name: u.name 
+              } : null,
+              stats: {
+                totalOrders: staffOrders.length,
+                delivered: staffDelivered,
+                active: staffActive,
+              }
+            };
+          } catch (staffError) {
+            console.error(`❌ Error enriching staff ${s.id}:`, staffError);
+            return {
+              ...s,
+              user: null,
+              stats: { totalOrders: 0, delivered: 0, active: 0 }
+            };
           }
+        }));
+        
+        return {
+          ...store,
+          totalStaff: staff.length,
+          onlineStaff: staff.filter(s => s.status === "online").length,
+          staff: enriched,
+          pickers: enriched.filter(s => s.role === "picker"),
+          drivers: enriched.filter(s => s.role === "driver"),
+          orderCount: storeOrders.length,
+          pendingOrders: storeOrders.filter(o => o.status === "pending").length,
+          activeOrders: storeOrders.filter(o => 
+            ["confirmed", "picking", "packed", "delivering"].includes(o.status || "")
+          ).length,
+          deliveredOrders: deliveredOrders.length,
+          cancelledOrders: storeOrders.filter(o => o.status === "cancelled").length,
+          // Financial metrics
+          totalRevenue,
+          todayRevenue,
+          todayOrders: todayOrders.length,
+          monthRevenue,
+          monthOrders: monthOrders.length,
+          avgOrderValue,
+          completionRate,
+          codCollected,
+          codPending,
         };
-      }));
-      
-      return {
-        ...store,
-        totalStaff: staff.length,
-        onlineStaff: staff.filter(s => s.status === "online").length,
-        staff: enriched,
-        pickers: enriched.filter(s => s.role === "picker"),
-        drivers: enriched.filter(s => s.role === "driver"),
-        orderCount: storeOrders.length,
-        pendingOrders: storeOrders.filter(o => o.status === "pending").length,
-        activeOrders: storeOrders.filter(o => 
-          ["confirmed", "picking", "packed", "delivering"].includes(o.status || "")
-        ).length,
-        deliveredOrders: deliveredOrders.length,
-        cancelledOrders: storeOrders.filter(o => o.status === "cancelled").length,
-        // Financial metrics
-        totalRevenue,
-        todayRevenue,
-        todayOrders: todayOrders.length,
-        monthRevenue,
-        monthOrders: monthOrders.length,
-        avgOrderValue,
-        completionRate,
-        codCollected,
-        codPending,
-      };
+      } catch (storeError) {
+        console.error(`❌ Error processing store ${store.id}:`, storeError);
+        // Return minimal store data if processing fails
+        return {
+          ...store,
+          totalStaff: 0,
+          onlineStaff: 0,
+          staff: [],
+          pickers: [],
+          drivers: [],
+          orderCount: 0,
+          pendingOrders: 0,
+          activeOrders: 0,
+          deliveredOrders: 0,
+          cancelledOrders: 0,
+          totalRevenue: 0,
+          todayRevenue: 0,
+          todayOrders: 0,
+          monthRevenue: 0,
+          monthOrders: 0,
+          avgOrderValue: 0,
+          completionRate: 0,
+          codCollected: 0,
+          codPending: 0,
+        };
+      }
     }));
     
-    // Global totals
+    // Calculate global totals
     const globalTotals = {
-      totalRevenue: metrics.reduce((sum, m) => sum + m.totalRevenue, 0),
-      todayRevenue: metrics.reduce((sum, m) => sum + m.todayRevenue, 0),
-      monthRevenue: metrics.reduce((sum, m) => sum + m.monthRevenue, 0),
-      avgOrderValue: metrics.reduce((sum, m) => sum + m.avgOrderValue, 0) / (metrics.length || 1),
-      codCollected: metrics.reduce((sum, m) => sum + m.codCollected, 0),
-      codPending: metrics.reduce((sum, m) => sum + m.codPending, 0),
+      totalRevenue: metrics.reduce((sum, m) => sum + (m.totalRevenue || 0), 0),
+      todayRevenue: metrics.reduce((sum, m) => sum + (m.todayRevenue || 0), 0),
+      monthRevenue: metrics.reduce((sum, m) => sum + (m.monthRevenue || 0), 0),
+      avgOrderValue: metrics.length > 0
+        ? metrics.reduce((sum, m) => sum + (m.avgOrderValue || 0), 0) / metrics.length
+        : 0,
+      codCollected: metrics.reduce((sum, m) => sum + (m.codCollected || 0), 0),
+      codPending: metrics.reduce((sum, m) => sum + (m.codPending || 0), 0),
     };
+    
+    console.log(`✅ Successfully calculated metrics for ${metrics.length} stores`);
     
     res.json({
       stores: metrics,
@@ -3146,9 +3310,16 @@ app.get("/api/admin/metrics", async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Admin metrics error:", error);
-    res.status(500).json({ error: "Failed to fetch metrics" });
+    console.error("Stack trace:", error instanceof Error ? error.stack : "No stack trace");
+    
+    res.status(500).json({ 
+      error: "Failed to fetch metrics",
+      message: error instanceof Error ? error.message : "Unknown error",
+      details: process.env.NODE_ENV === 'development' ? error : undefined
+    });
   }
 });
+
 
 // ============================================
 // STORE CRUD OPERATIONS
