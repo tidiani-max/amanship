@@ -22,6 +22,13 @@
       "when": 1770101430423,
       "tag": "0002_white_mad_thinker",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1770187400111,
+      "tag": "0003_exotic_electro",
+      "breakpoints": true
     }
   ]
 }

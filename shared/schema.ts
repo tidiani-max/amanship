@@ -106,10 +106,19 @@ export const products = pgTable("products", {
   id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   brand: text("brand").notNull().default("Generic"),
+  
+  // ✅ CRITICAL: costPrice is now REQUIRED
+  costPrice: integer("cost_price").notNull(), 
+  
+  // ✅ Price will be auto-calculated by database trigger
+  // BUT we keep it as required in schema because it will always have a value
   price: integer("price").notNull(),
-  originalPrice: integer("original_price"),
-  costPrice: integer("cost_price"),
-  margin: decimal("margin", { precision: 5, scale: 2 }).default("15.00"),
+  
+  // ✅ Margin defaults to 15% but can be customized per product
+  margin: decimal("margin", { precision: 5, scale: 2 }).default("15.00").notNull(),
+  
+  // Optional fields
+  originalPrice: integer("original_price"), // For showing "Was $X, Now $Y" discounts
   image: text("image"),
   categoryId: varchar("category_id", { length: 255 }).notNull(),
   description: text("description"),
@@ -522,7 +531,13 @@ export const insertStoreSchema = createInsertSchema(stores).omit({ id: true, cre
 export const insertStoreStaffSchema = createInsertSchema(storeStaff).omit({ id: true, createdAt: true, lastStatusChange: true });
 export const insertStoreInventorySchema = createInsertSchema(storeInventory).omit({ id: true });
 export const insertCategorySchema = createInsertSchema(categories).pick({ name: true, icon: true, color: true, image: true });
-export const insertProductSchema = createInsertSchema(products).omit({ id: true });
+export const insertProductSchema = createInsertSchema(products).omit({ 
+  id: true,
+  price: true,      // ❌ Don't allow manual price input - auto-calculated
+}).extend({
+  costPrice: z.number().int().positive(), // ✅ REQUIRED and must be positive
+  margin: z.number().optional(), // ✅ Optional - defaults to 15% if not provided
+});
 export const insertAddressSchema = createInsertSchema(addresses).omit({ id: true });
 export const insertCartItemSchema = createInsertSchema(cartItems).omit({ id: true });
 export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true });

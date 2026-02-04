@@ -279,21 +279,31 @@ app.post("/api/users/push-token", async (req, res) => {
 
 
 
- app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async (req: Request, res: Response) => {
+app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async (req: Request, res: Response) => {
   try {
-    const { inventoryId, userId, stock, price, name, brand, description, categoryId, originalPrice } = req.body;
+    const { 
+      inventoryId, 
+      userId, 
+      stock, 
+      costPrice,    // ✅ Update cost, price recalculates automatically
+      margin,       // ✅ Update margin, price recalculates automatically
+      name, 
+      brand, 
+      description, 
+      categoryId, 
+      originalPrice 
+    } = req.body;
 
-    console.log("📦 Update request:", { inventoryId, userId, hasImage: !!req.file });
-    console.log("📸 Image file:", req.file); // Add this
+    console.log("📦 Update request:", { inventoryId, userId, costPrice, margin });
 
     if (!inventoryId || !userId) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // 1. Update Inventory stock
+    // Update inventory stock
     await storage.updateStoreInventory(inventoryId, parseInt(stock) || 0, true);
 
-    // 2. Find the product linked to this inventory record
+    // Find the product
     const invRecords = await db.select().from(storeInventory).where(eq(storeInventory.id, inventoryId));
     
     if (invRecords.length > 0) {
@@ -301,39 +311,70 @@ app.post("/api/users/push-token", async (req, res) => {
         name,
         brand,
         description,
-        price: parseInt(price), // ✅ Changed from parseFloat to parseInt to match schema
         categoryId
       };
 
-      // ✅ Add originalPrice if provided
+      // ✅ IF COST PRICE CHANGED, DATABASE TRIGGER RECALCULATES SELLING PRICE
+      if (costPrice && costPrice.trim() !== "") {
+        const cost = parseInt(costPrice);
+        if (cost <= 0) {
+          return res.status(400).json({ 
+            error: "Cost price must be greater than 0" 
+          });
+        }
+        updateData.costPrice = cost;
+        console.log(`💰 Cost price updated to Rp${cost}, selling price will auto-recalculate`);
+      }
+
+      // ✅ IF MARGIN CHANGED, DATABASE TRIGGER RECALCULATES SELLING PRICE
+      if (margin && margin.trim() !== "") {
+        const newMargin = parseFloat(margin);
+        if (newMargin < 0) {
+          return res.status(400).json({ 
+            error: "Margin cannot be negative" 
+          });
+        }
+        updateData.margin = newMargin;
+        console.log(`💰 Margin updated to ${newMargin}%, selling price will auto-recalculate`);
+      }
+
+      // Update original price if provided
       if (originalPrice && originalPrice.trim() !== "") {
         updateData.originalPrice = parseInt(originalPrice);
       }
-      console.log("📸 Image upload check:", {
-      hasFile: !!req.file,
-      filename: req.file?.filename,
-      mimetype: req.file?.mimetype,
-      size: req.file?.size
-    });
 
-if (req.file) {
-  updateData.image = `/uploads/${req.file.filename}`;
-  console.log("✅ Image will be updated to:", updateData.image);
-}
-      // ✅ Add image if uploaded
+      // Update image if uploaded
       if (req.file) {
         updateData.image = `/uploads/${req.file.filename}`;
       }
 
-      await storage.updateProduct(invRecords[0].productId, updateData);
+      // ✅ Database trigger handles price calculation on UPDATE
+      const [updated] = await db
+        .update(products)
+        .set(updateData)
+        .where(eq(products.id, invRecords[0].productId))
+        .returning();
+      
+      console.log("✅ Product updated successfully");
+      
+      if (updated && (updateData.costPrice || updateData.margin)) {
+        console.log(`💰 Auto-pricing result: Cost Rp${updated.costPrice} × ${updated.margin}% → Selling Rp${updated.price}`);
+      }
     }
 
-    res.json({ success: true, message: "Inventory and Product updated" });
+    res.json({ 
+      success: true, 
+      message: "Product updated with automatic margin"
+    });
   } catch (error) {
-    console.error("Update error:", error);
-    res.status(500).json({ error: "Update failed" });
+    console.error("❌ Update error:", error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : "Update failed"
+    });
   }
 });
+
+
 
   // ==================== 3. AUTHENTICATION ROUTES ====================
   console.log("🔐 Registering auth routes...");
@@ -789,71 +830,105 @@ app.get("/api/picker/dashboard", async (req, res) => {
 
 app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, res) => {
   try {
-    const { userId, name, brand, description, price, originalPrice, stock, categoryId, location } = req.body;
+    const { 
+      userId, 
+      name, 
+      brand, 
+      description, 
+      costPrice,     // ✅ ONLY cost price needed - price auto-calculated
+      originalPrice, 
+      stock, 
+      categoryId, 
+      location,
+      margin         // ✅ Optional - defaults to 15% if not provided
+    } = req.body;
 
     console.log("📦 Creating new product:", { 
-      userId, name, price, stock, categoryId,
-      hasImage: !!req.file,
-      filename: req.file?.filename 
+      userId, name, costPrice, margin, stock, categoryId 
     });
 
-    // 1. Validate required fields
-    if (!userId || !name || !price || !stock || !categoryId) {
-      return res.status(400).json({ error: "Missing required fields" });
+    // Validate required fields
+    if (!userId || !name || !categoryId) {
+      return res.status(400).json({ error: "Missing required fields: userId, name, categoryId" });
     }
 
-    // 2. Find the store associated with this picker
+    // ✅ COST PRICE IS REQUIRED
+    if (!costPrice || parseInt(costPrice) <= 0) {
+      return res.status(400).json({ 
+        error: "Cost price is required and must be greater than 0",
+        hint: "Enter the price you paid to the supplier"
+      });
+    }
+
+    // Find the store
     const [staff] = await db.select().from(storeStaff).where(eq(storeStaff.userId, userId));
     if (!staff) {
-      console.log("❌ Staff record not found for user:", userId);
       return res.status(404).json({ error: "Store not found for this user" });
     }
 
-    console.log("✅ Staff found, store:", staff.storeId);
-
-    // 3. Create the Product entry first
+    // ✅ SIMPLIFIED: Just provide costPrice (and optional margin)
+    // Database trigger automatically calculates price
     const productData: any = {
       name,
       brand: brand || "Generic",
       description: description || "",
-      price: parseInt(price), // ✅ FIXED - Use parseInt
+      costPrice: parseInt(costPrice), // ✅ Required
       categoryId,
       image: req.file ? `/uploads/${req.file.filename}` : null,
     };
+
+    // ✅ Optional: Custom margin (if not provided, defaults to 15%)
+    if (margin && parseFloat(margin) > 0) {
+      productData.margin = parseFloat(margin);
+      console.log(`💰 Using custom margin: ${margin}%`);
+    }
 
     // Add originalPrice if provided
     if (originalPrice && originalPrice.trim() !== "") {
       productData.originalPrice = parseInt(originalPrice);
     }
 
-    console.log("💾 Inserting product:", productData);
+    console.log("💾 Creating product (price will auto-calculate):", productData);
 
+    // ✅ Database trigger automatically sets: 
+    // price = costPrice * (1 + margin/100)
     const [newProduct] = await db.insert(products).values(productData).returning();
 
-    console.log("✅ Product created:", newProduct.id);
+    console.log(`✅ Product created: ${newProduct.name}`);
+    console.log(`💰 Auto-pricing: Cost Rp${newProduct.costPrice} → Selling Rp${newProduct.price} (${newProduct.margin}% margin)`);
 
-    // 4. Create the Inventory entry to link product to store
-    const inventoryData = {
+    // Create inventory
+    await db.insert(storeInventory).values({
       storeId: staff.storeId,
       productId: newProduct.id,
       stockCount: parseInt(stock) || 0,
-      location: location || null, // ✅ Add location support
+      location: location || null,
       isAvailable: true
-    };
-
-    console.log("💾 Inserting inventory:", inventoryData);
-
-    await db.insert(storeInventory).values(inventoryData);
-
-    console.log("✅ Inventory created successfully");
+    });
 
     res.json({ 
       success: true, 
-      message: "New product created and added to inventory",
-      productId: newProduct.id 
+      message: "Product created with automatic margin",
+      product: {
+        id: newProduct.id,
+        name: newProduct.name,
+        costPrice: newProduct.costPrice,
+        sellingPrice: newProduct.price,
+        margin: `${newProduct.margin}%`,
+        profit: newProduct.price - newProduct.costPrice,
+      }
     });
   } catch (error) {
     console.error("❌ Creation error:", error);
+    
+    // Handle database constraint errors
+    if (error instanceof Error && error.message.includes('cost_price')) {
+      return res.status(400).json({ 
+        error: "Cost price is required",
+        hint: "Enter the price you paid to the supplier"
+      });
+    }
+    
     res.status(500).json({ 
       error: "Failed to create product",
       details: error instanceof Error ? error.message : "Unknown error"
@@ -2980,6 +3055,115 @@ app.delete("/api/admin/stores/:id", async (req, res) => {
   } catch (error) {
     console.error("❌ Delete store error:", error);
     res.status(500).json({ error: "Failed to delete store" });
+  }
+});
+
+app.post("/api/admin/products", async (req, res) => {
+  try {
+    const { userId, costPrice, margin, ...productData } = req.body;
+
+    // Verify admin access
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user || (user.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    // ✅ COST PRICE IS REQUIRED
+    if (!costPrice || costPrice <= 0) {
+      return res.status(400).json({ 
+        error: "Cost price is required and must be greater than 0" 
+      });
+    }
+
+    // ✅ SIMPLIFIED: Database calculates price automatically
+    const finalProductData: any = {
+      ...productData,
+      costPrice: parseInt(costPrice),
+    };
+
+    // Optional: Custom margin
+    if (margin && parseFloat(margin) > 0) {
+      finalProductData.margin = parseFloat(margin);
+    }
+
+    const [newProduct] = await db.insert(products).values(finalProductData).returning();
+
+    console.log(`✅ Admin created product: ${newProduct.name}`);
+    console.log(`💰 Auto-pricing: Cost Rp${newProduct.costPrice} × ${newProduct.margin}% → Selling Rp${newProduct.price}`);
+
+    res.json(newProduct);
+  } catch (error) {
+    console.error("❌ Admin create product error:", error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : "Failed to create product"
+    });
+  }
+});
+
+app.post("/api/admin/products/bulk-import", async (req, res) => {
+  try {
+    const { userId, products: productsToImport } = req.body;
+
+    // Verify admin access
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user || (user.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const imported = [];
+    const errors = [];
+
+    for (const productData of productsToImport) {
+      try {
+        // ✅ VALIDATE COST PRICE
+        if (!productData.costPrice || productData.costPrice <= 0) {
+          errors.push({ 
+            product: productData.name, 
+            error: "Cost price is required and must be > 0" 
+          });
+          continue;
+        }
+
+        // ✅ Database automatically calculates price
+        const finalData: any = {
+          ...productData,
+          costPrice: parseInt(productData.costPrice),
+        };
+
+        // Optional: Custom margin per product
+        if (productData.margin) {
+          finalData.margin = parseFloat(productData.margin);
+        }
+
+        const [newProduct] = await db.insert(products).values(finalData).returning();
+        
+        imported.push({
+          id: newProduct.id,
+          name: newProduct.name,
+          costPrice: newProduct.costPrice,
+          sellingPrice: newProduct.price,
+          margin: newProduct.margin,
+        });
+
+        console.log(`✅ Imported: ${newProduct.name} - Rp${newProduct.costPrice} → Rp${newProduct.price}`);
+      } catch (error) {
+        errors.push({ 
+          product: productData.name, 
+          error: error instanceof Error ? error.message : "Import failed" 
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      imported: imported.length,
+      failed: errors.length,
+      products: imported,
+      errors,
+    });
+  } catch (error) {
+    console.error("❌ Bulk import error:", error);
+    res.status(500).json({ error: "Bulk import failed" });
   }
 });
 
