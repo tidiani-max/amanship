@@ -3083,15 +3083,19 @@ console.log("👑 Registering admin routes...");
 // ============================================
 // ADMIN METRICS ENDPOINT - Enhanced with financials
 
+// ============================================
+// FIXED ADMIN METRICS ENDPOINT
+// Replace the existing /api/admin/metrics endpoint with this version
+// ============================================
+
 app.get("/api/admin/metrics", async (req, res) => {
   try {
     console.log("📊 Fetching admin metrics...");
     
-    // ✅ FIX 1: Get stores directly from DB instead of storage
+    // ✅ Use direct DB queries instead of storage methods
     const allStores = await db.select().from(stores);
     console.log(`✅ Found ${allStores.length} stores`);
     
-    // ✅ FIX 2: Get orders directly from DB instead of storage
     const allOrders = await db.select().from(orders);
     console.log(`✅ Found ${allOrders.length} orders`);
     
@@ -3106,9 +3110,9 @@ app.get("/api/admin/metrics", async (req, res) => {
         // Get store orders
         const storeOrders = allOrders.filter((o) => o.storeId === store.id);
         
-        // ✅ FIX 3: Safe calculation of total revenue
+        // ✅ Safe calculation of total revenue with explicit null checks
         const totalRevenue = storeOrders
-          .filter(o => o.status === "delivered")
+          .filter(o => o.status === "delivered" && o.total != null)
           .reduce((sum, o) => {
             const orderTotal = Number(o.total);
             return sum + (isNaN(orderTotal) ? 0 : orderTotal);
@@ -3125,7 +3129,7 @@ app.get("/api/admin/metrics", async (req, res) => {
         });
         
         const todayRevenue = todayOrders
-          .filter(o => o.status === "delivered")
+          .filter(o => o.status === "delivered" && o.total != null)
           .reduce((sum, o) => {
             const orderTotal = Number(o.total);
             return sum + (isNaN(orderTotal) ? 0 : orderTotal);
@@ -3143,14 +3147,14 @@ app.get("/api/admin/metrics", async (req, res) => {
         });
         
         const monthRevenue = monthOrders
-          .filter(o => o.status === "delivered")
+          .filter(o => o.status === "delivered" && o.total != null)
           .reduce((sum, o) => {
             const orderTotal = Number(o.total);
             return sum + (isNaN(orderTotal) ? 0 : orderTotal);
           }, 0);
         
         // Calculate average order value
-        const deliveredOrders = storeOrders.filter(o => o.status === "delivered");
+        const deliveredOrders = storeOrders.filter(o => o.status === "delivered" && o.total != null);
         const avgOrderValue = deliveredOrders.length > 0
           ? totalRevenue / deliveredOrders.length
           : 0;
@@ -3166,27 +3170,37 @@ app.get("/api/admin/metrics", async (req, res) => {
         // COD collection stats
         const codOrders = storeOrders.filter(o => o.paymentMethod === "cod");
         const codCollected = codOrders
-          .filter(o => o.codCollected === true)
+          .filter(o => o.codCollected === true && o.total != null)
           .reduce((sum, o) => {
             const orderTotal = Number(o.total);
             return sum + (isNaN(orderTotal) ? 0 : orderTotal);
           }, 0);
         
         const codPending = codOrders
-          .filter(o => !o.codCollected && o.status === "delivered")
+          .filter(o => !o.codCollected && o.status === "delivered" && o.total != null)
           .reduce((sum, o) => {
             const orderTotal = Number(o.total);
             return sum + (isNaN(orderTotal) ? 0 : orderTotal);
           }, 0);
         
-        // ✅ FIX 4: Enrich staff with user data safely
-        const enriched = await Promise.all(staff.map(async (s) => {
-          try {
-            const [u] = await db
-              .select()
-              .from(users)
-              .where(eq(users.id, s.userId))
-              .limit(1);
+        // ✅ Enrich staff with user data safely
+       const enriched = await Promise.all(staff.map(async (s) => {
+  try {
+    // ✅ CRITICAL FIX: Validate userId exists before querying
+    if (!s.userId) {
+      console.log(`⚠️ Staff ${s.id} has no userId assigned`);
+      return {
+        ...s,
+        user: null,
+        stats: { totalOrders: 0, delivered: 0, active: 0 }
+      };
+    }
+    
+    const [u] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, s.userId))
+      .limit(1);
             
             // Get staff-specific orders
             let staffOrders: any[] = [];
