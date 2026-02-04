@@ -6,16 +6,17 @@ import { db } from "./db";
 import { 
   categories, products, vouchers, users, stores, storeStaff, 
   storeInventory, otpCodes, addresses, orders, orderItems, 
-  cartItems, messages, promotions,  userAssignedVouchers, 
+  cartItems, messages, promotions, userAssignedVouchers, 
   voucherTriggerLog, 
   voucherUsageLog,
-  promotionUsageLog ,             
+  promotionUsageLog,             
   userPromotionUsage,      
   userVoucherUsage,
-  staffEarnings,          // ✅ NEW
-  salaryPayments,         // ✅ NEW
-  storeDailyFinancials,   // ✅ NEW
-  appSettings,            // ✅ NEW
+  staffEarnings,
+  salaryPayments,
+  storeDailyFinancials,
+  appSettings,
+  promotionCostLog,  // ✅ ADD THIS LINE
 } from "../shared/schema";
 import { findNearestAvailableStore, getStoresWithAvailability, estimateDeliveryTime } from "./storeAvailability";
 import express, { Express } from 'express';
@@ -2002,6 +2003,182 @@ app.get("/api/products/:id/store", async (req, res) => {
       res.status(500).json({ error: "Failed to remove item" });
     }
   });
+  // ==================== CART VALIDATION ====================
+app.post("/api/cart/validate", async (req, res) => {
+  try {
+    const { userId, latitude, longitude, items } = req.body;
+
+    if (!latitude || !longitude || !items?.length) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    console.log(`🔍 Validating ${items.length} cart items for location: ${latitude}, ${longitude}`);
+
+    // Get nearby stores (within 5km)
+    const nearbyStores = await db.execute(sql`
+      SELECT id
+      FROM stores
+      WHERE
+        is_active = true
+        AND (
+          6371 * acos(
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${parseFloat(latitude)}::numeric))
+              * cos(radians(latitude::numeric))
+              * cos(radians(longitude::numeric) - radians(${parseFloat(longitude)}::numeric))
+              + sin(radians(${parseFloat(latitude)}::numeric))
+              * sin(radians(latitude::numeric))
+            ))
+          )
+        ) <= 5
+    `);
+
+    const nearbyStoreIds = new Set(nearbyStores.rows.map((s: any) => s.id));
+    console.log(`✅ Found ${nearbyStoreIds.size} nearby stores`);
+
+    // Validate each cart item
+    const validatedItems = [];
+    const invalidItems = [];
+
+    for (const item of items) {
+      // Check if product is available in nearby stores
+      const [inventory] = await db
+        .select({
+          storeId: storeInventory.storeId,
+          stockCount: storeInventory.stockCount,
+          storeName: stores.name,
+        })
+        .from(storeInventory)
+        .leftJoin(stores, eq(storeInventory.storeId, stores.id))
+        .where(
+          and(
+            eq(storeInventory.productId, item.productId),
+            eq(storeInventory.isAvailable, true),
+            gt(storeInventory.stockCount, 0)
+          )
+        )
+        .limit(1);
+
+      if (inventory && nearbyStoreIds.has(inventory.storeId)) {
+        validatedItems.push({
+          ...item,
+          storeId: inventory.storeId,
+          storeName: inventory.storeName,
+          available: true,
+        });
+      } else {
+        invalidItems.push({
+          ...item,
+          reason: inventory 
+            ? "Store not in delivery range" 
+            : "Product out of stock or unavailable",
+          available: false,
+        });
+      }
+    }
+
+    console.log(`✅ Validated: ${validatedItems.length} available, ${invalidItems.length} unavailable`);
+
+    res.json({
+      valid: invalidItems.length === 0,
+      validItems: validatedItems,
+      invalidItems,
+      nearbyStoresCount: nearbyStoreIds.size,
+    });
+  } catch (error) {
+    console.error("❌ Cart validation error:", error);
+    res.status(500).json({ error: "Failed to validate cart" });
+  }
+});
+
+// FIXED VERSION - Replace lines ~2100-2170 in your routes.ts
+
+app.post("/api/cart/cleanup", async (req, res) => {
+  try {
+    const { userId, latitude, longitude } = req.body;
+
+    if (!userId || !latitude || !longitude) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    console.log(`🧹 Cleaning up cart for user ${userId} at location: ${latitude}, ${longitude}`);
+
+    // Get user's cart items - ✅ FIXED: Renamed to avoid shadowing
+    const userCartItems = await db
+      .select()
+      .from(cartItems)
+      .where(eq(cartItems.userId, userId));
+
+    if (userCartItems.length === 0) {
+      return res.json({ message: "Cart is empty", removedCount: 0 });
+    }
+
+    // Get nearby stores
+    const nearbyStores = await db.execute(sql`
+      SELECT id
+      FROM stores
+      WHERE
+        is_active = true
+        AND (
+          6371 * acos(
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${parseFloat(latitude)}::numeric))
+              * cos(radians(latitude::numeric))
+              * cos(radians(longitude::numeric) - radians(${parseFloat(longitude)}::numeric))
+              + sin(radians(${parseFloat(latitude)}::numeric))
+              * sin(radians(latitude::numeric))
+            ))
+          )
+        ) <= 5
+    `);
+
+    const nearbyStoreIds = new Set(nearbyStores.rows.map((s: any) => s.id));
+
+    // Remove items not available in nearby stores
+    const itemsToRemove = [];
+
+    for (const item of userCartItems) {
+      const [inventory] = await db
+        .select()
+        .from(storeInventory)
+        .where(
+          and(
+            eq(storeInventory.productId, item.productId),
+            eq(storeInventory.isAvailable, true),
+            gt(storeInventory.stockCount, 0)
+          )
+        )
+        .limit(1);
+
+      if (!inventory || !nearbyStoreIds.has(inventory.storeId)) {
+        itemsToRemove.push(item.id);
+      }
+    }
+
+    if (itemsToRemove.length > 0) {
+      await db
+        .delete(cartItems)
+        .where(
+          and(
+            eq(cartItems.userId, userId),
+            sql`${cartItems.id} IN (${sql.join(itemsToRemove.map(id => sql`${id}`), sql`, `)})`
+          )
+        );
+    }
+
+    console.log(`✅ Removed ${itemsToRemove.length} unavailable items from cart`);
+
+    res.json({
+      message: `Removed ${itemsToRemove.length} items not available in your area`,
+      removedCount: itemsToRemove.length,
+      remainingCount: userCartItems.length - itemsToRemove.length,
+    });
+  } catch (error) {
+    console.error("❌ Cart cleanup error:", error);
+    res.status(500).json({ error: "Failed to cleanup cart" });
+  }
+});
+
 
   // ==================== 9. ADDRESSES ====================
   console.log("📍 Registering address routes...");
@@ -2581,6 +2758,54 @@ async function updateStoreDailyFinancials(storeId: string, order: any) {
       netProfit: String(netProfit),
     });
   }
+}
+// Add this after updateStoreDailyFinancials function
+
+async function logPromotionCost(
+  promotionId: string,
+  orderId: string,
+  discountAmount: number,
+  orderTotal: number,
+  productCost: number,
+  storeId?: string
+) {
+  // Get promotion details
+  const [promotion] = await db
+    .select()
+    .from(promotions)
+    .where(eq(promotions.id, promotionId))
+    .limit(1);
+
+  if (!promotion) {
+    console.error(`❌ Promotion ${promotionId} not found`);
+    return;
+  }
+
+  // Determine who bears the cost
+  const costBearer = promotion.scope === 'app' || !promotion.storeId ? 'admin' : 'store';
+
+  // Log the cost
+  await db.insert(promotionCostLog).values({
+    promotionId,
+    orderId,
+    storeId: storeId || null,
+    discountAmount,
+    costBearer,
+    orderTotal,
+    productCost,
+  });
+
+  // Update promotion totals
+  await db
+    .update(promotions)
+    .set({
+      totalCostIncurred: sql`${promotions.totalCostIncurred} + ${discountAmount}`,
+      totalRevenueGenerated: sql`${promotions.totalRevenueGenerated} + ${orderTotal}`,
+      lastUsedAt: new Date(),
+    })
+    .where(eq(promotions.id, promotionId));
+
+  console.log(`💰 Logged ${costBearer} promotion cost: Rp ${discountAmount.toLocaleString()} for order ${orderId}`);
 }
 
 
@@ -5728,6 +5953,456 @@ app.get("/api/admin/salary/pending", async (req, res) => {
 console.log("✅ All financial routes registered");
 
 
+// ==================== ENHANCED FINANCIAL TRACKING ROUTES ====================
+// Add these to your routes.ts
+
+// GET COMPREHENSIVE FINANCIAL METRICS
+app.get("/api/admin/financials/comprehensive", async (req, res) => {
+  try {
+    const { userId, period = 'month' } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Verify admin access
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!user || (user.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    // Calculate date range
+    let startDate: Date;
+    const endDate = new Date();
+
+    if (period === 'today') {
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+    } else if (period === 'week') {
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - 7);
+    } else if (period === 'month') {
+      startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - 1);
+    } else {
+      startDate = new Date();
+      startDate.setFullYear(startDate.getFullYear() - 1);
+    }
+
+    console.log(`📊 Calculating financials from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+
+    // Get all delivered orders in period
+    const deliveredOrders = await db
+      .select()
+      .from(orders)
+      .where(
+        and(
+          eq(orders.status, "delivered"),
+          gte(orders.deliveredAt, startDate),
+          lte(orders.deliveredAt, endDate)
+        )
+      );
+
+    console.log(`✅ Found ${deliveredOrders.length} delivered orders`);
+
+    // Initialize metrics
+    let totalRevenue = 0;
+    let productRevenue = 0;
+    let deliveryRevenue = 0;
+    let productCosts = 0;
+    let staffBonuses = 0;
+    let adminPromoCosts = 0;
+    let storePromoCosts = 0;
+    let voucherCosts = 0;
+    let deliveryProfit = 0;
+
+    const storeMetrics: Record<string, any> = {};
+
+    // Process each order
+    for (const order of deliveredOrders) {
+      const orderSubtotal = order.subtotal || 0;
+      const orderDeliveryFee = order.deliveryFee || 12000;
+      const orderTotal = order.total || 0;
+
+      // Add to revenue
+      totalRevenue += orderTotal;
+      productRevenue += orderSubtotal;
+      deliveryRevenue += orderDeliveryFee;
+
+      // Calculate product costs from order items
+      const orderItemsData = await db
+        .select({
+          quantity: orderItems.quantity,
+          productId: orderItems.productId,
+        })
+        .from(orderItems)
+        .where(eq(orderItems.orderId, order.id));
+
+      let orderProductCost = 0;
+      for (const item of orderItemsData) {
+        const [product] = await db
+          .select({ costPrice: products.costPrice })
+          .from(products)
+          .where(eq(products.id, item.productId))
+          .limit(1);
+
+        if (product && product.costPrice) {
+          orderProductCost += product.costPrice * item.quantity;
+        }
+      }
+
+      productCosts += orderProductCost;
+
+      // Staff bonuses (Rp 6,000 per order: Rp 4k driver + Rp 2k picker)
+      const orderStaffBonus = 6000;
+      staffBonuses += orderStaffBonus;
+
+      // Delivery profit (Rp 12k delivery fee - Rp 6k staff bonus)
+      deliveryProfit += (orderDeliveryFee - orderStaffBonus);
+
+      // Get promotion costs
+      const promotionDiscount = order.promotionDiscount || 0;
+      const voucherDiscount = order.voucherDiscount || 0;
+
+      voucherCosts += voucherDiscount;
+
+      // Determine if promotion is admin or store level
+      if (order.appliedPromotionId) {
+        const [promotion] = await db
+          .select()
+          .from(promotions)
+          .where(eq(promotions.id, order.appliedPromotionId))
+          .limit(1);
+
+        if (promotion) {
+          if (promotion.scope === 'app' || !promotion.storeId) {
+            // Admin/app-wide promotion - comes from admin profit
+            adminPromoCosts += promotionDiscount;
+          } else {
+            // Store-specific promotion - comes from store profit
+            storePromoCosts += promotionDiscount;
+
+            // Track store-specific promo costs
+            if (!storeMetrics[order.storeId!]) {
+              storeMetrics[order.storeId!] = {
+                storeId: order.storeId,
+                totalRevenue: 0,
+                productRevenue: 0,
+                deliveryRevenue: 0,
+                productCosts: 0,
+                storePromoCosts: 0,
+                totalOrders: 0,
+              };
+            }
+            storeMetrics[order.storeId!].storePromoCosts += promotionDiscount;
+          }
+        }
+      }
+
+      // Track store metrics
+      if (order.storeId) {
+        if (!storeMetrics[order.storeId]) {
+          storeMetrics[order.storeId] = {
+            storeId: order.storeId,
+            totalRevenue: 0,
+            productRevenue: 0,
+            deliveryRevenue: 0,
+            productCosts: 0,
+            storePromoCosts: 0,
+            totalOrders: 0,
+          };
+        }
+
+        storeMetrics[order.storeId].totalRevenue += orderTotal;
+        storeMetrics[order.storeId].productRevenue += orderSubtotal;
+        storeMetrics[order.storeId].deliveryRevenue += orderDeliveryFee;
+        storeMetrics[order.storeId].productCosts += orderProductCost;
+        storeMetrics[order.storeId].totalOrders += 1;
+      }
+    }
+
+    // Calculate gross profit (revenue - COGS)
+    const grossProfit = productRevenue - productCosts;
+
+    // Calculate total costs
+    const totalCosts = productCosts + staffBonuses + adminPromoCosts + storePromoCosts + voucherCosts;
+
+    // Calculate net profit
+    const netProfit = totalRevenue - totalCosts;
+
+    // Calculate average order value
+    const avgOrderValue = deliveredOrders.length > 0 
+      ? totalRevenue / deliveredOrders.length 
+      : 0;
+
+    // Calculate store breakdowns with net profit
+    const storeBreakdown = await Promise.all(
+      Object.values(storeMetrics).map(async (store: any) => {
+        const [storeInfo] = await db
+          .select({ name: stores.name })
+          .from(stores)
+          .where(eq(stores.id, store.storeId))
+          .limit(1);
+
+        // Store net profit = revenue - product costs - store promo costs - staff bonuses
+        const storeStaffBonus = store.totalOrders * 6000;
+        const storeNetProfit = store.totalRevenue - store.productCosts - store.storePromoCosts - storeStaffBonus;
+
+        return {
+          ...store,
+          storeName: storeInfo?.name || "Unknown Store",
+          netProfit: storeNetProfit,
+          avgOrderValue: store.totalOrders > 0 ? store.totalRevenue / store.totalOrders : 0,
+        };
+      })
+    );
+
+    // Sort stores by net profit
+    storeBreakdown.sort((a, b) => b.netProfit - a.netProfit);
+
+    // Generate recommendations
+    const recommendations: string[] = [];
+    
+    const profitMargin = (netProfit / totalRevenue) * 100;
+    if (profitMargin < 5) {
+      recommendations.push("⚠️ Profit margin is below 5%. Consider reviewing promotion costs and product margins.");
+    }
+    
+    if (adminPromoCosts > netProfit * 0.3) {
+      recommendations.push("💡 Admin promotions are consuming >30% of potential profit. Review promotion effectiveness.");
+    }
+    
+    const bestStore = storeBreakdown[0];
+    const worstStore = storeBreakdown[storeBreakdown.length - 1];
+    if (bestStore && worstStore && worstStore.netProfit < 0) {
+      recommendations.push(`📈 ${worstStore.storeName} is losing money. Review their pricing and promotion strategy.`);
+    }
+    
+    if (avgOrderValue < 50000) {
+      recommendations.push("🎯 Average order value is below Rp 50k. Consider minimum order promotions to increase basket size.");
+    }
+
+    const targetProfit = 50000000; // Rp 50 million per month target
+    const targetAchievement = (netProfit / targetProfit) * 100;
+    if (targetAchievement < 80) {
+      recommendations.push(`🎯 You're at ${targetAchievement.toFixed(0)}% of monthly target. Focus on high-margin products.`);
+    }
+
+    // Return comprehensive metrics
+    const response = {
+      period: {
+        start: startDate,
+        end: endDate,
+        type: period,
+      },
+      totalRevenue,
+      productRevenue,
+      deliveryRevenue,
+      productCosts,
+      grossProfit,
+      staffBonuses,
+      adminPromoCosts,
+      storePromoCosts,
+      voucherCosts,
+      totalCosts,
+      netProfit,
+      deliveryProfit,
+      totalOrders: deliveredOrders.length,
+      avgOrderValue,
+      profitMargin: (netProfit / totalRevenue) * 100,
+      monthlyTarget: targetProfit,
+      targetAchievement,
+      storeBreakdown,
+      recommendations,
+      breakdown: {
+        revenueBreakdown: [
+          { label: 'Products', value: productRevenue, percentage: (productRevenue / totalRevenue) * 100 },
+          { label: 'Delivery', value: deliveryRevenue, percentage: (deliveryRevenue / totalRevenue) * 100 },
+        ],
+        costBreakdown: [
+          { label: 'Product Costs', value: productCosts, percentage: (productCosts / totalCosts) * 100 },
+          { label: 'Staff Bonuses', value: staffBonuses, percentage: (staffBonuses / totalCosts) * 100 },
+          { label: 'Admin Promotions', value: adminPromoCosts, percentage: (adminPromoCosts / totalCosts) * 100 },
+          { label: 'Store Promotions', value: storePromoCosts, percentage: (storePromoCosts / totalCosts) * 100 },
+          { label: 'Vouchers', value: voucherCosts, percentage: (voucherCosts / totalCosts) * 100 },
+        ],
+      },
+    };
+
+    console.log(`✅ Financial metrics calculated successfully`);
+    console.log(`💰 Net Profit: Rp ${netProfit.toLocaleString()}`);
+    console.log(`📊 Profit Margin: ${profitMargin.toFixed(2)}%`);
+
+    res.json(response);
+  } catch (error) {
+    console.error("❌ Get comprehensive financials error:", error);
+    res.status(500).json({ error: "Failed to fetch financial metrics" });
+  }
+});
+
+// GET PROFIT/LOSS TREND (Daily breakdown)
+app.get("/api/admin/financials/trend", async (req, res) => {
+  try {
+    const { userId, days = 30 } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!user || (user.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const daysCount = parseInt(days as string);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - daysCount);
+    startDate.setHours(0, 0, 0, 0);
+
+    // Get daily financials
+    const dailyData = await db
+      .select()
+      .from(storeDailyFinancials)
+      .where(gte(storeDailyFinancials.date, startDate))
+      .orderBy(storeDailyFinancials.date);
+
+    // Group by date and sum across stores
+    const dateMap: Record<string, any> = {};
+
+    for (const day of dailyData) {
+      const dateKey = day.date.toISOString().split('T')[0];
+      
+      if (!dateMap[dateKey]) {
+        dateMap[dateKey] = {
+          date: day.date,
+          grossRevenue: 0,
+          productCosts: 0,
+          staffBonuses: 0,
+          promotionDiscounts: 0,
+          voucherDiscounts: 0,
+          netProfit: 0,
+        };
+      }
+
+      dateMap[dateKey].grossRevenue += parseFloat(String(day.grossRevenue));
+      dateMap[dateKey].productCosts += parseFloat(String(day.productCosts));
+      dateMap[dateKey].staffBonuses += parseFloat(String(day.staffBonuses));
+      dateMap[dateKey].promotionDiscounts += parseFloat(String(day.promotionDiscounts));
+      dateMap[dateKey].voucherDiscounts += parseFloat(String(day.voucherDiscounts));
+      dateMap[dateKey].netProfit += parseFloat(String(day.netProfit));
+    }
+
+    const trend = Object.values(dateMap).sort((a: any, b: any) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    res.json(trend);
+  } catch (error) {
+    console.error("❌ Get trend error:", error);
+    res.status(500).json({ error: "Failed to fetch trend" });
+  }
+});
+
+// GET PROMOTION COST IMPACT ANALYSIS
+app.get("/api/admin/promotions/cost-impact", async (req, res) => {
+  try {
+    const { userId, period = 'month' } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!user || (user.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    let startDate = new Date();
+    if (period === 'week') {
+      startDate.setDate(startDate.getDate() - 7);
+    } else {
+      startDate.setMonth(startDate.getMonth() - 1);
+    }
+
+    // Get all promotions with usage
+    const allPromotions = await db
+      .select({
+        promotion: promotions,
+        store: stores,
+      })
+      .from(promotions)
+      .leftJoin(stores, eq(promotions.storeId, stores.id))
+      .where(gte(promotions.createdAt, startDate));
+
+    // Calculate cost for each promotion
+    const promotionImpact = await Promise.all(
+      allPromotions.map(async ({ promotion, store }) => {
+        // Get orders that used this promotion
+        const ordersWithPromo = await db
+          .select()
+          .from(orders)
+          .where(
+            and(
+              eq(orders.appliedPromotionId, promotion.id),
+              eq(orders.status, "delivered"),
+              gte(orders.deliveredAt, startDate)
+            )
+          );
+
+        const totalDiscount = ordersWithPromo.reduce(
+          (sum, order) => sum + (order.promotionDiscount || 0),
+          0
+        );
+
+        const totalRevenue = ordersWithPromo.reduce(
+          (sum, order) => sum + order.total,
+          0
+        );
+
+        return {
+          promotionId: promotion.id,
+          title: promotion.title,
+          scope: promotion.scope,
+          storeName: store?.name || 'App-Wide',
+          usageCount: ordersWithPromo.length,
+          totalDiscount,
+          totalRevenue,
+          avgDiscount: ordersWithPromo.length > 0 ? totalDiscount / ordersWithPromo.length : 0,
+          costType: promotion.scope === 'app' || !promotion.storeId ? 'admin' : 'store',
+        };
+      })
+    );
+
+    // Sort by total cost
+    promotionImpact.sort((a, b) => b.totalDiscount - a.totalDiscount);
+
+    // Calculate totals
+    const adminPromoCost = promotionImpact
+      .filter(p => p.costType === 'admin')
+      .reduce((sum, p) => sum + p.totalDiscount, 0);
+
+    const storePromoCost = promotionImpact
+      .filter(p => p.costType === 'store')
+      .reduce((sum, p) => sum + p.totalDiscount, 0);
+
+    res.json({
+      period: { start: startDate, end: new Date(), type: period },
+      promotionImpact,
+      totals: {
+        adminPromoCost,
+        storePromoCost,
+        totalPromoCost: adminPromoCost + storePromoCost,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Get promotion impact error:", error);
+    res.status(500).json({ error: "Failed to fetch promotion impact" });
+  }
+});
+
+console.log("✅ Enhanced financial tracking routes registered");
+
+
 
 // Run daily at 9 AM
 cron.schedule('0 9 * * *', async () => {
@@ -5740,18 +6415,6 @@ cron.schedule('0 9 * * *', async () => {
     console.error('❌ Cron job failed:', error);
   }
 });
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

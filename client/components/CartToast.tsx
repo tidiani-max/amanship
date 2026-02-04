@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { View, StyleSheet, Pressable } from "react-native";
+import { View, StyleSheet, Pressable, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
@@ -7,14 +7,14 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, Shadows } from "@/constants/theme";
+import { Shadows } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { useLocation } from "@/context/LocationContext";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -29,14 +29,17 @@ export function CartToast({ visible, hasItems, productName, onDismiss }: CartToa
   const { theme } = useTheme();
   const navigation = useNavigation<NavigationProp>();
   const insets = useSafeAreaInsets();
+  const { location } = useLocation();
   
-  // 0 = Mini Bubble, 1 = Fully Expanded
   const expansion = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
       expansion.value = withSpring(1, { damping: 15 });
-      // Auto-shrink back to bubble after 4s
+      
+      // Show location warning if needed
+      checkLocationValidity();
+      
       const timer = setTimeout(() => {
         expansion.value = withSpring(0);
         onDismiss(); 
@@ -44,6 +47,14 @@ export function CartToast({ visible, hasItems, productName, onDismiss }: CartToa
       return () => clearTimeout(timer);
     }
   }, [visible]);
+
+  const checkLocationValidity = () => {
+    // This will be called when cart is visible
+    // Location validation happens in CartContext
+    if (!location?.latitude || !location?.longitude) {
+      console.warn("⚠️ No location available for cart validation");
+    }
+  };
 
   const handleGoToCart = () => {
     navigation.navigate("Cart");
@@ -60,7 +71,6 @@ export function CartToast({ visible, hasItems, productName, onDismiss }: CartToa
     display: expansion.value < 0.1 ? 'none' : 'flex',
   }));
 
-  // Only show if there are items in the cart
   if (!hasItems) return null;
 
   return (
@@ -79,14 +89,15 @@ export function CartToast({ visible, hasItems, productName, onDismiss }: CartToa
         style={styles.mainArea} 
         onPress={() => (expansion.value = expansion.value === 0 ? withSpring(1) : withSpring(0))}
       >
-        {/* VISUAL CHANGE: Purple gradient icon instead of green */}
         <View style={styles.iconContainer}>
           <Feather name="shopping-bag" size={20} color="#6366f1" />
           <View style={styles.dot} />
         </View>
         
         <Animated.View style={[styles.textContainer, contentStyle]}>
-          <ThemedText type="small" style={{ fontWeight: "700" }}>Added to Cart</ThemedText>
+          <ThemedText type="small" style={{ fontWeight: "700" }}>
+            Added to Cart
+          </ThemedText>
           <ThemedText type="caption" numberOfLines={1} style={{ color: theme.textSecondary }}>
             {productName}
           </ThemedText>
@@ -94,10 +105,9 @@ export function CartToast({ visible, hasItems, productName, onDismiss }: CartToa
       </Pressable>
 
       <Animated.View style={contentStyle}>
-         {/* VISUAL CHANGE: Purple button instead of green */}
-         <Pressable onPress={handleGoToCart} style={styles.goBtn}>
-            <ThemedText style={styles.goBtnText}>View</ThemedText>
-         </Pressable>
+        <Pressable onPress={handleGoToCart} style={styles.goBtn}>
+          <ThemedText style={styles.goBtnText}>View</ThemedText>
+        </Pressable>
       </Animated.View>
     </Animated.View>
   );
@@ -121,7 +131,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  // VISUAL CHANGE: Purple/white theme
   iconContainer: {
     width: 40,
     height: 40,
@@ -134,7 +143,6 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     flex: 1,
   },
-  // VISUAL CHANGE: Purple dot instead of green
   dot: {
     position: 'absolute',
     top: 0,
@@ -146,7 +154,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'white'
   },
-  // VISUAL CHANGE: Purple button
   goBtn: {
     backgroundColor: '#6366f1',
     paddingHorizontal: 16,

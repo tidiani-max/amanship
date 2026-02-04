@@ -188,6 +188,9 @@ export const orders = pgTable("orders", {
   estimatedArrival: timestamp("estimated_arrival"),
   actualDistance: decimal("actual_distance", { precision: 6, scale: 2 }),
   trackingStarted: timestamp("tracking_started"),
+  // ✅ NEW: Track who created applied promotion for cost attribution
+ promotionCreator: varchar("promotion_creator", { length: 255 }),
+ promotionScope: text("promotion_scope"), // 'app' or 'store'
 });
 
 export const orderItems = pgTable("order_items", {
@@ -246,6 +249,12 @@ export const promotions = pgTable("promotions", {
   isRamadanSpecial: boolean("is_ramadan_special").default(false).notNull(),
   isFeatured: boolean("is_featured").default(false).notNull(),
   showInBanner: boolean("show_in_banner").default(false).notNull(),
+  // ✅ NEW: Track total cost of this promotion
+  totalCostIncurred: integer("total_cost_incurred").default(0).notNull(),
+ // ✅ NEW: Track revenue generated with this promotion
+  totalRevenueGenerated: integer("total_revenue_generated").default(0).notNull(),
+ // ✅ NEW: ROI tracking
+  lastUsedAt: timestamp("last_used_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -387,9 +396,53 @@ export const storeDailyFinancials = pgTable("store_daily_financials", {
   voucherDiscounts: decimal("voucher_discounts", { precision: 12, scale: 2 }).default("0").notNull(),
   grossProfit: decimal("gross_profit", { precision: 12, scale: 2 }).default("0").notNull(),
   netProfit: decimal("net_profit", { precision: 12, scale: 2 }).default("0").notNull(),
+  adminPromotionDiscounts: decimal("admin_promotion_discounts", { precision: 12, scale: 2 }).default("0").notNull(),
+  storePromotionDiscounts: decimal("store_promotion_discounts", { precision: 12, scale: 2 }).default("0").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const promotionCostLog = pgTable("promotion_cost_log", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  promotionId: varchar("promotion_id", { length: 255 }).notNull(),
+  orderId: varchar("order_id", { length: 255 }).notNull(),
+  storeId: varchar("store_id", { length: 255 }),
+  discountAmount: integer("discount_amount").notNull(),
+  costBearer: text("cost_bearer").notNull(), // 'admin' or 'store'
+  orderTotal: integer("order_total").notNull(),
+  productCost: integer("product_cost").notNull(),
+  appliedAt: timestamp("applied_at").defaultNow().notNull(),
+});
+
+// ✅ NEW: Admin profit tracking
+export const adminFinancials = pgTable("admin_financials", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  date: timestamp("date").notNull(),
+  
+  // Revenue streams
+  totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).default("0").notNull(),
+  productRevenue: decimal("product_revenue", { precision: 12, scale: 2 }).default("0").notNull(),
+  deliveryRevenue: decimal("delivery_revenue", { precision: 12, scale: 2 }).default("0").notNull(),
+  
+  // Costs
+  productCosts: decimal("product_costs", { precision: 12, scale: 2 }).default("0").notNull(),
+  staffBonuses: decimal("staff_bonuses", { precision: 12, scale: 2 }).default("0").notNull(),
+  adminPromotionCosts: decimal("admin_promotion_costs", { precision: 12, scale: 2 }).default("0").notNull(),
+  voucherCosts: decimal("voucher_costs", { precision: 12, scale: 2 }).default("0").notNull(),
+  
+  // Profit metrics
+  grossProfit: decimal("gross_profit", { precision: 12, scale: 2 }).default("0").notNull(),
+  netProfit: decimal("net_profit", { precision: 12, scale: 2 }).default("0").notNull(),
+  
+  // Targets
+  targetProfit: decimal("target_profit", { precision: 12, scale: 2 }).default("50000000").notNull(),
+  
+  totalOrders: integer("total_orders").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+
 
 export const appSettings = pgTable("app_settings", {
   id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -524,6 +577,15 @@ export const storeDailyFinancialsRelations = relations(storeDailyFinancials, ({ 
   store: one(stores, { fields: [storeDailyFinancials.storeId], references: [stores.id] }),
 }));
 
+export const promotionCostLogRelations = relations(promotionCostLog, ({ one }) => ({
+  promotion: one(promotions, { fields: [promotionCostLog.promotionId], references: [promotions.id] }),
+  order: one(orders, { fields: [promotionCostLog.orderId], references: [orders.id] }),
+  store: one(stores, { fields: [promotionCostLog.storeId], references: [stores.id] }),
+}));
+
+export const adminFinancialsRelations = relations(adminFinancials, ({ }) => ({}));
+
+
 // --- Insert Schemas ---
 export const insertUserSchema = createInsertSchema(users);
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
@@ -555,6 +617,16 @@ export const insertStaffEarningsSchema = createInsertSchema(staffEarnings).omit(
 export const insertSalaryPaymentSchema = createInsertSchema(salaryPayments).omit({ id: true, createdAt: true });
 export const insertStoreDailyFinancialsSchema = createInsertSchema(storeDailyFinancials).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAppSettingSchema = createInsertSchema(appSettings).omit({ id: true, updatedAt: true });
+export const insertPromotionCostLogSchema = createInsertSchema(promotionCostLog).omit({ 
+  id: true, 
+  appliedAt: true 
+});
+
+export const insertAdminFinancialsSchema = createInsertSchema(adminFinancials).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
 
 // --- Type Exports ---
 export type User = typeof users.$inferSelect;
@@ -602,3 +674,7 @@ export type StoreDailyFinancials = typeof storeDailyFinancials.$inferSelect;
 export type InsertStoreDailyFinancials = z.infer<typeof insertStoreDailyFinancialsSchema>;
 export type AppSetting = typeof appSettings.$inferSelect;
 export type InsertAppSetting = z.infer<typeof insertAppSettingSchema>;
+export type PromotionCostLog = typeof promotionCostLog.$inferSelect;
+export type InsertPromotionCostLog = z.infer<typeof insertPromotionCostLogSchema>;
+export type AdminFinancials = typeof adminFinancials.$inferSelect;
+export type InsertAdminFinancials = z.infer<typeof insertAdminFinancialsSchema>;
