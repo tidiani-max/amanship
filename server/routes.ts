@@ -279,6 +279,7 @@ app.post("/api/users/push-token", async (req, res) => {
 
 
 
+// ✅ FIX 2: UPDATE PRODUCT (Use costPrice, not price)
 app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async (req: Request, res: Response) => {
   try {
     const { 
@@ -340,7 +341,10 @@ app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async
 
       // Update original price if provided
       if (originalPrice && originalPrice.trim() !== "") {
-        updateData.originalPrice = parseInt(originalPrice);
+        const origPrice = parseInt(originalPrice);
+        if (origPrice > 0) {
+          updateData.originalPrice = origPrice;
+        }
       }
 
       // Update image if uploaded
@@ -364,7 +368,7 @@ app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async
 
     res.json({ 
       success: true, 
-      message: "Product updated with automatic margin"
+      message: "Product updated with automatic pricing"
     });
   } catch (error) {
     console.error("❌ Update error:", error);
@@ -828,6 +832,10 @@ app.get("/api/picker/dashboard", async (req, res) => {
     }
   });
 
+// ==================== ROUTES.TS FIXES ====================
+// Replace your picker inventory routes with these FIXED versions
+
+// ✅ FIX 1: CREATE NEW PRODUCT (Use costPrice, not price)
 app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, res) => {
   try {
     const { 
@@ -835,12 +843,12 @@ app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, 
       name, 
       brand, 
       description, 
-      costPrice,     // ✅ ONLY cost price needed - price auto-calculated
-      originalPrice, 
+      costPrice,     // ✅ SUPPLIER COST (required)
+      originalPrice, // ✅ For showing discounts (optional)
       stock, 
       categoryId, 
       location,
-      margin         // ✅ Optional - defaults to 15% if not provided
+      margin         // ✅ Optional - defaults to 15%
     } = req.body;
 
     console.log("📦 Creating new product:", { 
@@ -849,11 +857,13 @@ app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, 
 
     // Validate required fields
     if (!userId || !name || !categoryId) {
-      return res.status(400).json({ error: "Missing required fields: userId, name, categoryId" });
+      return res.status(400).json({ 
+        error: "Missing required fields: userId, name, categoryId" 
+      });
     }
 
     // ✅ COST PRICE IS REQUIRED
-    if (!costPrice || parseInt(costPrice) <= 0) {
+    if (!costPrice || isNaN(parseInt(costPrice)) || parseInt(costPrice) <= 0) {
       return res.status(400).json({ 
         error: "Cost price is required and must be greater than 0",
         hint: "Enter the price you paid to the supplier"
@@ -866,8 +876,8 @@ app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, 
       return res.status(404).json({ error: "Store not found for this user" });
     }
 
-    // ✅ SIMPLIFIED: Just provide costPrice (and optional margin)
-    // Database trigger automatically calculates price
+    // ✅ DATABASE TRIGGER HANDLES PRICE CALCULATION
+    // We only need to provide: costPrice (and optional margin)
     const productData: any = {
       name,
       brand: brand || "Generic",
@@ -880,18 +890,20 @@ app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, 
     // ✅ Optional: Custom margin (if not provided, defaults to 15%)
     if (margin && parseFloat(margin) > 0) {
       productData.margin = parseFloat(margin);
-      console.log(`💰 Using custom margin: ${margin}%`);
     }
 
     // Add originalPrice if provided
     if (originalPrice && originalPrice.trim() !== "") {
-      productData.originalPrice = parseInt(originalPrice);
+      const origPrice = parseInt(originalPrice);
+      if (origPrice > 0) {
+        productData.originalPrice = origPrice;
+      }
     }
 
     console.log("💾 Creating product (price will auto-calculate):", productData);
 
-    // ✅ Database trigger automatically sets: 
-    // price = costPrice * (1 + margin/100)
+    // ✅ Database trigger automatically calculates:
+    // price = ROUND(costPrice * (1 + margin/100))
     const [newProduct] = await db.insert(products).values(productData).returning();
 
     console.log(`✅ Product created: ${newProduct.name}`);
@@ -908,7 +920,7 @@ app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, 
 
     res.json({ 
       success: true, 
-      message: "Product created with automatic margin",
+      message: "Product created with automatic pricing",
       product: {
         id: newProduct.id,
         name: newProduct.name,
@@ -920,21 +932,16 @@ app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, 
     });
   } catch (error) {
     console.error("❌ Creation error:", error);
-    
-    // Handle database constraint errors
-    if (error instanceof Error && error.message.includes('cost_price')) {
-      return res.status(400).json({ 
-        error: "Cost price is required",
-        hint: "Enter the price you paid to the supplier"
-      });
-    }
-    
     res.status(500).json({ 
       error: "Failed to create product",
       details: error instanceof Error ? error.message : "Unknown error"
     });
   }
 });
+
+
+
+
   // Add this to registerRoutes in server/routes.ts
 
 
@@ -3058,6 +3065,7 @@ app.delete("/api/admin/stores/:id", async (req, res) => {
   }
 });
 
+// ✅ FIX 3: ADMIN CREATE PRODUCT (same pattern)
 app.post("/api/admin/products", async (req, res) => {
   try {
     const { userId, costPrice, margin, ...productData } = req.body;
@@ -3069,13 +3077,13 @@ app.post("/api/admin/products", async (req, res) => {
     }
 
     // ✅ COST PRICE IS REQUIRED
-    if (!costPrice || costPrice <= 0) {
+    if (!costPrice || isNaN(parseInt(costPrice)) || parseInt(costPrice) <= 0) {
       return res.status(400).json({ 
         error: "Cost price is required and must be greater than 0" 
       });
     }
 
-    // ✅ SIMPLIFIED: Database calculates price automatically
+    // ✅ DATABASE CALCULATES PRICE AUTOMATICALLY
     const finalProductData: any = {
       ...productData,
       costPrice: parseInt(costPrice),

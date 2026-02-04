@@ -533,10 +533,14 @@ export const insertStoreInventorySchema = createInsertSchema(storeInventory).omi
 export const insertCategorySchema = createInsertSchema(categories).pick({ name: true, icon: true, color: true, image: true });
 export const insertProductSchema = createInsertSchema(products).omit({ 
   id: true,
-  price: true,
+  price: true,      // ✅ OMIT PRICE - auto-calculated by database
 }).extend({
-  costPrice: z.number().int().positive(),
-  margin: z.number().optional().transform(val => val !== undefined ? String(val) : undefined),
+  costPrice: z.number().int().positive({ 
+    message: "Cost price must be greater than 0" 
+  }),
+  margin: z.number().optional().transform(val => 
+    val !== undefined ? String(val) : undefined
+  ),
 });
 export const insertAddressSchema = createInsertSchema(addresses).omit({ id: true });
 export const insertCartItemSchema = createInsertSchema(cartItems).omit({ id: true });

@@ -1,4 +1,4 @@
-// Enhanced Picker Dashboard with Promotions Tab - COMPLETE FIXED VERSION
+// Enhanced Picker Dashboard with FIXED PRICING - Cost Price Focus
 import React, { useState, useMemo } from "react";
 import { 
   View, StyleSheet, ScrollView, RefreshControl, 
@@ -39,8 +39,9 @@ interface InventoryItem {
     id: string;
     name: string;
     brand: string;
-    price: number;
-    originalPrice?: number;
+    costPrice: number;      // ✅ ADDED
+    price: number;          // This is auto-calculated
+    originalPrice?: number; // For discounts
     description?: string;
     image?: string; 
     category?: { name: string };
@@ -175,7 +176,7 @@ const PromotionCard: React.FC<PromotionCardProps> = ({
     <Card style={{ ...styles.promotionCard, ...(!promotion.isActive && { opacity: 0.6 }) }}>
       {promotion.image && (
         <Image 
-          source={{ uri: getImageUrl(promotion.image) }} // ADD getImageUrl here
+          source={{ uri: getImageUrl(promotion.image) }}
           style={styles.promotionCardImage}
           resizeMode="cover"
         />
@@ -300,7 +301,9 @@ function InventoryItemRow({
         <ThemedText type="body" style={{ fontWeight: '600' }}>
           {item.product.name}
         </ThemedText>
-        <ThemedText type="caption">Stock: {item.stockCount} | Rp {item.product.price}</ThemedText>
+        <ThemedText type="caption">
+          Stock: {item.stockCount} | Cost: Rp {item.product.costPrice?.toLocaleString() || '?'} → Sell: Rp {item.product.price.toLocaleString()}
+        </ThemedText>
       </View>
       <TouchableOpacity style={styles.iconBtn} onPress={() => onDelete(item.id)}>
         <Feather name="trash-2" size={18} color="#e74c3c" />
@@ -335,13 +338,13 @@ export default function PickerDashboardScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingPromotion, setIsEditingPromotion] = useState(false);
   
-  // Inventory form states
+  // ✅ FIXED: Inventory form states - Using costPrice instead of price
   const [selectedInventoryId, setSelectedInventoryId] = useState<string | null>(null);
   const [formName, setFormName] = useState("");
   const [formBrand, setFormBrand] = useState("");
   const [formDescription, setFormDescription] = useState("");
-  const [formPrice, setFormPrice] = useState("");
-  const [formOriginalPrice, setFormOriginalPrice] = useState("");
+  const [formCostPrice, setFormCostPrice] = useState(""); // ✅ THIS IS THE SUPPLIER COST
+  const [formOriginalPrice, setFormOriginalPrice] = useState(""); // For discounts
   const [formStock, setFormStock] = useState("");
   const [formLocation, setFormLocation] = useState("");
   const [formCategoryId, setFormCategoryId] = useState<string | null>(null);
@@ -654,8 +657,8 @@ export default function PickerDashboardScreen() {
       setFormName(item.product.name);
       setFormBrand(item.product.brand || "");
       setFormDescription(item.product.description || "");
+      setFormCostPrice(item.product.costPrice?.toString() || ""); // ✅ LOAD COST PRICE
       setFormOriginalPrice(item.product.originalPrice?.toString() || "");
-      setFormPrice(item.product.price.toString());
       setFormStock(item.stockCount.toString());
       setFormLocation(item.location ?? "");
       setFormCategoryId(item.categoryId || (item as any).product?.categoryId || null);
@@ -667,8 +670,8 @@ export default function PickerDashboardScreen() {
       setFormName("");
       setFormBrand("");
       setFormDescription("");
+      setFormCostPrice(""); // ✅ RESET
       setFormOriginalPrice("");
-      setFormPrice("");
       setFormStock("");
       setFormLocation("");
       setFormCategoryId(null);
@@ -694,8 +697,9 @@ export default function PickerDashboardScreen() {
       return;
     }
 
-    if (!formPrice.trim() || isNaN(Number(formPrice)) || Number(formPrice) <= 0) {
-      showAlert("Invalid Price", "Please enter a valid price greater than 0.");
+    // ✅ VALIDATE COST PRICE (not selling price)
+    if (!formCostPrice.trim() || isNaN(Number(formCostPrice)) || Number(formCostPrice) <= 0) {
+      showAlert("Invalid Cost Price", "Please enter what you paid the supplier (must be > 0).");
       return;
     }
 
@@ -704,22 +708,12 @@ export default function PickerDashboardScreen() {
       return;
     }
 
-    if (formOriginalPrice.trim() && (isNaN(Number(formOriginalPrice)) || Number(formOriginalPrice) <= 0)) {
-      showAlert("Invalid Original Price", "Original price must be a valid number greater than 0.");
-      return;
-    }
-
-    if (formOriginalPrice.trim() && Number(formOriginalPrice) <= Number(formPrice)) {
-      showAlert("Price Error", "Original price should be higher than the current price.");
-      return;
-    }
-
     const formData = new FormData();
     formData.append("userId", user.id); 
     formData.append("name", formName.trim());
     formData.append("brand", formBrand.trim() || "Generic");
     formData.append("description", formDescription.trim() || "");
-    formData.append("price", formPrice.trim());
+    formData.append("costPrice", formCostPrice.trim()); // ✅ SEND COST PRICE
     formData.append("stock", formStock.trim());
     formData.append("location", formLocation.trim() || "");
     formData.append("categoryId", formCategoryId!);
@@ -778,10 +772,11 @@ export default function PickerDashboardScreen() {
         await queryClient.refetchQueries({ queryKey: ["/api/picker/inventory", user?.id] });
         showAlert("Success", isEditing ? "Product Updated!" : "Product Added!");
         
+        // Reset form
         setFormName("");
         setFormBrand("");
         setFormDescription("");
-        setFormPrice("");
+        setFormCostPrice("");
         setFormOriginalPrice("");
         setFormStock("");
         setFormLocation("");
@@ -878,6 +873,14 @@ export default function PickerDashboardScreen() {
     await Promise.all([refetchInv(), refetchDash(), refetchPromotions()]);
   };
 
+  // ✅ CALCULATE WHAT THE SELLING PRICE WILL BE
+  const calculatedSellingPrice = useMemo(() => {
+    if (!formCostPrice || isNaN(Number(formCostPrice)) || Number(formCostPrice) <= 0) {
+      return 0;
+    }
+    return Math.round(Number(formCostPrice) * 1.15); // 15% margin
+  }, [formCostPrice]);
+
   // ==================== RENDER ====================
 
   return (
@@ -910,19 +913,6 @@ export default function PickerDashboardScreen() {
             {dashboard?.store?.name || "Loading..."}
           </ThemedText>
         </View>
-        <View style={[styles.storeInfo, { marginTop: 8, marginBottom: 16 }]}>
-  <Feather name="map-pin" size={14} color={theme.textSecondary} />
-  <ThemedText type="caption" style={{ color: theme.textSecondary, marginLeft: 4 }}>
-    {dashboard?.store?.name || "Loading..."}
-  </ThemedText>
-</View>
-
-{/* 💰 STAFF EARNINGS DASHBOARD */}
-{user?.id && (
-  <View style={{ paddingHorizontal: 20, marginTop: 8, marginBottom: 16 }}>
-    <StaffEarningsDashboard userId={user.id} role="picker" />
-  </View>
-)}
 
         {/* Tabs */}
         <View style={[styles.tabs, { borderBottomColor: theme.border }]}>
@@ -963,6 +953,14 @@ export default function PickerDashboardScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={invLoading || dashLoading || promotionsLoading} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
+
+        {/* 💰 STAFF EARNINGS DASHBOARD */}
+        {user?.id && (
+          <View style={{ paddingHorizontal: 20, marginTop: 8, marginBottom: 16 }}>
+            <StaffEarningsDashboard userId={user.id} role="picker" />
+          </View>
+        )}
+
         {activeTab === "promotions" ? (
           <>
             <TouchableOpacity 
@@ -1216,33 +1214,107 @@ export default function PickerDashboardScreen() {
             </TouchableOpacity>
 
             <ThemedText style={styles.label}>Product Name *</ThemedText>
-            <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} value={formName} onChangeText={setFormName} placeholder="Fresh Milk" placeholderTextColor={theme.textSecondary} />
+            <TextInput 
+              style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} 
+              value={formName} 
+              onChangeText={setFormName} 
+              placeholder="Fresh Milk" 
+              placeholderTextColor={theme.textSecondary} 
+            />
 
             <ThemedText style={styles.label}>Brand</ThemedText>
-            <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} value={formBrand} onChangeText={setFormBrand} placeholder="Brand name" placeholderTextColor={theme.textSecondary} />
+            <TextInput 
+              style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} 
+              value={formBrand} 
+              onChangeText={setFormBrand} 
+              placeholder="Brand name" 
+              placeholderTextColor={theme.textSecondary} 
+            />
 
             <ThemedText style={styles.label}>Description</ThemedText>
-            <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary, height: 60 }]} value={formDescription} onChangeText={setFormDescription} multiline placeholder="Details..." placeholderTextColor={theme.textSecondary} />
+            <TextInput 
+              style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary, height: 60 }]} 
+              value={formDescription} 
+              onChangeText={setFormDescription} 
+              multiline 
+              placeholder="Details..." 
+              placeholderTextColor={theme.textSecondary} 
+            />
 
+            {/* ✅ FIXED PRICING SECTION */}
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
-                <ThemedText style={styles.label}>Price (Rp) *</ThemedText>
-                <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} value={formPrice} onChangeText={setFormPrice} keyboardType="numeric" placeholder="0" placeholderTextColor={theme.textSecondary} />
+                <ThemedText style={styles.label}>Cost Price (Rp) *</ThemedText>
+                <ThemedText type="caption" style={{ color: theme.textSecondary, marginBottom: 4 }}>
+                  What you paid supplier
+                </ThemedText>
+                <TextInput 
+                  style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} 
+                  value={formCostPrice} 
+                  onChangeText={setFormCostPrice} 
+                  keyboardType="numeric" 
+                  placeholder="e.g., 10000" 
+                  placeholderTextColor={theme.textSecondary} 
+                />
               </View>
               <View style={{ flex: 1, marginLeft: 10 }}>
-                <ThemedText style={styles.label}>Old Price</ThemedText>
-                <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} value={formOriginalPrice} onChangeText={setFormOriginalPrice} keyboardType="numeric" placeholder="Optional" placeholderTextColor={theme.textSecondary} />
+                <ThemedText style={styles.label}>Discount Price (Optional)</ThemedText>
+                <ThemedText type="caption" style={{ color: theme.textSecondary, marginBottom: 4 }}>
+                  For "Was Rp X" display
+                </ThemedText>
+                <TextInput 
+                  style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} 
+                  value={formOriginalPrice} 
+                  onChangeText={setFormOriginalPrice} 
+                  keyboardType="numeric" 
+                  placeholder="e.g., 15000" 
+                  placeholderTextColor={theme.textSecondary} 
+                />
+              </View>
+            </View>
+            
+            {/* ✅ PRICE CALCULATOR PREVIEW */}
+            <View style={[styles.infoBox, { backgroundColor: theme.primary + '15', borderColor: theme.primary + '30' }]}>
+              <Feather name="info" size={16} color={theme.primary} />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '600' }}>
+                  Selling Price Auto-Calculated
+                </ThemedText>
+                <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 2 }}>
+                  Cost Price + 15% margin = Selling Price
+                  {calculatedSellingPrice > 0 && (
+                    <>
+                      {"\n"}Rp {Number(formCostPrice).toLocaleString()} → Rp {calculatedSellingPrice.toLocaleString()}
+                      {formOriginalPrice && Number(formOriginalPrice) > 0 && (
+                        <>{"\n"}Discount: Was Rp {Number(formOriginalPrice).toLocaleString()}</>
+                      )}
+                    </>
+                  )}
+                </ThemedText>
               </View>
             </View>
 
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.label}>Stock *</ThemedText>
-                <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} value={formStock} onChangeText={setFormStock} keyboardType="numeric" placeholder="0" placeholderTextColor={theme.textSecondary} />
+                <TextInput 
+                  style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} 
+                  value={formStock} 
+                  onChangeText={setFormStock} 
+                  keyboardType="numeric" 
+                  placeholder="0" 
+                  placeholderTextColor={theme.textSecondary} 
+                />
               </View>
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <ThemedText style={styles.label}>Location</ThemedText>
-                <TextInput style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} value={formLocation} onChangeText={setFormLocation} placeholder="Aisle 1" placeholderTextColor={theme.textSecondary} />
+                <TextInput 
+                  style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundTertiary }]} 
+                  value={formLocation} 
+                  onChangeText={setFormLocation} 
+                  placeholder="Aisle 1" 
+                  placeholderTextColor={theme.textSecondary} 
+                />
               </View>
             </View>
 
@@ -1323,6 +1395,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, fontWeight: '700', marginBottom: 4, marginTop: 8 },
   input: { padding: 12, borderRadius: 8, marginBottom: 8 },
   row: { flexDirection: 'row' },
+  infoBox: { padding: 12, borderRadius: 8, marginBottom: 15, flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1 },
   saveBtn: { padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 25, marginBottom: 40 },
   saveBtnText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   orderCard: { padding: 15, marginBottom: 15 },
