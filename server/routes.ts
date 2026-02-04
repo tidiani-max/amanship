@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { createServer, type Server } from "node:http";
-import { eq, and, gt, sql, or, gte, lte, isNull } from "drizzle-orm";
+import { eq, and, gt, sql, or, gte, lte, isNull, desc } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
 import { 
@@ -11,7 +11,11 @@ import {
   voucherUsageLog,
   promotionUsageLog ,             
   userPromotionUsage,      
-  userVoucherUsage,     
+  userVoucherUsage,
+  staffEarnings,          // ✅ NEW
+  salaryPayments,         // ✅ NEW
+  storeDailyFinancials,   // ✅ NEW
+  appSettings,            // ✅ NEW
 } from "../shared/schema";
 import { findNearestAvailableStore, getStoresWithAvailability, estimateDeliveryTime } from "./storeAvailability";
 import express, { Express } from 'express';
@@ -21,6 +25,7 @@ import multer from "multer";
 import { driverLocations } from "../shared/schema";
 import { userClaimedPromotions } from "../shared/schema";
 import chatbotRouter from "../server/routes/chatbot"; 
+
 
 
 
@@ -36,6 +41,15 @@ import cron from 'node-cron';
 
 // ==================== CONFIGURATION ====================
 const DEMO_USER_ID = "demo-user";
+
+// ==================== FINANCIAL CONFIGURATION ====================
+const DELIVERY_FEE = 12000; // Rp 12,000 per order
+const DRIVER_BONUS_PER_DELIVERY = 4000; // Rp 4,000 per delivery
+const PICKER_BONUS_PER_ORDER = 2000; // Rp 2,000 per order
+const BASE_SALARY_MONTHLY = 2000000; // Rp 2,000,000 per month
+const DEFAULT_PRODUCT_MARGIN = 15; // 15%
+const DELIVERY_FEE_STAFF_BONUS = DRIVER_BONUS_PER_DELIVERY + PICKER_BONUS_PER_ORDER; // Rp 6,000
+const DELIVERY_FEE_PROFIT = DELIVERY_FEE - DELIVERY_FEE_STAFF_BONUS; // Rp 6,000
 
 // Multer storage configuration
 const UPLOADS_PATH = path.resolve(process.cwd(), "uploads");
@@ -1145,8 +1159,6 @@ app.put("/api/driver/orders/:id/status", async (req, res) => {
   }
 });
 
-
-
 // neew routes
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -1365,6 +1377,173 @@ app.get("/api/driver/route/:orderId", async (req, res) => {
   }
 });
 
+
+
+// ==================== STAFF EARNINGS DASHBOARD ====================
+
+// GET TODAY'S EARNINGS WITH MOTIVATION
+app.get("/api/staff/earnings/today", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const today = getTodayMidnight();
+    const { month, year } = getCurrentPeriod();
+
+    const [todayEarning] = await db
+      .select()
+      .from(staffEarnings)
+      .where(
+        and(
+          eq(staffEarnings.staffId, userId as string),
+          eq(staffEarnings.date, today)
+        )
+      )
+      .limit(1);
+
+    const monthStart = new Date(year, month - 1, 1);
+    monthStart.setHours(0, 0, 0, 0);
+
+    const monthEarnings = await db
+      .select({
+        totalBonus: sql<string>`SUM(${staffEarnings.bonusEarned})`,
+        totalOrders: sql<number>`SUM(${staffEarnings.ordersCompleted})::int`,
+        totalDeliveries: sql<number>`SUM(${staffEarnings.deliveriesCompleted})::int`,
+      })
+      .from(staffEarnings)
+      .where(
+        and(
+          eq(staffEarnings.staffId, userId as string),
+          gte(staffEarnings.date, monthStart)
+        )
+      );
+
+    const monthlyBonus = parseFloat(monthEarnings[0]?.totalBonus || "0");
+    const projectedMonthlyTotal = BASE_SALARY_MONTHLY + monthlyBonus;
+
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const [yesterdayEarning] = await db
+      .select()
+      .from(staffEarnings)
+      .where(
+        and(
+          eq(staffEarnings.staffId, userId as string),
+          eq(staffEarnings.date, yesterday)
+        )
+      )
+      .limit(1);
+
+    const todayBonus = parseFloat(todayEarning?.bonusEarned || "0");
+    const yesterdayBonus = parseFloat(yesterdayEarning?.bonusEarned || "0");
+
+    let motivationMessage = "";
+    let motivationIcon = "";
+    
+    if (todayBonus > yesterdayBonus) {
+      motivationMessage = "Great job! You're earning more than yesterday. Keep it up!";
+      motivationIcon = "🔥";
+    } else if (todayBonus < yesterdayBonus && yesterdayBonus > 0) {
+      motivationMessage = "Your bonus is lower than yesterday. Let's push harder!";
+      motivationIcon = "⚡";
+    } else {
+      motivationMessage = "Steady progress! Keep maintaining this pace.";
+      motivationIcon = "💪";
+    }
+
+    res.json({
+      today: {
+        date: today,
+        bonus: todayBonus,
+        orders: todayEarning?.ordersCompleted || 0,
+        deliveries: todayEarning?.deliveriesCompleted || 0,
+      },
+      monthToDate: {
+        bonus: monthlyBonus,
+        orders: monthEarnings[0]?.totalOrders || 0,
+        deliveries: monthEarnings[0]?.totalDeliveries || 0,
+        baseSalary: BASE_SALARY_MONTHLY,
+        projectedTotal: projectedMonthlyTotal,
+      },
+      comparison: {
+        yesterdayBonus,
+        change: todayBonus - yesterdayBonus,
+        percentChange: yesterdayBonus > 0 
+          ? ((todayBonus - yesterdayBonus) / yesterdayBonus) * 100 
+          : 0,
+      },
+      motivation: {
+        message: motivationMessage,
+        icon: motivationIcon,
+      },
+      rates: {
+        deliveryBonus: DRIVER_BONUS_PER_DELIVERY,
+        orderBonus: PICKER_BONUS_PER_ORDER,
+        baseSalary: BASE_SALARY_MONTHLY,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Get staff earnings error:", error);
+    res.status(500).json({ error: "Failed to fetch earnings" });
+  }
+});
+
+// GET EARNINGS HISTORY
+app.get("/api/staff/earnings/history", async (req, res) => {
+  try {
+    const { userId, days = 30 } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - Number(days));
+    daysAgo.setHours(0, 0, 0, 0);
+
+    const history = await db
+      .select()
+      .from(staffEarnings)
+      .where(
+        and(
+          eq(staffEarnings.staffId, userId as string),
+          gte(staffEarnings.date, daysAgo)
+        )
+      )
+      .orderBy(desc(staffEarnings.date));
+
+    res.json(history);
+  } catch (error) {
+    console.error("❌ Get earnings history error:", error);
+    res.status(500).json({ error: "Failed to fetch history" });
+  }
+});
+
+// GET SALARY PAYMENT HISTORY
+app.get("/api/staff/salary/history", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const payments = await db
+      .select()
+      .from(salaryPayments)
+      .where(eq(salaryPayments.staffId, userId as string))
+      .orderBy(desc(salaryPayments.year), desc(salaryPayments.month));
+
+    res.json(payments);
+  } catch (error) {
+    console.error("❌ Get salary history error:", error);
+    res.status(500).json({ error: "Failed to fetch salary history" });
+  }
+});
 
 // ==================== 6. CATEGORIES ====================
   console.log("📂 Registering category routes...");
@@ -1861,7 +2040,7 @@ app.post("/api/orders", async (req, res) => {
 
     for (const storeId of Object.keys(itemsByStore)) {
       const storeItems = itemsByStore[storeId];
-      const DELIVERY_FEE_PER_STORE = 10000;
+      const DELIVERY_FEE_PER_STORE = DELIVERY_FEE;
       const itemsTotal = storeItems.reduce(
         (sum, i) => sum + Number(i.price) * Number(i.quantity),
         0
@@ -1910,6 +2089,7 @@ app.post("/api/orders", async (req, res) => {
     res.status(500).json({ error: "Failed to create order" });
   }
 });
+
 app.patch("/api/orders/:id/pack", async (req, res) => {
   try {
     const { userId } = req.body;
@@ -1934,14 +2114,24 @@ app.patch("/api/orders/:id/pack", async (req, res) => {
 
     const [updated] = await db
       .update(orders)
-      .set({ status: "packed" })
+      .set({ 
+        status: "packed",
+        packedAt: new Date()
+      })
       .where(eq(orders.id, req.params.id))
       .returning();
 
-    // 🔔 NOTIFY CUSTOMER ABOUT STATUS CHANGE
-    await notifyCustomerOrderStatus(updated.id, "packed");
+    // 💰 RECORD PICKER BONUS
+    if (order.pickerId) {
+      await recordStaffEarning(
+        order.pickerId,
+        staff.storeId,
+        "picker",
+        PICKER_BONUS_PER_ORDER
+      );
+    }
 
-    // 🔔 NOTIFY AVAILABLE DRIVERS
+    await notifyCustomerOrderStatus(updated.id, "packed");
     await notifyDriversPackedOrder(staff.storeId, updated.id);
 
     res.json(updated);
@@ -1950,6 +2140,7 @@ app.patch("/api/orders/:id/pack", async (req, res) => {
     res.status(500).json({ error: "Failed to pack order" });
   }
 });
+
 app.get("/api/orders", async (req, res) => {
   try {
     const { userId, role } = req.query;
@@ -2052,6 +2243,7 @@ app.get("/api/orders/:id", async (req, res) => {
 
 // ===== CORRECTED DRIVER ORDER COMPLETE ROUTE =====
 
+
 app.put("/api/driver/orders/:id/complete", async (req, res) => {
   try {
     const { id } = req.params;
@@ -2085,7 +2277,6 @@ app.put("/api/driver/orders/:id/complete", async (req, res) => {
     }
 
     if (order.deliveryPin !== deliveryPin.toString()) {
-      console.log(`❌ PIN mismatch - Expected: ${order.deliveryPin}, Got: ${deliveryPin}`);
       return res.status(401).json({ 
         error: "Incorrect PIN. Please check with the customer and try again." 
       });
@@ -2093,31 +2284,36 @@ app.put("/api/driver/orders/:id/complete", async (req, res) => {
 
     const [completed] = await db
       .update(orders)
-      .set({ status: "delivered", deliveredAt: new Date() })
+      .set({ 
+        status: "delivered", 
+        deliveredAt: new Date() 
+      })
       .where(eq(orders.id, id))
       .returning();
 
-    // ✅ UPDATE USER STATS (totalOrders, totalSpent, lastOrderAt)
+    // 💰 RECORD DRIVER BONUS
+    await recordStaffEarning(
+      userId,
+      staff.storeId,
+      "driver",
+      DRIVER_BONUS_PER_DELIVERY
+    );
+
+    // 💰 UPDATE STORE DAILY FINANCIALS
+    await updateStoreDailyFinancials(staff.storeId, completed);
+
+    // ✅ UPDATE USER STATS
     await db.update(users)
       .set({ 
         totalOrders: sql`${users.totalOrders} + 1`,
         totalSpent: sql`${users.totalSpent} + ${completed.total}`,
         lastOrderAt: new Date(),
-        isNewUser: false, // Mark as returning user after first order
-        firstOrderAt: sql`COALESCE(${users.firstOrderAt}, NOW())`, // Set if null
+        isNewUser: false,
+        firstOrderAt: sql`COALESCE(${users.firstOrderAt}, NOW())`,
       })
       .where(eq(users.id, completed.userId));
 
-    // 🔔 NOTIFY CUSTOMER ORDER DELIVERED
     await notifyCustomerOrderStatus(completed.id, "delivered");
-
-    // 🎁 CHECK VOUCHER TRIGGERS (async, don't await)
-    setTimeout(() => {
-      checkAndAssignVouchers(completed.userId, "nth_order");
-      checkAndAssignVouchers(completed.userId, "high_value_order", { 
-        orderValue: completed.total 
-      });
-    }, 1000);
 
     console.log(`✅ Order ${id} completed by driver ${userId}`);
     res.json(completed);
@@ -2178,6 +2374,136 @@ app.post("/api/messages", uploadChat.single("file"), async (req, res) => {
     res.status(500).json({ error: "Failed to send message" });
   }
 });
+
+
+
+// ==================== FINANCIAL HELPER FUNCTIONS ====================
+
+function getTodayMidnight(): Date {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
+function getCurrentPeriod(): { month: number; year: number } {
+  const now = new Date();
+  return {
+    month: now.getMonth() + 1,
+    year: now.getFullYear(),
+  };
+}
+
+async function recordStaffEarning(
+  staffId: string,
+  storeId: string,
+  role: "picker" | "driver",
+  bonusAmount: number
+) {
+  const today = getTodayMidnight();
+  
+  const [existing] = await db
+    .select()
+    .from(staffEarnings)
+    .where(
+      and(
+        eq(staffEarnings.staffId, staffId),
+        eq(staffEarnings.date, today)
+      )
+    )
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(staffEarnings)
+      .set({
+        ordersCompleted: role === "picker" 
+          ? sql`${staffEarnings.ordersCompleted} + 1`
+          : staffEarnings.ordersCompleted,
+        deliveriesCompleted: role === "driver"
+          ? sql`${staffEarnings.deliveriesCompleted} + 1`
+          : staffEarnings.deliveriesCompleted,
+        bonusEarned: sql`${staffEarnings.bonusEarned} + ${bonusAmount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(staffEarnings.id, existing.id));
+  } else {
+    await db.insert(staffEarnings).values({
+      staffId,
+      storeId,
+      date: today,
+      role,
+      ordersCompleted: role === "picker" ? 1 : 0,
+      deliveriesCompleted: role === "driver" ? 1 : 0,
+      bonusEarned: String(bonusAmount),
+    });
+  }
+
+  console.log(`💰 Recorded ${role} earning: Rp ${bonusAmount} for staff ${staffId}`);
+}
+
+async function updateStoreDailyFinancials(storeId: string, order: any) {
+  const today = getTodayMidnight();
+  
+  const [existing] = await db
+    .select()
+    .from(storeDailyFinancials)
+    .where(
+      and(
+        eq(storeDailyFinancials.storeId, storeId),
+        eq(storeDailyFinancials.date, today)
+      )
+    )
+    .limit(1);
+
+  const productRevenue = order.subtotal || 0;
+  const productCost = order.productCost || 0;
+  const deliveryRevenue = order.deliveryFee || DELIVERY_FEE;
+  const staffBonus = DELIVERY_FEE_STAFF_BONUS;
+  const promotionDiscount = order.promotionDiscount || 0;
+  const voucherDiscount = order.voucherDiscount || 0;
+  
+  const grossRevenue = productRevenue + deliveryRevenue;
+  const grossProfit = productRevenue - productCost;
+  const netProfit = grossRevenue - productCost - staffBonus - promotionDiscount - voucherDiscount;
+
+  if (existing) {
+    await db
+      .update(storeDailyFinancials)
+      .set({
+        totalOrders: sql`${storeDailyFinancials.totalOrders} + 1`,
+        grossRevenue: sql`${storeDailyFinancials.grossRevenue} + ${grossRevenue}`,
+        deliveryFeeRevenue: sql`${storeDailyFinancials.deliveryFeeRevenue} + ${deliveryRevenue}`,
+        productRevenue: sql`${storeDailyFinancials.productRevenue} + ${productRevenue}`,
+        productCosts: sql`${storeDailyFinancials.productCosts} + ${productCost}`,
+        staffBonuses: sql`${storeDailyFinancials.staffBonuses} + ${staffBonus}`,
+        promotionDiscounts: sql`${storeDailyFinancials.promotionDiscounts} + ${promotionDiscount}`,
+        voucherDiscounts: sql`${storeDailyFinancials.voucherDiscounts} + ${voucherDiscount}`,
+        grossProfit: sql`${storeDailyFinancials.grossProfit} + ${grossProfit}`,
+        netProfit: sql`${storeDailyFinancials.netProfit} + ${netProfit}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(storeDailyFinancials.id, existing.id));
+  } else {
+    await db.insert(storeDailyFinancials).values({
+      storeId,
+      date: today,
+      totalOrders: 1,
+      grossRevenue: String(grossRevenue),
+      deliveryFeeRevenue: String(deliveryRevenue),
+      productRevenue: String(productRevenue),
+      productCosts: String(productCost),
+      staffBonuses: String(staffBonus),
+      promotionDiscounts: String(promotionDiscount),
+      voucherDiscounts: String(voucherDiscount),
+      grossProfit: String(grossProfit),
+      netProfit: String(netProfit),
+    });
+  }
+}
+
+
+
+
 
   // ==================== 12. STORES ====================
   console.log("🏪 Registering store routes...");
@@ -4681,9 +5007,6 @@ async function findBestClaimedPromotion(
 }
 
 
-
-
-
 // ===== GET ASSIGNED VOUCHERS =====
 app.get("/api/vouchers/assigned", async (req, res) => {
   try {
@@ -4875,6 +5198,342 @@ app.post("/api/admin/vouchers/template", async (req, res) => {
   }
 });
 
+
+// ==================== ADMIN FINANCIAL DASHBOARD ====================
+
+// GET STORE FINANCIALS
+app.get("/api/admin/financials/store/:storeId", async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const { period = "daily", startDate, endDate } = req.query;
+
+    let start: Date;
+    let end: Date;
+
+    if (startDate && endDate) {
+      start = new Date(startDate as string);
+      end = new Date(endDate as string);
+    } else if (period === "daily") {
+      start = new Date();
+      start.setDate(start.getDate() - 30);
+      start.setHours(0, 0, 0, 0);
+      end = new Date();
+      end.setHours(23, 59, 59, 999);
+    } else {
+      start = new Date();
+      start.setMonth(start.getMonth() - 12);
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+      end = new Date();
+      end.setHours(23, 59, 59, 999);
+    }
+
+    const financials = await db
+      .select()
+      .from(storeDailyFinancials)
+      .where(
+        and(
+          eq(storeDailyFinancials.storeId, storeId),
+          gte(storeDailyFinancials.date, start),
+          lte(storeDailyFinancials.date, end)
+        )
+      )
+      .orderBy(desc(storeDailyFinancials.date));
+
+    const totals = financials.reduce(
+      (acc, day) => ({
+        totalOrders: acc.totalOrders + day.totalOrders,
+        grossRevenue: acc.grossRevenue + parseFloat(String(day.grossRevenue)),
+        productRevenue: acc.productRevenue + parseFloat(String(day.productRevenue)),
+        deliveryFeeRevenue: acc.deliveryFeeRevenue + parseFloat(String(day.deliveryFeeRevenue)),
+        productCosts: acc.productCosts + parseFloat(String(day.productCosts)),
+        staffBonuses: acc.staffBonuses + parseFloat(String(day.staffBonuses)),
+        promotionDiscounts: acc.promotionDiscounts + parseFloat(String(day.promotionDiscounts)),
+        voucherDiscounts: acc.voucherDiscounts + parseFloat(String(day.voucherDiscounts)),
+        grossProfit: acc.grossProfit + parseFloat(String(day.grossProfit)),
+        netProfit: acc.netProfit + parseFloat(String(day.netProfit)),
+      }),
+      {
+        totalOrders: 0,
+        grossRevenue: 0,
+        productRevenue: 0,
+        deliveryFeeRevenue: 0,
+        productCosts: 0,
+        staffBonuses: 0,
+        promotionDiscounts: 0,
+        voucherDiscounts: 0,
+        grossProfit: 0,
+        netProfit: 0,
+      }
+    );
+
+    const avgOrderValue = totals.totalOrders > 0 
+      ? totals.grossRevenue / totals.totalOrders 
+      : 0;
+    
+    const profitMargin = totals.grossRevenue > 0
+      ? (totals.netProfit / totals.grossRevenue) * 100
+      : 0;
+
+    res.json({
+      period: { start, end, type: period },
+      financials,
+      totals,
+      metrics: {
+        avgOrderValue,
+        profitMargin,
+        avgDailyOrders: totals.totalOrders / financials.length,
+        avgDailyRevenue: totals.grossRevenue / financials.length,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Get store financials error:", error);
+    res.status(500).json({ error: "Failed to fetch financials" });
+  }
+});
+
+// GET ALL STORES SUMMARY
+app.get("/api/admin/financials/summary", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!user || (user.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const today = getTodayMidnight();
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+
+    const allStores = await db.select().from(stores);
+
+    const storeFinancials = await Promise.all(
+      allStores.map(async (store) => {
+        const [todayData] = await db
+          .select()
+          .from(storeDailyFinancials)
+          .where(
+            and(
+              eq(storeDailyFinancials.storeId, store.id),
+              eq(storeDailyFinancials.date, today)
+            )
+          );
+
+        const monthData = await db
+          .select({
+            totalOrders: sql<number>`SUM(${storeDailyFinancials.totalOrders})::int`,
+            grossRevenue: sql<string>`SUM(${storeDailyFinancials.grossRevenue})`,
+            netProfit: sql<string>`SUM(${storeDailyFinancials.netProfit})`,
+          })
+          .from(storeDailyFinancials)
+          .where(
+            and(
+              eq(storeDailyFinancials.storeId, store.id),
+              gte(storeDailyFinancials.date, monthStart)
+            )
+          );
+
+        return {
+          storeId: store.id,
+          storeName: store.name,
+          today: {
+            orders: todayData?.totalOrders || 0,
+            revenue: parseFloat(String(todayData?.grossRevenue || 0)),
+            profit: parseFloat(String(todayData?.netProfit || 0)),
+          },
+          monthToDate: {
+            orders: monthData[0]?.totalOrders || 0,
+            revenue: parseFloat(monthData[0]?.grossRevenue || "0"),
+            profit: parseFloat(monthData[0]?.netProfit || "0"),
+          },
+        };
+      })
+    );
+
+    const globalTotals = storeFinancials.reduce(
+      (acc, store) => ({
+        todayOrders: acc.todayOrders + store.today.orders,
+        todayRevenue: acc.todayRevenue + store.today.revenue,
+        todayProfit: acc.todayProfit + store.today.profit,
+        monthOrders: acc.monthOrders + store.monthToDate.orders,
+        monthRevenue: acc.monthRevenue + store.monthToDate.revenue,
+        monthProfit: acc.monthProfit + store.monthToDate.profit,
+      }),
+      {
+        todayOrders: 0,
+        todayRevenue: 0,
+        todayProfit: 0,
+        monthOrders: 0,
+        monthRevenue: 0,
+        monthProfit: 0,
+      }
+    );
+
+    res.json({
+      stores: storeFinancials,
+      globalTotals,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("❌ Get financial summary error:", error);
+    res.status(500).json({ error: "Failed to fetch summary" });
+  }
+});
+
+// PROCESS MONTHLY SALARIES
+app.post("/api/admin/salary/process", async (req, res) => {
+  try {
+    const { userId, storeId, month, year } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user || (user.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const targetMonth = month || new Date().getMonth() + 1;
+    const targetYear = year || new Date().getFullYear();
+
+    const staff = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.storeId, storeId));
+
+    const monthStart = new Date(targetYear, targetMonth - 1, 1);
+    monthStart.setHours(0, 0, 0, 0);
+    
+    const monthEnd = new Date(targetYear, targetMonth, 0);
+    monthEnd.setHours(23, 59, 59, 999);
+
+    const processed = [];
+
+    for (const member of staff) {
+      const earnings = await db
+        .select({
+          totalBonus: sql<string>`SUM(${staffEarnings.bonusEarned})`,
+          totalOrders: sql<number>`SUM(${staffEarnings.ordersCompleted})::int`,
+          totalDeliveries: sql<number>`SUM(${staffEarnings.deliveriesCompleted})::int`,
+        })
+        .from(staffEarnings)
+        .where(
+          and(
+            eq(staffEarnings.staffId, member.userId),
+            gte(staffEarnings.date, monthStart),
+            lte(staffEarnings.date, monthEnd)
+          )
+        );
+
+      const totalBonus = parseFloat(earnings[0]?.totalBonus || "0");
+      const totalEarnings = BASE_SALARY_MONTHLY + totalBonus;
+
+      const [payment] = await db
+        .insert(salaryPayments)
+        .values({
+          staffId: member.userId,
+          storeId: member.storeId,
+          month: targetMonth,
+          year: targetYear,
+          baseSalary: String(BASE_SALARY_MONTHLY),
+          totalBonus: String(totalBonus),
+          totalEarnings: String(totalEarnings),
+          totalOrders: earnings[0]?.totalOrders || 0,
+          totalDeliveries: earnings[0]?.totalDeliveries || 0,
+          status: "pending",
+        })
+        .returning();
+
+      processed.push(payment);
+    }
+
+    res.json({
+      success: true,
+      processed: processed.length,
+      payments: processed,
+    });
+  } catch (error) {
+    console.error("❌ Process salary error:", error);
+    res.status(500).json({ error: "Failed to process salaries" });
+  }
+});
+
+// MARK SALARY AS PAID
+app.patch("/api/admin/salary/:id/paid", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user || (user.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const [updated] = await db
+      .update(salaryPayments)
+      .set({
+        status: "paid",
+        paidAt: new Date(),
+      })
+      .where(eq(salaryPayments.id, id))
+      .returning();
+
+    if (!updated) {
+      return res.status(404).json({ error: "Payment not found" });
+    }
+
+    res.json(updated);
+  } catch (error) {
+    console.error("❌ Mark salary paid error:", error);
+    res.status(500).json({ error: "Failed to update payment" });
+  }
+});
+
+// GET PENDING SALARIES
+app.get("/api/admin/salary/pending", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!user || (user.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const pending = await db
+      .select({
+        payment: salaryPayments,
+        staff: users,
+        store: stores,
+      })
+      .from(salaryPayments)
+      .leftJoin(users, eq(salaryPayments.staffId, users.id))
+      .leftJoin(stores, eq(salaryPayments.storeId, stores.id))
+      .where(eq(salaryPayments.status, "pending"))
+      .orderBy(desc(salaryPayments.year), desc(salaryPayments.month));
+
+    res.json(pending);
+  } catch (error) {
+    console.error("❌ Get pending salaries error:", error);
+    res.status(500).json({ error: "Failed to fetch pending salaries" });
+  }
+});
+
+console.log("✅ All financial routes registered");
 
 
 

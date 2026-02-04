@@ -16,14 +16,12 @@ export type OrderStatus = typeof orderStatuses[number];
 export const paymentMethodTypes = ["midtrans", "cod"] as const;
 export type PaymentMethodType = typeof paymentMethodTypes[number];
 
-// ===== PROMOTIONS: Store/Admin Created, User Claims =====
 export const promotionTypes = ["percentage", "fixed_amount", "buy_x_get_y", "free_delivery", "bundle"] as const;
 export type PromotionType = typeof promotionTypes[number];
 
 export const promotionScopes = ["store", "app"] as const;
 export type PromotionScope = typeof promotionScopes[number];
 
-// ===== VOUCHERS: System-Generated, Auto-Assigned =====
 export const voucherTypes = ["welcome", "loyalty", "winback", "birthday", "seasonal"] as const;
 export type VoucherType = typeof voucherTypes[number];
 
@@ -33,7 +31,7 @@ export type VoucherTrigger = typeof voucherTriggers[number];
 // --- Tables ---
 
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   name: text("name"),
@@ -57,7 +55,7 @@ export const users = pgTable("users", {
 });
 
 export const otpCodes = pgTable("otp_codes", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   phone: text("phone").notNull(),
   code: text("code").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
@@ -66,30 +64,30 @@ export const otpCodes = pgTable("otp_codes", {
 });
 
 export const messages = pgTable("messages", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orderId: varchar("order_id").notNull().references(() => orders.id),
-  senderId: varchar("user_id").notNull().references(() => users.id),
-  type: varchar("type").default("text").notNull(),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orderId: varchar("order_id", { length: 255 }).notNull(),
+  senderId: varchar("user_id", { length: 255 }).notNull(),
+  type: varchar("type", { length: 50 }).default("text").notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const stores = pgTable("stores", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   address: text("address").notNull(),
   latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
   longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
-  ownerId: varchar("owner_id").references(() => users.id),
+  ownerId: varchar("owner_id", { length: 255 }),
   codAllowed: boolean("cod_allowed").default(true).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const storeStaff = pgTable("store_staff", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  storeId: varchar("store_id").notNull().references(() => stores.id),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  storeId: varchar("store_id", { length: 255 }).notNull(),
   role: text("role").notNull(),
   status: text("status").notNull().default("offline"),
   lastStatusChange: timestamp("last_status_change").defaultNow().notNull(),
@@ -97,7 +95,7 @@ export const storeStaff = pgTable("store_staff", {
 });
 
 export const categories = pgTable("categories", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   icon: text("icon").notNull(),
   color: text("color").notNull(),
@@ -105,13 +103,15 @@ export const categories = pgTable("categories", {
 });
 
 export const products = pgTable("products", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   brand: text("brand").notNull().default("Generic"),
   price: integer("price").notNull(),
   originalPrice: integer("original_price"),
+  costPrice: integer("cost_price"),
+  margin: decimal("margin", { precision: 5, scale: 2 }).default("15.00"),
   image: text("image"),
-  categoryId: varchar("category_id").notNull().references(() => categories.id),
+  categoryId: varchar("category_id", { length: 255 }).notNull(),
   description: text("description"),
   nutrition: jsonb("nutrition"),
   isRamadanSpecial: boolean("is_ramadan_special").default(false).notNull(),
@@ -119,17 +119,17 @@ export const products = pgTable("products", {
 });
 
 export const storeInventory = pgTable("store_inventory", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  storeId: varchar("store_id").notNull().references(() => stores.id),
-  productId: varchar("product_id").notNull().references(() => products.id),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  storeId: varchar("store_id", { length: 255 }).notNull(),
+  productId: varchar("product_id", { length: 255 }).notNull(),
   stockCount: integer("stock_count").notNull().default(0),
   location: text("location"),
   isAvailable: boolean("is_available").default(true).notNull(),
 });
 
 export const addresses = pgTable("addresses", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: varchar("user_id", { length: 255 }).notNull(),
   label: text("label").notNull(),
   fullAddress: text("full_address").notNull(),
   details: text("details"),
@@ -139,31 +139,32 @@ export const addresses = pgTable("addresses", {
 });
 
 export const cartItems = pgTable("cart_items", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  productId: varchar("product_id").notNull().references(() => products.id),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  productId: varchar("product_id", { length: 255 }).notNull(),
   quantity: integer("quantity").notNull().default(1),
 });
 
 export const orders = pgTable("orders", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   orderNumber: text("order_number").notNull().unique(),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  storeId: varchar("store_id").references(() => stores.id),
-  pickerId: varchar("picker_id").references(() => users.id),
-  driverId: varchar("driver_id").references(() => users.id),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  storeId: varchar("store_id", { length: 255 }),
+  pickerId: varchar("picker_id", { length: 255 }),
+  driverId: varchar("driver_id", { length: 255 }),
   items: jsonb("items").notNull(),
   status: text("status").notNull().default("pending"),
   total: integer("total").notNull(),
   subtotal: integer("subtotal").notNull(),
-  deliveryFee: integer("delivery_fee").notNull().default(10000),
+  productCost: integer("product_cost").default(0).notNull(),
+  deliveryFee: integer("delivery_fee").notNull().default(12000),
   discount: integer("discount").default(0).notNull(),
-  appliedPromotionId: varchar("applied_promotion_id").references(() => promotions.id),
-  appliedVoucherId: varchar("applied_voucher_id").references(() => vouchers.id),
+  appliedPromotionId: varchar("applied_promotion_id", { length: 255 }),
+  appliedVoucherId: varchar("applied_voucher_id", { length: 255 }),
   promotionDiscount: integer("promotion_discount").default(0).notNull(),
   voucherDiscount: integer("voucher_discount").default(0).notNull(),
   freeDelivery: boolean("free_delivery").default(false).notNull(),
-  addressId: varchar("address_id").references(() => addresses.id),
+  addressId: varchar("address_id", { length: 255 }),
   paymentMethod: text("payment_method").default("midtrans"),
   paymentStatus: text("payment_status").default("pending"),
   codCollected: boolean("cod_collected").default(false),
@@ -181,19 +182,20 @@ export const orders = pgTable("orders", {
 });
 
 export const orderItems = pgTable("order_items", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orderId: varchar("order_id").references(() => orders.id).notNull(),
-  productId: varchar("product_id").references(() => products.id).notNull(),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  orderId: varchar("order_id", { length: 255 }).notNull(),
+  productId: varchar("product_id", { length: 255 }).notNull(),
   quantity: integer("quantity").notNull(),
   priceAtEntry: decimal("price_at_entry", { precision: 10, scale: 2 }).notNull(),
+  costAtEntry: decimal("cost_at_entry", { precision: 10, scale: 2 }),
   isFreeItem: boolean("is_free_item").default(false).notNull(),
   promotionApplied: text("promotion_applied"),
 });
 
 export const driverLocations = pgTable("driver_locations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  driverId: varchar("driver_id").notNull().references(() => users.id),
-  orderId: varchar("order_id").references(() => orders.id),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  driverId: varchar("driver_id", { length: 255 }).notNull(),
+  orderId: varchar("order_id", { length: 255 }),
   latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
   longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
   heading: decimal("heading", { precision: 5, scale: 2 }),
@@ -202,122 +204,83 @@ export const driverLocations = pgTable("driver_locations", {
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
-// ===== PROMOTIONS: User Claims Once, Then Uses Multiple Times =====
 export const promotions = pgTable("promotions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   title: text("title").notNull(),
   description: text("description").notNull(),
   type: text("type").notNull(),
-  
-  // Discount details
   discountValue: integer("discount_value"),
   maxDiscount: integer("max_discount"),
   minOrder: integer("min_order").default(0).notNull(),
-  
-  // Buy X Get Y details
   buyQuantity: integer("buy_quantity"),
   getQuantity: integer("get_quantity"),
   applicableProductIds: jsonb("applicable_product_ids"),
-  
-  // Bundle details
   bundleItems: jsonb("bundle_items"),
   bundlePrice: integer("bundle_price"),
-  
-  // Store scope
-  storeId: varchar("store_id").references(() => stores.id),
-  createdBy: varchar("created_by").notNull().references(() => users.id),
+  storeId: varchar("store_id", { length: 255 }),
+  createdBy: varchar("created_by", { length: 255 }).notNull(),
   scope: text("scope").default("store").notNull(),
   applicableStoreIds: jsonb("applicable_store_ids"),
-  
-  // Display
   image: text("image"),
   bannerImage: text("banner_image"),
   icon: text("icon").default("gift"),
   color: text("color").default("#f59e0b"),
   priority: integer("priority").default(0).notNull(),
-  
-  // Limits - FIXED NAMING
   isActive: boolean("is_active").default(true).notNull(),
-  usageLimit: integer("usage_limit"), // Total global limit
+  usageLimit: integer("usage_limit"),
   usedCount: integer("used_count").default(0).notNull(),
-  userLimit: integer("user_limit").default(1).notNull(), // Per-user limit
-  
-  // Targeting
-  targetUsers: text("target_users").default("all"), // "all", "new_users", "returning_users", "specific_users"
+  userLimit: integer("user_limit").default(1).notNull(),
+  targetUsers: text("target_users").default("all"),
   specificUserIds: jsonb("specific_user_ids"),
-  
-  // Schedule
   validFrom: timestamp("valid_from").defaultNow().notNull(),
   validUntil: timestamp("valid_until").notNull(),
-  
-  // Special flags
   isRamadanSpecial: boolean("is_ramadan_special").default(false).notNull(),
   isFeatured: boolean("is_featured").default(false).notNull(),
   showInBanner: boolean("show_in_banner").default(false).notNull(),
-  
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// ===== VOUCHERS: System Auto-Generated, Auto-Assigned =====
 export const vouchers = pgTable("vouchers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   code: text("code").notNull().unique(),
   title: text("title").notNull(),
   description: text("description").notNull(),
-  
-  // Voucher type and trigger
   type: text("type").notNull(),
   trigger: text("trigger").notNull(),
-  
-  // Discount details
   discountType: text("discount_type").notNull(),
   discount: integer("discount").notNull(),
   maxDiscount: integer("max_discount"),
   minOrder: integer("min_order").default(0).notNull(),
-  
-  // Auto-assignment rules
   autoAssign: boolean("auto_assign").default(true).notNull(),
   assignmentRules: jsonb("assignment_rules"),
-  
-  // Validity
   validFrom: timestamp("valid_from").defaultNow().notNull(),
   validUntil: timestamp("valid_until").notNull(),
   daysValid: integer("days_valid").default(30).notNull(),
-  
-  // Usage limits
-  usageLimit: integer("usage_limit"), // Total global limit
+  usageLimit: integer("usage_limit"),
   usedCount: integer("used_count").default(0).notNull(),
-  userLimit: integer("user_limit").default(1).notNull(), // Per-user limit
-  
-  // Targeting
-  targetUsers: text("target_users").default("all"), // "all", "new_users", "returning_users"
-  
-  // Display
+  userLimit: integer("user_limit").default(1).notNull(),
+  targetUsers: text("target_users").default("all"),
   icon: text("icon").default("gift"),
   color: text("color").default("#10b981"),
   priority: integer("priority").default(0).notNull(),
-  
   isActive: boolean("is_active").default(true).notNull(),
   isRamadanSpecial: boolean("is_ramadan_special").default(false).notNull(),
-  
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// ===== USER CLAIMED PROMOTIONS (One-Time Claim) =====
 export const userClaimedPromotions = pgTable("user_claimed_promotions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  promotionId: varchar("promotion_id").notNull().references(() => promotions.id),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  promotionId: varchar("promotion_id", { length: 255 }).notNull(),
   claimedAt: timestamp("claimed_at").defaultNow().notNull(),
   usageCount: integer("usage_count").default(0).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
 });
 
-// ===== USER ASSIGNED VOUCHERS (Auto-Assigned) =====
 export const userAssignedVouchers = pgTable("user_assigned_vouchers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  voucherId: varchar("voucher_id").notNull().references(() => vouchers.id),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  voucherId: varchar("voucher_id", { length: 255 }).notNull(),
   assignedAt: timestamp("assigned_at").defaultNow().notNull(),
   assignedBy: text("assigned_by").default("system").notNull(),
   usageCount: integer("usage_count").default(0).notNull(),
@@ -325,54 +288,108 @@ export const userAssignedVouchers = pgTable("user_assigned_vouchers", {
   isActive: boolean("is_active").default(true).notNull(),
 });
 
-// ===== PROMOTION USAGE TRACKING (Per Order) - RENAMED FOR CLARITY =====
 export const promotionUsageLog = pgTable("promotion_usage_log", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  promotionId: varchar("promotion_id").notNull().references(() => promotions.id),
-  claimedPromotionId: varchar("claimed_promotion_id").notNull().references(() => userClaimedPromotions.id),
-  orderId: varchar("order_id").references(() => orders.id),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  promotionId: varchar("promotion_id", { length: 255 }).notNull(),
+  claimedPromotionId: varchar("claimed_promotion_id", { length: 255 }).notNull(),
+  orderId: varchar("order_id", { length: 255 }),
   discountApplied: integer("discount_applied").notNull(),
   usedAt: timestamp("used_at").defaultNow().notNull(),
 });
 
-// ✅ ADDED: User Promotion Usage (for quick counting)
 export const userPromotionUsage = pgTable("user_promotion_usage", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  promotionId: varchar("promotion_id").notNull().references(() => promotions.id),
-  orderId: varchar("order_id").references(() => orders.id),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  promotionId: varchar("promotion_id", { length: 255 }).notNull(),
+  orderId: varchar("order_id", { length: 255 }),
   usedAt: timestamp("used_at").defaultNow().notNull(),
 });
 
-// ===== VOUCHER USAGE TRACKING (Per Order) =====
 export const voucherUsageLog = pgTable("voucher_usage_log", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  voucherId: varchar("voucher_id").notNull().references(() => vouchers.id),
-  assignedVoucherId: varchar("assigned_voucher_id").notNull().references(() => userAssignedVouchers.id),
-  orderId: varchar("order_id").references(() => orders.id),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  voucherId: varchar("voucher_id", { length: 255 }).notNull(),
+  assignedVoucherId: varchar("assigned_voucher_id", { length: 255 }).notNull(),
+  orderId: varchar("order_id", { length: 255 }),
   discountApplied: integer("discount_applied").notNull(),
   usedAt: timestamp("used_at").defaultNow().notNull(),
 });
 
-// ✅ ADDED: User Voucher Usage (for quick counting)
 export const userVoucherUsage = pgTable("user_voucher_usage", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  voucherId: varchar("voucher_id").notNull().references(() => vouchers.id),
-  orderId: varchar("order_id").references(() => orders.id),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  voucherId: varchar("voucher_id", { length: 255 }).notNull(),
+  orderId: varchar("order_id", { length: 255 }),
   usedAt: timestamp("used_at").defaultNow().notNull(),
 });
 
-// ===== VOUCHER AUTO-ASSIGNMENT TRIGGERS =====
 export const voucherTriggerLog = pgTable("voucher_trigger_log", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  voucherId: varchar("voucher_id").notNull().references(() => vouchers.id),
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  voucherId: varchar("voucher_id", { length: 255 }).notNull(),
   trigger: text("trigger").notNull(),
   triggeredAt: timestamp("triggered_at").defaultNow().notNull(),
-  assignedVoucherId: varchar("assigned_voucher_id").references(() => userAssignedVouchers.id),
+  assignedVoucherId: varchar("assigned_voucher_id", { length: 255 }),
+});
+
+// ==================== 💰 FINANCIAL TRACKING TABLES ====================
+
+export const staffEarnings = pgTable("staff_earnings", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  staffId: varchar("staff_id", { length: 255 }).notNull(),
+  storeId: varchar("store_id", { length: 255 }).notNull(),
+  date: timestamp("date").notNull(),
+  role: text("role").notNull(),
+  ordersCompleted: integer("orders_completed").default(0).notNull(),
+  deliveriesCompleted: integer("deliveries_completed").default(0).notNull(),
+  bonusEarned: decimal("bonus_earned", { precision: 12, scale: 2 }).default("0").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const salaryPayments = pgTable("salary_payments", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  staffId: varchar("staff_id", { length: 255 }).notNull(),
+  storeId: varchar("store_id", { length: 255 }).notNull(),
+  month: integer("month").notNull(),
+  year: integer("year").notNull(),
+  baseSalary: decimal("base_salary", { precision: 12, scale: 2 }).notNull(),
+  totalBonus: decimal("total_bonus", { precision: 12, scale: 2 }).default("0").notNull(),
+  totalEarnings: decimal("total_earnings", { precision: 12, scale: 2 }).notNull(),
+  totalOrders: integer("total_orders").default(0).notNull(),
+  totalDeliveries: integer("total_deliveries").default(0).notNull(),
+  status: text("status").default("pending").notNull(),
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const storeDailyFinancials = pgTable("store_daily_financials", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  storeId: varchar("store_id", { length: 255 }).notNull(),
+  date: timestamp("date").notNull(),
+  totalOrders: integer("total_orders").default(0).notNull(),
+  grossRevenue: decimal("gross_revenue", { precision: 12, scale: 2 }).default("0").notNull(),
+  deliveryFeeRevenue: decimal("delivery_fee_revenue", { precision: 12, scale: 2 }).default("0").notNull(),
+  productRevenue: decimal("product_revenue", { precision: 12, scale: 2 }).default("0").notNull(),
+  productCosts: decimal("product_costs", { precision: 12, scale: 2 }).default("0").notNull(),
+  staffBonuses: decimal("staff_bonuses", { precision: 12, scale: 2 }).default("0").notNull(),
+  promotionDiscounts: decimal("promotion_discounts", { precision: 12, scale: 2 }).default("0").notNull(),
+  voucherDiscounts: decimal("voucher_discounts", { precision: 12, scale: 2 }).default("0").notNull(),
+  grossProfit: decimal("gross_profit", { precision: 12, scale: 2 }).default("0").notNull(),
+  netProfit: decimal("net_profit", { precision: 12, scale: 2 }).default("0").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const appSettings = pgTable("app_settings", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
+  description: text("description"),
+  dataType: text("data_type").default("string").notNull(),
+  category: text("category").default("general").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // --- Relations ---
@@ -396,6 +413,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   createdPromotions: many(promotions),
   promotionUsage: many(userPromotionUsage),
   voucherUsage: many(userVoucherUsage),
+  staffEarnings: many(staffEarnings),
+  salaryPayments: many(salaryPayments),
 }));
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
@@ -449,6 +468,9 @@ export const storesRelations = relations(stores, ({ one, many }) => ({
   inventory: many(storeInventory),
   orders: many(orders),
   promotions: many(promotions),
+  staffEarnings: many(staffEarnings),
+  salaryPayments: many(salaryPayments),
+  dailyFinancials: many(storeDailyFinancials),
 }));
 
 export const storeStaffRelations = relations(storeStaff, ({ one }) => ({
@@ -479,6 +501,20 @@ export const cartItemsRelations = relations(cartItems, ({ one }) => ({
   product: one(products, { fields: [cartItems.productId], references: [products.id] }),
 }));
 
+export const staffEarningsRelations = relations(staffEarnings, ({ one }) => ({
+  staff: one(users, { fields: [staffEarnings.staffId], references: [users.id] }),
+  store: one(stores, { fields: [staffEarnings.storeId], references: [stores.id] }),
+}));
+
+export const salaryPaymentsRelations = relations(salaryPayments, ({ one }) => ({
+  staff: one(users, { fields: [salaryPayments.staffId], references: [users.id] }),
+  store: one(stores, { fields: [salaryPayments.storeId], references: [stores.id] }),
+}));
+
+export const storeDailyFinancialsRelations = relations(storeDailyFinancials, ({ one }) => ({
+  store: one(stores, { fields: [storeDailyFinancials.storeId], references: [stores.id] }),
+}));
+
 // --- Insert Schemas ---
 export const insertUserSchema = createInsertSchema(users);
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
@@ -496,6 +532,10 @@ export const insertMessageSchema = createInsertSchema(messages).omit({ id: true,
 export const insertDriverLocationSchema = createInsertSchema(driverLocations).omit({ id: true, timestamp: true });
 export const insertUserClaimedPromotionSchema = createInsertSchema(userClaimedPromotions).omit({ id: true, claimedAt: true });
 export const insertUserAssignedVoucherSchema = createInsertSchema(userAssignedVouchers).omit({ id: true, assignedAt: true });
+export const insertStaffEarningsSchema = createInsertSchema(staffEarnings).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertSalaryPaymentSchema = createInsertSchema(salaryPayments).omit({ id: true, createdAt: true });
+export const insertStoreDailyFinancialsSchema = createInsertSchema(storeDailyFinancials).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertAppSettingSchema = createInsertSchema(appSettings).omit({ id: true, updatedAt: true });
 
 // --- Type Exports ---
 export type User = typeof users.$inferSelect;
@@ -535,3 +575,11 @@ export type VoucherUsageLog = typeof voucherUsageLog.$inferSelect;
 export type VoucherTriggerLog = typeof voucherTriggerLog.$inferSelect;
 export type UserPromotionUsage = typeof userPromotionUsage.$inferSelect;
 export type UserVoucherUsage = typeof userVoucherUsage.$inferSelect;
+export type StaffEarnings = typeof staffEarnings.$inferSelect;
+export type InsertStaffEarnings = z.infer<typeof insertStaffEarningsSchema>;
+export type SalaryPayment = typeof salaryPayments.$inferSelect;
+export type InsertSalaryPayment = z.infer<typeof insertSalaryPaymentSchema>;
+export type StoreDailyFinancials = typeof storeDailyFinancials.$inferSelect;
+export type InsertStoreDailyFinancials = z.infer<typeof insertStoreDailyFinancialsSchema>;
+export type AppSetting = typeof appSettings.$inferSelect;
+export type InsertAppSetting = z.infer<typeof insertAppSettingSchema>;
