@@ -3106,7 +3106,7 @@ app.get("/api/admin/metrics", async (req, res) => {
         // STORE ORDERS (SAFE)
         // =========================
         const storeOrders = allOrders.filter(
-  o => o.store_id && String(o.store_id) === String(store.id)
+  o => o.storeId && String(o.storeId) === String(store.id)
 );
 
 
@@ -3142,12 +3142,12 @@ app.get("/api/admin/metrics", async (req, res) => {
         );
 
         const todayOrders = storeOrders.filter(o => {
-          const d = safeDate(o.created_at);
+          const d = safeDate(o.createdAt);
           return d && d >= todayStart;
         });
 
         const monthOrders = storeOrders.filter(o => {
-          const d = safeDate(o.created_at);
+          const d = safeDate(o.createdAt);
           return d && d >= monthStart;
         });
 
