@@ -16,6 +16,7 @@ import { apiRequest } from "@/lib/query-client";
 import { Spacing } from "@/constants/theme";
 // Add MaterialCommunityIcons to this line
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { StaffEarningsDashboard } from "@/components/StaffEarningsDashboard";
 
 // BRAND COLORS
 const BRAND_PURPLE = "#6338f2"; 
@@ -534,6 +535,19 @@ useEffect(() => {
             ONLINE & READY
           </ThemedText>
         </View>
+        <View style={[styles.statusRow, { marginTop: 8, marginBottom: 16 }]}>
+  <View style={[styles.statusDot, { backgroundColor: BRAND_MINT }]} />
+  <ThemedText type="caption" style={{ color: '#64748b', marginLeft: 6, fontWeight: '700' }}>
+    ONLINE & READY
+  </ThemedText>
+</View>
+
+{/* 💰 STAFF EARNINGS DASHBOARD */}
+{user?.id && (
+  <View style={{ paddingHorizontal: 16, marginTop: 8, marginBottom: 16 }}>
+    <StaffEarningsDashboard userId={user.id} role="driver" />
+  </View>
+)}
       </View>
 
       {/* Content */}

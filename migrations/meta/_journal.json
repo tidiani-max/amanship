@@ -29,6 +29,13 @@
       "when": 1770187400111,
       "tag": "0003_exotic_electro",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1770194728818,
+      "tag": "0004_bumpy_spencer_smythe",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,7 @@ import { useAuth } from "@/context/AuthContext";
 import { getImageUrl } from "@/lib/image-url"; 
 import { Spacing } from "@/constants/theme";
 import { OrderReceipt } from "@/components/OrderReceipt";
+import { StaffEarningsDashboard } from "@/components/StaffEarningsDashboard";
 
 const BASE_URL = process.env.EXPO_PUBLIC_DOMAIN!;
 
@@ -909,6 +910,19 @@ export default function PickerDashboardScreen() {
             {dashboard?.store?.name || "Loading..."}
           </ThemedText>
         </View>
+        <View style={[styles.storeInfo, { marginTop: 8, marginBottom: 16 }]}>
+  <Feather name="map-pin" size={14} color={theme.textSecondary} />
+  <ThemedText type="caption" style={{ color: theme.textSecondary, marginLeft: 4 }}>
+    {dashboard?.store?.name || "Loading..."}
+  </ThemedText>
+</View>
+
+{/* 💰 STAFF EARNINGS DASHBOARD */}
+{user?.id && (
+  <View style={{ paddingHorizontal: 20, marginTop: 8, marginBottom: 16 }}>
+    <StaffEarningsDashboard userId={user.id} role="picker" />
+  </View>
+)}
 
         {/* Tabs */}
         <View style={[styles.tabs, { borderBottomColor: theme.border }]}>

@@ -25,6 +25,7 @@ import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import * as ImagePicker from 'expo-image-picker';
 import { getImageUrl } from "@/lib/image-url";
+import { StaffEarningsDashboard } from "@/components/StaffEarningsDashboard";
 // ===================== TYPES =====================
 interface StaffMember {
   id: string;
@@ -1702,6 +1703,66 @@ export default function AdminDashboardScreen() {
                       </ThemedText>
                       <ThemedText style={[styles.statSubtext, { color: theme.textSecondary }]}>Per order</ThemedText>
                     </View>
+                    {/* Enhanced Financial Breakdown */}
+{globalTotals && (
+  <View style={styles.contentSection}>
+    <View style={styles.sectionHeader}>
+      <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
+        💰 Financial Breakdown
+      </ThemedText>
+    </View>
+    
+    <View style={styles.metricsRow}>
+      <View style={styles.metricBox}>
+        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+          COD Collected
+        </ThemedText>
+        <ThemedText style={[styles.metricBoxValue, { color: theme.success }]}>
+          {formatCurrency(globalTotals.codCollected)}
+        </ThemedText>
+        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+          Cash received
+        </ThemedText>
+      </View>
+      
+      <View style={styles.metricBox}>
+        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+          COD Outstanding
+        </ThemedText>
+        <ThemedText style={[styles.metricBoxValue, { color: theme.warning }]}>
+          {formatCurrency(globalTotals.codPending)}
+        </ThemedText>
+        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+          Pending collection
+        </ThemedText>
+      </View>
+      
+      <View style={styles.metricBox}>
+        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+          Revenue Mix
+        </ThemedText>
+        <ThemedText style={[styles.metricBoxValue, { color: theme.primary }]}>
+          85% / 15%
+        </ThemedText>
+        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+          Products / Delivery
+        </ThemedText>
+      </View>
+      
+      <View style={styles.metricBox}>
+        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+          Est. Net Margin
+        </ThemedText>
+        <ThemedText style={[styles.metricBoxValue, { color: theme.secondary }]}>
+          ~8-10%
+        </ThemedText>
+        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+          After all costs
+        </ThemedText>
+      </View>
+    </View>
+  </View>
+)}
                   </View>
                 )}
 
