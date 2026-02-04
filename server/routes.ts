@@ -3091,170 +3091,205 @@ console.log("👑 Registering admin routes...");
 app.get("/api/admin/metrics", async (req, res) => {
   try {
     console.log("📊 Fetching admin metrics...");
-    
-    // ✅ Use direct DB queries instead of storage methods
+
     const allStores = await db.select().from(stores);
-    console.log(`✅ Found ${allStores.length} stores`);
-    
     const allOrders = await db.select().from(orders);
-    console.log(`✅ Found ${allOrders.length} orders`);
-    
-    const metrics = await Promise.all(allStores.map(async (store) => {
+
+    console.log(`✅ Stores: ${allStores.length}`);
+    console.log(`✅ Orders: ${allOrders.length}`);
+
+    const metrics: any[] = [];
+
+    for (const store of allStores) {
       try {
-        // Get store staff
+        // =========================
+        // STORE ORDERS (SAFE)
+        // =========================
+        const storeOrders = allOrders.filter(
+  o => o.store_id && String(o.store_id) === String(store.id)
+);
+
+
+        // =========================
+        // STORE STAFF
+        // =========================
         const staff = await db
           .select()
           .from(storeStaff)
           .where(eq(storeStaff.storeId, store.id));
-        
-        // Get store orders
-        const storeOrders = allOrders.filter((o) => o.storeId === store.id);
-        
-        // ✅ Safe calculation of total revenue with explicit null checks
-        const totalRevenue = storeOrders
-          .filter(o => o.status === "delivered" && o.total != null)
-          .reduce((sum, o) => {
-            const orderTotal = Number(o.total);
-            return sum + (isNaN(orderTotal) ? 0 : orderTotal);
-          }, 0);
-        
-        // Calculate today's metrics
+
+        // =========================
+        // HELPERS
+        // =========================
+        const safeDate = (d: any) => {
+          if (!d) return null;
+          const date = new Date(d);
+          return isNaN(date.getTime()) ? null : date;
+        };
+
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
-        
+
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+
+        // =========================
+        // FILTERS
+        // =========================
+        const deliveredOrders = storeOrders.filter(
+          o => o.status === "delivered" && o.total != null
+        );
+
         const todayOrders = storeOrders.filter(o => {
-          if (!o.createdAt) return false;
-          const orderDate = new Date(o.createdAt);
-          return orderDate >= todayStart;
+          const d = safeDate(o.created_at);
+          return d && d >= todayStart;
         });
-        
-        const todayRevenue = todayOrders
-          .filter(o => o.status === "delivered" && o.total != null)
-          .reduce((sum, o) => {
-            const orderTotal = Number(o.total);
-            return sum + (isNaN(orderTotal) ? 0 : orderTotal);
-          }, 0);
-        
-        // Calculate month metrics
-        const thisMonthStart = new Date();
-        thisMonthStart.setDate(1);
-        thisMonthStart.setHours(0, 0, 0, 0);
-        
+
         const monthOrders = storeOrders.filter(o => {
-          if (!o.createdAt) return false;
-          const orderDate = new Date(o.createdAt);
-          return orderDate >= thisMonthStart;
+          const d = safeDate(o.created_at);
+          return d && d >= monthStart;
         });
-        
-        const monthRevenue = monthOrders
-          .filter(o => o.status === "delivered" && o.total != null)
-          .reduce((sum, o) => {
-            const orderTotal = Number(o.total);
-            return sum + (isNaN(orderTotal) ? 0 : orderTotal);
+
+        if (!storeOrders.length) {
+  metrics.push({
+    ...store,
+    totalStaff: staff.length,
+    onlineStaff: staff.filter(s => s.status === "online").length,
+    staff: [],
+    pickers: [],
+    drivers: [],
+    orderCount: 0,
+    pendingOrders: 0,
+    activeOrders: 0,
+    deliveredOrders: 0,
+    cancelledOrders: 0,
+    totalRevenue: 0,
+    todayRevenue: 0,
+    todayOrders: 0,
+    monthRevenue: 0,
+    monthOrders: 0,
+    avgOrderValue: 0,
+    completionRate: 0,
+    codCollected: 0,
+    codPending: 0,
+  });
+  continue;
+}
+
+
+        // =========================
+        // FINANCIALS
+        // =========================
+        const sumTotal = (orders: any[]) =>
+          orders.reduce((sum, o) => {
+            const t = Number(o.total);
+            return sum + (isNaN(t) ? 0 : t);
           }, 0);
-        
-        // Calculate average order value
-        const deliveredOrders = storeOrders.filter(o => o.status === "delivered" && o.total != null);
-        const avgOrderValue = deliveredOrders.length > 0
-          ? totalRevenue / deliveredOrders.length
-          : 0;
-        
-        // Calculate completion rate
-        const completedOrders = storeOrders.filter(o => 
+
+        const totalRevenue = sumTotal(deliveredOrders);
+        const todayRevenue = sumTotal(todayOrders.filter(o => o.status === "delivered"));
+        const monthRevenue = sumTotal(monthOrders.filter(o => o.status === "delivered"));
+
+        const avgOrderValue =
+          deliveredOrders.length > 0
+            ? totalRevenue / deliveredOrders.length
+            : 0;
+
+        const completedOrders = storeOrders.filter(o =>
           ["delivered", "cancelled"].includes(o.status || "")
         );
-        const completionRate = completedOrders.length > 0
-          ? (deliveredOrders.length / completedOrders.length) * 100
-          : 0;
-        
-        // COD collection stats
+
+        const completionRate =
+          completedOrders.length > 0
+            ? (deliveredOrders.length / completedOrders.length) * 100
+            : 0;
+
+        // =========================
+        // COD
+        // =========================
         const codOrders = storeOrders.filter(o => o.paymentMethod === "cod");
-        const codCollected = codOrders
-          .filter(o => o.codCollected === true && o.total != null)
-          .reduce((sum, o) => {
-            const orderTotal = Number(o.total);
-            return sum + (isNaN(orderTotal) ? 0 : orderTotal);
-          }, 0);
-        
-        const codPending = codOrders
-          .filter(o => !o.codCollected && o.status === "delivered" && o.total != null)
-          .reduce((sum, o) => {
-            const orderTotal = Number(o.total);
-            return sum + (isNaN(orderTotal) ? 0 : orderTotal);
-          }, 0);
-        
-        // ✅ Enrich staff with user data safely
-       const enriched = await Promise.all(staff.map(async (s) => {
-  try {
-    // ✅ CRITICAL FIX: Validate userId exists before querying
-    if (!s.userId) {
-      console.log(`⚠️ Staff ${s.id} has no userId assigned`);
-      return {
-        ...s,
-        user: null,
-        stats: { totalOrders: 0, delivered: 0, active: 0 }
-      };
-    }
-    
-    const [u] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, s.userId))
-      .limit(1);
-            
-            // Get staff-specific orders
-            let staffOrders: any[] = [];
-            if (s.role === "picker") {
-              staffOrders = allOrders.filter(o => o.pickerId === s.userId);
-            } else if (s.role === "driver") {
-              staffOrders = allOrders.filter(o => o.driverId === s.userId);
+
+        const codCollected = sumTotal(
+          codOrders.filter(o => o.codCollected === true)
+        );
+
+        const codPending = sumTotal(
+          codOrders.filter(
+            o => o.status === "delivered" && !o.codCollected
+          )
+        );
+
+        // =========================
+        // STAFF ENRICHMENT (SAFE)
+        // =========================
+        const enrichedStaff = [];
+
+        for (const s of staff) {
+          try {
+            if (!s.userId) {
+              enrichedStaff.push({
+                ...s,
+                user: null,
+                stats: { totalOrders: 0, delivered: 0, active: 0 },
+              });
+              continue;
             }
-            
-            const staffDelivered = staffOrders.filter(o => o.status === "delivered").length;
-            const staffActive = staffOrders.filter(o => 
-              !["delivered", "cancelled"].includes(o.status || "")
-            ).length;
-            
-            return { 
-              ...s, 
-              user: u ? { 
-                id: u.id, 
-                username: u.username, 
-                phone: u.phone, 
-                email: u.email,
-                name: u.name 
-              } : null,
+
+            const [user] = await db
+              .select()
+              .from(users)
+              .where(eq(users.id, s.userId))
+              .limit(1);
+
+            const staffOrders =
+              s.role === "picker"
+                ? allOrders.filter(o => o.pickerId === s.userId)
+                : s.role === "driver"
+                ? allOrders.filter(o => o.driverId === s.userId)
+                : [];
+
+            enrichedStaff.push({
+              ...s,
+              user: user
+                ? {
+                    id: user.id,
+                    username: user.username,
+                    phone: user.phone,
+                    email: user.email,
+                    name: user.name,
+                  }
+                : null,
               stats: {
                 totalOrders: staffOrders.length,
-                delivered: staffDelivered,
-                active: staffActive,
-              }
-            };
-          } catch (staffError) {
-            console.error(`❌ Error enriching staff ${s.id}:`, staffError);
-            return {
-              ...s,
-              user: null,
-              stats: { totalOrders: 0, delivered: 0, active: 0 }
-            };
+                delivered: staffOrders.filter(o => o.status === "delivered").length,
+                active: staffOrders.filter(
+                  o => !["delivered", "cancelled"].includes(o.status || "")
+                ).length,
+              },
+            });
+          } catch (e) {
+            console.error("⚠️ Staff enrich failed:", s.id);
           }
-        }));
-        
-        return {
+        }
+
+        // =========================
+        // PUSH STORE METRICS
+        // =========================
+        metrics.push({
           ...store,
           totalStaff: staff.length,
           onlineStaff: staff.filter(s => s.status === "online").length,
-          staff: enriched,
-          pickers: enriched.filter(s => s.role === "picker"),
-          drivers: enriched.filter(s => s.role === "driver"),
+          staff: enrichedStaff,
+          pickers: enrichedStaff.filter(s => s.role === "picker"),
+          drivers: enrichedStaff.filter(s => s.role === "driver"),
           orderCount: storeOrders.length,
           pendingOrders: storeOrders.filter(o => o.status === "pending").length,
-          activeOrders: storeOrders.filter(o => 
+          activeOrders: storeOrders.filter(o =>
             ["confirmed", "picking", "packed", "delivering"].includes(o.status || "")
           ).length,
           deliveredOrders: deliveredOrders.length,
           cancelledOrders: storeOrders.filter(o => o.status === "cancelled").length,
-          // Financial metrics
           totalRevenue,
           todayRevenue,
           todayOrders: todayOrders.length,
@@ -3264,49 +3299,27 @@ app.get("/api/admin/metrics", async (req, res) => {
           completionRate,
           codCollected,
           codPending,
-        };
-      } catch (storeError) {
-        console.error(`❌ Error processing store ${store.id}:`, storeError);
-        // Return minimal store data if processing fails
-        return {
-          ...store,
-          totalStaff: 0,
-          onlineStaff: 0,
-          staff: [],
-          pickers: [],
-          drivers: [],
-          orderCount: 0,
-          pendingOrders: 0,
-          activeOrders: 0,
-          deliveredOrders: 0,
-          cancelledOrders: 0,
-          totalRevenue: 0,
-          todayRevenue: 0,
-          todayOrders: 0,
-          monthRevenue: 0,
-          monthOrders: 0,
-          avgOrderValue: 0,
-          completionRate: 0,
-          codCollected: 0,
-          codPending: 0,
-        };
+        });
+      } catch (storeErr) {
+        console.error("💥 Store skipped:", store.id, storeErr);
       }
-    }));
-    
-    // Calculate global totals
+    }
+
+    // =========================
+    // GLOBAL TOTALS
+    // =========================
     const globalTotals = {
-      totalRevenue: metrics.reduce((sum, m) => sum + (m.totalRevenue || 0), 0),
-      todayRevenue: metrics.reduce((sum, m) => sum + (m.todayRevenue || 0), 0),
-      monthRevenue: metrics.reduce((sum, m) => sum + (m.monthRevenue || 0), 0),
-      avgOrderValue: metrics.length > 0
-        ? metrics.reduce((sum, m) => sum + (m.avgOrderValue || 0), 0) / metrics.length
-        : 0,
-      codCollected: metrics.reduce((sum, m) => sum + (m.codCollected || 0), 0),
-      codPending: metrics.reduce((sum, m) => sum + (m.codPending || 0), 0),
+      totalRevenue: metrics.reduce((s, m) => s + (m.totalRevenue || 0), 0),
+      todayRevenue: metrics.reduce((s, m) => s + (m.todayRevenue || 0), 0),
+      monthRevenue: metrics.reduce((s, m) => s + (m.monthRevenue || 0), 0),
+      avgOrderValue:
+        metrics.length > 0
+          ? metrics.reduce((s, m) => s + (m.avgOrderValue || 0), 0) / metrics.length
+          : 0,
+      codCollected: metrics.reduce((s, m) => s + (m.codCollected || 0), 0),
+      codPending: metrics.reduce((s, m) => s + (m.codPending || 0), 0),
     };
-    
-    console.log(`✅ Successfully calculated metrics for ${metrics.length} stores`);
-    
+
     res.json({
       stores: metrics,
       globalTotals,
@@ -3322,17 +3335,12 @@ app.get("/api/admin/metrics", async (req, res) => {
       },
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
-    console.error("❌ Admin metrics error:", error);
-    console.error("Stack trace:", error instanceof Error ? error.stack : "No stack trace");
-    
-    res.status(500).json({ 
-      error: "Failed to fetch metrics",
-      message: error instanceof Error ? error.message : "Unknown error",
-      details: process.env.NODE_ENV === 'development' ? error : undefined
-    });
+  } catch (err) {
+    console.error("❌ Admin metrics fatal error:", err);
+    res.status(500).json({ error: "Failed to fetch admin metrics" });
   }
 });
+
 
 
 // ============================================
