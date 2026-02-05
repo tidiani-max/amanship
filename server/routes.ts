@@ -16,7 +16,10 @@ import {
   salaryPayments,
   storeDailyFinancials,
   appSettings,
-  promotionCostLog,  // ✅ ADD THIS LINE
+  promotionCostLog,
+  storeOwners,
+  productFreshness,
+  storeOwnerDailyEarnings,
 } from "../shared/schema";
 import { findNearestAvailableStore, getStoresWithAvailability, estimateDeliveryTime } from "./storeAvailability";
 import express, { Express } from 'express';
@@ -6596,6 +6599,669 @@ app.get("/api/admin/promotions/cost-impact", async (req, res) => {
 console.log("✅ Enhanced financial tracking routes registered");
 
 
+// server/routes.ts - ADD THESE ROUTES
+
+// ==================== STORE OWNER ROUTES ====================
+console.log("👨‍💼 Registering store owner routes...");
+
+// CREATE STORE + OWNER (Admin Only)
+app.post("/api/admin/stores-with-owner", async (req, res) => {
+  try {
+    const { 
+      userId, // Admin user ID
+      storeName,
+      storeAddress,
+      storeLatitude,
+      storeLongitude,
+      codAllowed,
+      ownerName,
+      ownerPhone,
+      ownerEmail,
+      tempPassword
+    } = req.body;
+
+    console.log("🏪 Creating store with owner:", { storeName, ownerPhone });
+
+    // Verify admin access
+    const [admin] = await db.select().from(users).where(eq(users.id, userId));
+    if (!admin || (admin.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    // Check if phone already exists
+    const [existingUser] = await db.select().from(users).where(eq(users.phone, ownerPhone));
+    if (existingUser) {
+      return res.status(400).json({ error: "Phone number already registered" });
+    }
+
+    // Create store owner user account
+    const [ownerUser] = await db.insert(users).values({
+      username: ownerPhone.replace(/\+/g, ''),
+      password: tempPassword || "owner123", // Temporary password
+      phone: ownerPhone,
+      email: ownerEmail || null,
+      name: ownerName,
+      role: "store_owner",
+      firstLogin: true, // Force password reset on first login
+    }).returning();
+
+    console.log(`✅ Created store owner user: ${ownerUser.id}`);
+
+    // Create store
+    const [newStore] = await db.insert(stores).values({
+      name: storeName,
+      address: storeAddress,
+      latitude: String(storeLatitude || -6.2088),
+      longitude: String(storeLongitude || 106.8456),
+      ownerId: ownerUser.id,
+      codAllowed: codAllowed ?? true,
+      isActive: true,
+    }).returning();
+
+    console.log(`✅ Created store: ${newStore.id}`);
+
+    // Create store owner relationship
+    const [storeOwner] = await db.insert(storeOwners).values({
+      userId: ownerUser.id,
+      storeId: newStore.id,
+      commissionRate: "0", // No commission, they get profit
+      status: "active",
+    }).returning();
+
+    console.log(`✅ Created store owner relationship: ${storeOwner.id}`);
+
+    res.json({
+      success: true,
+      store: newStore,
+      owner: {
+        id: ownerUser.id,
+        name: ownerUser.name,
+        phone: ownerUser.phone,
+        email: ownerUser.email,
+      },
+      message: `Store created! Owner should login with phone ${ownerPhone} and password "${tempPassword || "owner123"}" to set their new password.`
+    });
+
+  } catch (error) {
+    console.error("❌ Create store with owner error:", error);
+    res.status(500).json({ error: "Failed to create store and owner" });
+  }
+});
+
+// GET STORE OWNER DASHBOARD
+app.get("/api/store-owner/dashboard", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Get store owner record
+    const [storeOwner] = await db
+      .select()
+      .from(storeOwners)
+      .where(eq(storeOwners.userId, userId as string));
+
+    if (!storeOwner) {
+      return res.status(403).json({ error: "Not a store owner" });
+    }
+
+    // Get store details
+    const [store] = await db
+      .select()
+      .from(stores)
+      .where(eq(stores.id, storeOwner.storeId));
+
+    // Get today's earnings
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [todayEarnings] = await db
+      .select()
+      .from(storeOwnerDailyEarnings)
+      .where(
+        and(
+          eq(storeOwnerDailyEarnings.storeOwnerId, storeOwner.id),
+          eq(storeOwnerDailyEarnings.date, today)
+        )
+      );
+
+    // Get this month's earnings
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    const monthEarnings = await db
+      .select({
+        totalRevenue: sql<string>`SUM(${storeOwnerDailyEarnings.totalRevenue})`,
+        totalCosts: sql<string>`SUM(${storeOwnerDailyEarnings.productCosts} + ${storeOwnerDailyEarnings.staffBonuses} + ${storeOwnerDailyEarnings.storePromoCosts})`,
+        netProfit: sql<string>`SUM(${storeOwnerDailyEarnings.netProfit})`,
+        totalOrders: sql<number>`SUM(${storeOwnerDailyEarnings.ordersCompleted})::int`,
+      })
+      .from(storeOwnerDailyEarnings)
+      .where(
+        and(
+          eq(storeOwnerDailyEarnings.storeOwnerId, storeOwner.id),
+          gte(storeOwnerDailyEarnings.date, monthStart)
+        )
+      );
+
+    // Get staff count
+    const staff = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.storeId, store.id));
+
+    res.json({
+      store,
+      today: {
+        revenue: parseFloat(todayEarnings?.totalRevenue || "0"),
+        costs: parseFloat(todayEarnings?.productCosts || "0") + 
+               parseFloat(todayEarnings?.staffBonuses || "0") + 
+               parseFloat(todayEarnings?.storePromoCosts || "0"),
+        netProfit: parseFloat(todayEarnings?.netProfit || "0"),
+        orders: todayEarnings?.ordersCompleted || 0,
+      },
+      month: {
+        revenue: parseFloat(monthEarnings[0]?.totalRevenue || "0"),
+        costs: parseFloat(monthEarnings[0]?.totalCosts || "0"),
+        netProfit: parseFloat(monthEarnings[0]?.netProfit || "0"),
+        orders: monthEarnings[0]?.totalOrders || 0,
+      },
+      staff: {
+        total: staff.length,
+        online: staff.filter(s => s.status === 'online').length,
+        pickers: staff.filter(s => s.role === 'picker').length,
+        drivers: staff.filter(s => s.role === 'driver').length,
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Store owner dashboard error:", error);
+    res.status(500).json({ error: "Failed to fetch dashboard" });
+  }
+});
+
+// GET EARNINGS HISTORY
+app.get("/api/store-owner/earnings/history", async (req, res) => {
+  try {
+    const { userId, days = 30 } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [storeOwner] = await db
+      .select()
+      .from(storeOwners)
+      .where(eq(storeOwners.userId, userId as string));
+
+    if (!storeOwner) {
+      return res.status(403).json({ error: "Not a store owner" });
+    }
+
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - Number(days));
+    daysAgo.setHours(0, 0, 0, 0);
+
+    const history = await db
+      .select()
+      .from(storeOwnerDailyEarnings)
+      .where(
+        and(
+          eq(storeOwnerDailyEarnings.storeOwnerId, storeOwner.id),
+          gte(storeOwnerDailyEarnings.date, daysAgo)
+        )
+      )
+      .orderBy(desc(storeOwnerDailyEarnings.date));
+
+    res.json(history);
+
+  } catch (error) {
+    console.error("❌ Get earnings history error:", error);
+    res.status(500).json({ error: "Failed to fetch history" });
+  }
+});
+
+console.log("✅ Store owner routes registered");
+
+
+
+// server/routes.ts - ADD THESE ROUTES FOR FRESH PRODUCTS
+
+// ==================== FRESH PRODUCT MANAGEMENT ====================
+console.log("🥬 Registering fresh product routes...");
+
+// CREATE/UPDATE PRODUCT WITH FRESHNESS (Store Owner or Picker)
+app.post("/api/store-owner/products", uploadMiddleware.single("image"), async (req, res) => {
+  try {
+    const { 
+      userId, 
+      name, 
+      brand, 
+      description, 
+      costPrice,
+      margin,
+      stock, 
+      categoryId, 
+      location,
+      // Freshness fields
+      isFresh,
+      expiryDate,
+      shelfLife,
+      temperatureMin,
+      temperatureMax,
+      requiresRefrigeration,
+      requiresFreezer,
+      specialPackaging,
+      handlingInstructions,
+    } = req.body;
+
+    console.log("🥬 Creating fresh product:", { userId, name, isFresh });
+
+    if (!userId || !name || !categoryId) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    if (!costPrice || isNaN(parseInt(costPrice)) || parseInt(costPrice) <= 0) {
+      return res.status(400).json({ 
+        error: "Cost price is required and must be greater than 0" 
+      });
+    }
+
+    // Verify user is store owner or picker
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    let storeId: string;
+
+    if (user.role === "store_owner") {
+      const [storeOwner] = await db
+        .select()
+        .from(storeOwners)
+        .where(eq(storeOwners.userId, userId));
+      
+      if (!storeOwner) {
+        return res.status(403).json({ error: "Not a store owner" });
+      }
+      storeId = storeOwner.storeId;
+    } else if (user.role === "picker") {
+      const [staff] = await db
+        .select()
+        .from(storeStaff)
+        .where(eq(storeStaff.userId, userId));
+      
+      if (!staff) {
+        return res.status(403).json({ error: "Not assigned to a store" });
+      }
+      storeId = staff.storeId;
+    } else {
+      return res.status(403).json({ error: "Only store owners and pickers can add products" });
+    }
+
+    // Calculate freshness priority
+    let freshnessPriority = 0;
+    if (isFresh === "true" || isFresh === true) {
+      if (expiryDate) {
+        const daysUntilExpiry = Math.floor(
+          (new Date(expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        );
+        // Higher priority for items expiring sooner
+        freshnessPriority = Math.max(0, 100 - daysUntilExpiry);
+      } else if (shelfLife) {
+        // Priority based on shelf life (shorter = higher priority)
+        freshnessPriority = Math.max(0, 100 - parseInt(shelfLife));
+      }
+    }
+
+    // Create product
+    const productData: any = {
+      name: name.trim(),
+      brand: brand || "Generic",
+      description: description || "",
+      costPrice: parseInt(costPrice),
+      categoryId,
+      image: req.file ? `/uploads/${req.file.filename}` : null,
+      // Freshness fields
+      isFresh: isFresh === "true" || isFresh === true,
+      expiryDate: expiryDate ? new Date(expiryDate) : null,
+      shelfLife: shelfLife ? parseInt(shelfLife) : null,
+      temperatureMin: temperatureMin ? parseFloat(temperatureMin) : null,
+      temperatureMax: temperatureMax ? parseFloat(temperatureMax) : null,
+      requiresRefrigeration: requiresRefrigeration === "true" || requiresRefrigeration === true,
+      requiresFreezer: requiresFreezer === "true" || requiresFreezer === true,
+      specialPackaging: specialPackaging || null,
+      handlingInstructions: handlingInstructions || null,
+      freshnessPriority,
+    };
+
+    if (margin && parseFloat(margin) > 0) {
+      productData.margin = parseFloat(margin);
+    }
+
+    const [newProduct] = await db.insert(products).values(productData).returning();
+
+    console.log(`✅ Product created: ${newProduct.name} (Fresh: ${newProduct.isFresh})`);
+
+    // Create inventory
+    await db.insert(storeInventory).values({
+      storeId,
+      productId: newProduct.id,
+      stockCount: parseInt(stock) || 0,
+      location: location || null,
+      isAvailable: true,
+    });
+
+    res.json({ 
+      success: true, 
+      message: "Product created successfully",
+      product: newProduct,
+    });
+
+  } catch (error) {
+    console.error("❌ Create fresh product error:", error);
+    res.status(500).json({ 
+      error: "Failed to create product",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
+
+// UPDATE PRODUCT WITH FRESHNESS
+app.patch("/api/store-owner/products/:id", uploadMiddleware.single("image"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { 
+      userId,
+      name,
+      brand,
+      description,
+      costPrice,
+      margin,
+      stock,
+      categoryId,
+      location,
+      // Freshness fields
+      isFresh,
+      expiryDate,
+      shelfLife,
+      temperatureMin,
+      temperatureMax,
+      requiresRefrigeration,
+      requiresFreezer,
+      specialPackaging,
+      handlingInstructions,
+    } = req.body;
+
+    console.log("🔄 Updating product:", { id, userId });
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Verify ownership
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    let storeId: string;
+
+    if (user.role === "store_owner") {
+      const [storeOwner] = await db
+        .select()
+        .from(storeOwners)
+        .where(eq(storeOwners.userId, userId));
+      
+      if (!storeOwner) {
+        return res.status(403).json({ error: "Not a store owner" });
+      }
+      storeId = storeOwner.storeId;
+    } else if (user.role === "picker") {
+      const [staff] = await db
+        .select()
+        .from(storeStaff)
+        .where(eq(storeStaff.userId, userId));
+      
+      if (!staff) {
+        return res.status(403).json({ error: "Not assigned to a store" });
+      }
+      storeId = staff.storeId;
+    } else {
+      return res.status(403).json({ error: "Only store owners and pickers can update products" });
+    }
+
+    // Verify product belongs to this store
+    const [inventory] = await db
+      .select()
+      .from(storeInventory)
+      .where(
+        and(
+          eq(storeInventory.productId, id),
+          eq(storeInventory.storeId, storeId)
+        )
+      );
+
+    if (!inventory) {
+      return res.status(403).json({ error: "Product not found in your store" });
+    }
+
+    // Update inventory stock if provided
+    if (stock !== undefined) {
+      await db
+        .update(storeInventory)
+        .set({ 
+          stockCount: parseInt(stock),
+          location: location || inventory.location,
+        })
+        .where(eq(storeInventory.id, inventory.id));
+    }
+
+    // Build update data
+    const updateData: any = {};
+    
+    if (name !== undefined) updateData.name = name.trim();
+    if (brand !== undefined) updateData.brand = brand;
+    if (description !== undefined) updateData.description = description;
+    if (categoryId !== undefined) updateData.categoryId = categoryId;
+    
+    if (costPrice && costPrice.trim() !== "") {
+      const cost = parseInt(costPrice);
+      if (cost > 0) updateData.costPrice = cost;
+    }
+    
+    if (margin && margin.trim() !== "") {
+      const newMargin = parseFloat(margin);
+      if (newMargin >= 0) updateData.margin = newMargin;
+    }
+
+    if (req.file) {
+      updateData.image = `/uploads/${req.file.filename}`;
+    }
+
+    // Freshness updates
+    if (isFresh !== undefined) {
+      updateData.isFresh = isFresh === "true" || isFresh === true;
+    }
+    if (expiryDate !== undefined) {
+      updateData.expiryDate = expiryDate ? new Date(expiryDate) : null;
+    }
+    if (shelfLife !== undefined) {
+      updateData.shelfLife = shelfLife ? parseInt(shelfLife) : null;
+    }
+    if (temperatureMin !== undefined) {
+      updateData.temperatureMin = temperatureMin ? parseFloat(temperatureMin) : null;
+    }
+    if (temperatureMax !== undefined) {
+      updateData.temperatureMax = temperatureMax ? parseFloat(temperatureMax) : null;
+    }
+    if (requiresRefrigeration !== undefined) {
+      updateData.requiresRefrigeration = requiresRefrigeration === "true" || requiresRefrigeration === true;
+    }
+    if (requiresFreezer !== undefined) {
+      updateData.requiresFreezer = requiresFreezer === "true" || requiresFreezer === true;
+    }
+    if (specialPackaging !== undefined) {
+      updateData.specialPackaging = specialPackaging || null;
+    }
+    if (handlingInstructions !== undefined) {
+      updateData.handlingInstructions = handlingInstructions || null;
+    }
+
+    // Recalculate freshness priority if fresh
+    if (updateData.isFresh || (updateData.expiryDate !== undefined) || (updateData.shelfLife !== undefined)) {
+      const [currentProduct] = await db.select().from(products).where(eq(products.id, id));
+      
+      const isProductFresh = updateData.isFresh !== undefined ? updateData.isFresh : currentProduct.isFresh;
+      const productExpiryDate = updateData.expiryDate !== undefined ? updateData.expiryDate : currentProduct.expiryDate;
+      const productShelfLife = updateData.shelfLife !== undefined ? updateData.shelfLife : currentProduct.shelfLife;
+
+      let freshnessPriority = 0;
+      if (isProductFresh) {
+        if (productExpiryDate) {
+          const daysUntilExpiry = Math.floor(
+            (new Date(productExpiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+          );
+          freshnessPriority = Math.max(0, 100 - daysUntilExpiry);
+        } else if (productShelfLife) {
+          freshnessPriority = Math.max(0, 100 - productShelfLife);
+        }
+      }
+      updateData.freshnessPriority = freshnessPriority;
+    }
+
+    // Update product
+    const [updated] = await db
+      .update(products)
+      .set(updateData)
+      .where(eq(products.id, id))
+      .returning();
+
+    console.log(`✅ Product updated: ${id}`);
+
+    res.json({
+      success: true,
+      message: "Product updated successfully",
+      product: updated,
+    });
+
+  } catch (error) {
+    console.error("❌ Update product error:", error);
+    res.status(500).json({ 
+      error: "Failed to update product",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
+
+// GET FRESH PRODUCTS EXPIRING SOON (Alert for store owners)
+app.get("/api/store-owner/products/expiring-soon", async (req, res) => {
+  try {
+    const { userId, days = 7 } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [storeOwner] = await db
+      .select()
+      .from(storeOwners)
+      .where(eq(storeOwners.userId, userId as string));
+
+    if (!storeOwner) {
+      return res.status(403).json({ error: "Not a store owner" });
+    }
+
+    const daysAhead = new Date();
+    daysAhead.setDate(daysAhead.getDate() + Number(days));
+
+    const expiringProducts = await db
+      .select({
+        product: products,
+        inventory: storeInventory,
+      })
+      .from(products)
+      .innerJoin(storeInventory, eq(products.id, storeInventory.productId))
+      .where(
+        and(
+          eq(storeInventory.storeId, storeOwner.storeId),
+          eq(products.isFresh, true),
+          lte(products.expiryDate, daysAhead),
+          gt(storeInventory.stockCount, 0)
+        )
+      )
+      .orderBy(products.expiryDate);
+
+    const formatted = expiringProducts.map(({ product, inventory }) => ({
+      ...product,
+      stockCount: inventory.stockCount,
+      location: inventory.location,
+      daysUntilExpiry: product.expiryDate 
+        ? Math.floor((new Date(product.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : null,
+    }));
+
+    res.json(formatted);
+
+  } catch (error) {
+    console.error("❌ Get expiring products error:", error);
+    res.status(500).json({ error: "Failed to fetch expiring products" });
+  }
+});
+
+// GET FRESH PRODUCTS REQUIRING SPECIAL HANDLING
+app.get("/api/picker/fresh-products-priority", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [staff] = await db
+      .select()
+      .from(storeStaff)
+      .where(eq(storeStaff.userId, userId as string));
+
+    if (!staff) {
+      return res.status(403).json({ error: "Not a picker" });
+    }
+
+    // Get fresh products sorted by priority
+    const freshProducts = await db
+      .select({
+        product: products,
+        inventory: storeInventory,
+      })
+      .from(products)
+      .innerJoin(storeInventory, eq(products.id, storeInventory.productId))
+      .where(
+        and(
+          eq(storeInventory.storeId, staff.storeId),
+          eq(products.isFresh, true),
+          gt(storeInventory.stockCount, 0)
+        )
+      )
+      .orderBy(desc(products.freshnessPriority));
+
+    const formatted = freshProducts.map(({ product, inventory }) => ({
+      ...product,
+      stockCount: inventory.stockCount,
+      location: inventory.location,
+      needsUrgentAttention: product.freshnessPriority > 80,
+      requiresColdChain: product.requiresRefrigeration || product.requiresFreezer,
+    }));
+
+    res.json(formatted);
+
+  } catch (error) {
+    console.error("❌ Get fresh products error:", error);
+    res.status(500).json({ error: "Failed to fetch fresh products" });
+  }
+});
+
+console.log("✅ Fresh product routes registered");
 
 // Run daily at 9 AM
 cron.schedule('0 9 * * *', async () => {

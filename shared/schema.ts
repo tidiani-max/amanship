@@ -4,7 +4,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // --- Enums ---
-export const userRoles = ["customer", "picker", "driver", "owner", "admin"] as const;
+export const userRoles = ["customer", "picker", "driver", "owner", "store_owner", "admin"] as const;
 export type UserRole = typeof userRoles[number];
 
 export const staffStatuses = ["online", "offline"] as const;
@@ -125,6 +125,16 @@ export const products = pgTable("products", {
   nutrition: jsonb("nutrition"),
   isRamadanSpecial: boolean("is_ramadan_special").default(false).notNull(),
   ramadanDiscount: integer("ramadan_discount"),
+  isFresh: boolean("is_fresh").default(false).notNull(),
+  expiryDate: timestamp("expiry_date"),
+  shelfLife: integer("shelf_life"),
+  temperatureMin: decimal("temperature_min", { precision: 4, scale: 1 }),
+  temperatureMax: decimal("temperature_max", { precision: 4, scale: 1 }),
+  requiresRefrigeration: boolean("requires_refrigeration").default(false).notNull(),
+  requiresFreezer: boolean("requires_freezer").default(false).notNull(),
+  specialPackaging: text("special_packaging"),
+  handlingInstructions: text("handling_instructions"),
+  freshnessPriority: integer("freshness_priority").default(0).notNull(),
 });
 
 export const storeInventory = pgTable("store_inventory", {
@@ -442,6 +452,50 @@ export const adminFinancials = pgTable("admin_financials", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const storeOwners = pgTable("store_owners", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: varchar("user_id", { length: 255 }).notNull().unique(),
+  storeId: varchar("store_id", { length: 255 }).notNull().unique(),
+  commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }).default("0").notNull(),
+  status: text("status").default("active").notNull(),
+  onboardedAt: timestamp("onboarded_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const productFreshness = pgTable("product_freshness", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  productId: varchar("product_id", { length: 255 }).notNull().unique(),
+  isFresh: boolean("is_fresh").default(false).notNull(),
+  expiryDate: timestamp("expiry_date"),
+  shelfLife: integer("shelf_life"), // days
+  temperatureMin: decimal("temperature_min", { precision: 4, scale: 1 }),
+  temperatureMax: decimal("temperature_max", { precision: 4, scale: 1 }),
+  requiresRefrigeration: boolean("requires_refrigeration").default(false).notNull(),
+  requiresFreezer: boolean("requires_freezer").default(false).notNull(),
+  specialPackaging: text("special_packaging"),
+  handlingInstructions: text("handling_instructions"),
+  priority: integer("priority").default(0).notNull(), // Higher = more urgent
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const storeOwnerDailyEarnings = pgTable("store_owner_daily_earnings", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  storeOwnerId: varchar("store_owner_id", { length: 255 }).notNull(),
+  storeId: varchar("store_id", { length: 255 }).notNull(),
+  date: timestamp("date").notNull(),
+  totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).default("0").notNull(),
+  productCosts: decimal("product_costs", { precision: 12, scale: 2 }).default("0").notNull(),
+  deliveryRevenue: decimal("delivery_revenue", { precision: 12, scale: 2 }).default("0").notNull(),
+  storePromoCosts: decimal("store_promo_costs", { precision: 12, scale: 2 }).default("0").notNull(),
+  staffBonuses: decimal("staff_bonuses", { precision: 12, scale: 2 }).default("0").notNull(),
+  grossProfit: decimal("gross_profit", { precision: 12, scale: 2 }).default("0").notNull(),
+  netProfit: decimal("net_profit", { precision: 12, scale: 2 }).default("0").notNull(),
+  ordersCompleted: integer("orders_completed").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 
 
 export const appSettings = pgTable("app_settings", {
@@ -584,6 +638,19 @@ export const promotionCostLogRelations = relations(promotionCostLog, ({ one }) =
 }));
 
 export const adminFinancialsRelations = relations(adminFinancials, ({ }) => ({}));
+export const storeOwnersRelations = relations(storeOwners, ({ one }) => ({
+  user: one(users, { fields: [storeOwners.userId], references: [users.id] }),
+  store: one(stores, { fields: [storeOwners.storeId], references: [stores.id] }),
+}));
+
+export const productFreshnessRelations = relations(productFreshness, ({ one }) => ({
+  product: one(products, { fields: [productFreshness.productId], references: [products.id] }),
+}));
+
+export const storeOwnerDailyEarningsRelations = relations(storeOwnerDailyEarnings, ({ one }) => ({
+  storeOwner: one(storeOwners, { fields: [storeOwnerDailyEarnings.storeOwnerId], references: [storeOwners.id] }),
+  store: one(stores, { fields: [storeOwnerDailyEarnings.storeId], references: [stores.id] }),
+}));
 
 
 // --- Insert Schemas ---
@@ -627,6 +694,11 @@ export const insertAdminFinancialsSchema = createInsertSchema(adminFinancials).o
   createdAt: true, 
   updatedAt: true 
 });
+export const insertStoreOwnerSchema = createInsertSchema(storeOwners).omit({ id: true, createdAt: true });
+export const insertProductFreshnessSchema = createInsertSchema(productFreshness).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertStoreOwnerDailyEarningsSchema = createInsertSchema(storeOwnerDailyEarnings).omit({ id: true, createdAt: true, updatedAt: true });
+
+
 
 // --- Type Exports ---
 export type User = typeof users.$inferSelect;
@@ -678,3 +750,9 @@ export type PromotionCostLog = typeof promotionCostLog.$inferSelect;
 export type InsertPromotionCostLog = z.infer<typeof insertPromotionCostLogSchema>;
 export type AdminFinancials = typeof adminFinancials.$inferSelect;
 export type InsertAdminFinancials = z.infer<typeof insertAdminFinancialsSchema>;
+export type StoreOwner = typeof storeOwners.$inferSelect;
+export type InsertStoreOwner = z.infer<typeof insertStoreOwnerSchema>;
+export type ProductFreshness = typeof productFreshness.$inferSelect;
+export type InsertProductFreshness = z.infer<typeof insertProductFreshnessSchema>;
+export type StoreOwnerDailyEarnings = typeof storeOwnerDailyEarnings.$inferSelect;
+export type InsertStoreOwnerDailyEarnings = z.infer<typeof insertStoreOwnerDailyEarningsSchema>;
