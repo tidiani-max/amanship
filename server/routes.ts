@@ -3955,6 +3955,26 @@ app.post("/api/seed", async (_req: Request, res: Response) => {
         
         return res.json({ message: "Store data seeded successfully" });
       }
+      const [existingDemoStoreOwner] = await db
+  .select()
+  .from(storeOwners)
+  .where(
+    and(
+      eq(storeOwners.userId, "demo-user"),
+      eq(storeOwners.storeId, "demo-store")
+    )
+  )
+  .limit(1);
+
+if (!existingDemoStoreOwner) {
+  await db.insert(storeOwners).values({
+    userId: "demo-user",
+    storeId: "demo-store",
+    commissionRate: "0",
+    status: "active",
+  });
+  console.log("✅ Created demo store owner relationship");
+}
       
       return res.json({ message: "Data already seeded" });
     }

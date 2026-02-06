@@ -78,7 +78,8 @@ export default function QRISPaymentModal({
           {/* QR Code */}
           <View style={styles.qrContainer}>
             <Image
-              source={require('@/assets/qris-code.png')} 
+              
+source={require('../../assets/qris-code.png')} 
               style={styles.qrCode}
               resizeMode="contain"
             />
