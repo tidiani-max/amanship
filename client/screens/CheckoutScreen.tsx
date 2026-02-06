@@ -34,10 +34,11 @@ interface PaymentOption {
   id: string;
   name: string;
   icon: string;
-  type: "ewallet" | "bank" | "card" | "cod";
+  type: "ewallet" | "bank" | "card" | "cod" | "qris";
 }
 
 const PAYMENT_METHODS: PaymentOption[] = [
+  { id: "qris", name: "QRIS (Scan QR)", icon: "smartphone", type: "qris" },
   { id: "gopay", name: "GoPay", icon: "credit-card", type: "ewallet" },
   { id: "ovo", name: "OVO", icon: "credit-card", type: "ewallet" },
   { id: "shopeepay", name: "ShopeePay", icon: "credit-card", type: "ewallet" },
@@ -71,7 +72,7 @@ export default function CheckoutScreen() {
   const { user } = useAuth();
   const { t } = useLanguage();
 
-  const [selectedPayment, setSelectedPayment] = useState<PaymentOption>(PAYMENT_METHODS[0]);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentOption>(PAYMENT_METHODS[0]); // QRIS by default
   const [itemsWithStore, setItemsWithStore] = useState<any[]>([]);
   const [isLoadingStores, setIsLoadingStores] = useState(true);
   const [voucherCode, setVoucherCode] = useState('');
@@ -82,7 +83,7 @@ export default function CheckoutScreen() {
   const [promotionDiscount, setPromotionDiscount] = useState(0);
   const [freeDelivery, setFreeDelivery] = useState(false);
 
-  // --- START BACKEND LOGIC (PRESERVED) ---
+  // Existing backend logic...
   const { data: addresses = [] } = useQuery<Address[]>({
     queryKey: ["/api/addresses", user?.id],
     enabled: !!user?.id,
@@ -260,12 +261,28 @@ export default function CheckoutScreen() {
       const itemsPayload = items.map((i) => ({
         productId: i.product.id, name: i.product.name, price: i.product.price, quantity: i.quantity,
       }));
+      
+      // ✅ Determine payment method type
+      let paymentMethod = "midtrans"; // Default
+      if (selectedPayment.type === "cod") {
+        paymentMethod = "cod";
+      } else if (selectedPayment.type === "qris") {
+        paymentMethod = "qris";
+      }
+      
       const res = await apiRequest("POST", "/api/orders", {
-        customerLat: location.latitude.toString(), customerLng: location.longitude.toString(),
-        paymentMethod: selectedPayment.type === "cod" ? "cod" : "midtrans",
-        items: itemsPayload, total: finalTotal, voucherCode: appliedVoucher?.code,
-        voucherDiscount, promotionId: autoAppliedPromotion?.id, promotionDiscount,
-        freeDelivery, addressId, userId: user.id,
+        customerLat: location.latitude.toString(), 
+        customerLng: location.longitude.toString(),
+        paymentMethod, // ✅ Send correct payment method
+        items: itemsPayload, 
+        total: finalTotal, 
+        voucherCode: appliedVoucher?.code,
+        voucherDiscount, 
+        promotionId: autoAppliedPromotion?.id, 
+        promotionDiscount,
+        freeDelivery, 
+        addressId, 
+        userId: user.id,
       });
       if (!res.ok) throw new Error("Order failed");
       return res.json();
@@ -285,7 +302,6 @@ export default function CheckoutScreen() {
   };
 
   const isProcessing = saveAddressMutation.isPending || orderMutation.isPending;
-  // --- END BACKEND LOGIC ---
 
   if (isLoadingStores) {
     return (
@@ -309,7 +325,6 @@ export default function CheckoutScreen() {
         {/* Address Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-           
             <ThemedText style={styles.sectionTitle}>{t.checkout.deliveryAddress}</ThemedText>
           </View>
           
@@ -318,7 +333,6 @@ export default function CheckoutScreen() {
               <Feather name={isManualLocation ? "map-pin" : "navigation"} size={20} color="#4f46e5" />
             </View>
             <View style={{ flex: 1, marginLeft: 12 }}>
-
               <ThemedText style={{ color: '#64748b', fontSize: 13 }} numberOfLines={2}>
                 {isManualLocation && manualAddress ? manualAddress : "Location detected automatically"}
               </ThemedText>
@@ -435,6 +449,14 @@ export default function CheckoutScreen() {
               >
                 <Feather name={method.icon as any} size={18} color={selectedPayment.id === method.id ? "#4f46e5" : "#64748b"} />
                 <ThemedText style={[styles.paymentText, selectedPayment.id === method.id && { color: '#4f46e5' }]}>{method.name}</ThemedText>
+                
+                {/* ✅ QRIS Badge */}
+                {method.type === "qris" && (
+                  <View style={styles.qrisBadge}>
+                    <ThemedText style={styles.qrisBadgeText}>Cheapest</ThemedText>
+                  </View>
+                )}
+                
                 <View style={[styles.radioOuter, selectedPayment.id === method.id && { borderColor: '#4f46e5' }]}>
                   {selectedPayment.id === method.id && <View style={styles.radioInner} />}
                 </View>
@@ -481,7 +503,6 @@ export default function CheckoutScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Sectioning & Headers
   section: {
     marginBottom: 32,
   },
@@ -496,8 +517,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#1e293b',
   },
-
-  // Premium Cards & Containers
   premiumCard: {
     backgroundColor: '#ffffff',
     borderRadius: 24,
@@ -523,8 +542,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-
-  // Store Breakdown Cards
   storeCard: {
     backgroundColor: '#ffffff',
     borderRadius: 24,
@@ -559,8 +576,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
   },
-
-  // Item Rows
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -593,8 +608,6 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontWeight: '700',
   },
-
-  // Voucher Input Section
   voucherContainer: {
     flexDirection: 'row',
     backgroundColor: '#ffffff',
@@ -635,8 +648,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
-
-  // Payment Options
   paymentCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -657,6 +668,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#64748b',
   },
+  qrisBadge: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  qrisBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
   radioOuter: {
     width: 20,
     height: 20,
@@ -672,8 +694,6 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#4f46e5',
   },
-
-  // Floating Footer with Grand Total
   footer: {
     position: 'absolute',
     bottom: 0,
@@ -734,17 +754,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f8fafc',
   },
-  // Add these inside your styles object:
   addressRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12, // Replaces Spacing.md
+    gap: 12,
   },
-
   addressIcon: {
     width: 44,
     height: 44,
-    borderRadius: 14, // Squircle style
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },

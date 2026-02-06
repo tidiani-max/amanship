@@ -14,9 +14,10 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import { Spacing } from "@/constants/theme";
-// Add MaterialCommunityIcons to this line
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { StaffEarningsDashboard } from "@/components/StaffEarningsDashboard";
+// 🆕 QRIS - Import the modal
+import QRISPaymentModal from "@/components/QRISPaymentModal";
 
 // BRAND COLORS
 const BRAND_PURPLE = "#6338f2"; 
@@ -131,7 +132,7 @@ function OrderCard({
 
   const getStatusColor = () => {
     if (isDelivered) return BRAND_MINT;
-    if (isAtStore) return "#f59e0b"; // Warning Orange
+    if (isAtStore) return "#f59e0b";
     if (isOnWay) return BRAND_PURPLE;
     return theme.textSecondary;
   };
@@ -237,7 +238,9 @@ function OrderCard({
         <View style={styles.detailRow}>
           <Feather name="credit-card" size={16} color="#64748b" />
           <ThemedText type="body" style={{ color: '#334155' }}>
-            {order.paymentMethod === "cod" ? "CASH ON DELIVERY" : "PREPAID"}
+            {/* 🆕 QRIS - Show payment method */}
+            {order.paymentMethod === "cod" ? "CASH ON DELIVERY" : 
+             order.paymentMethod === "qris" ? "QRIS PAYMENT" : "PREPAID"}
           </ThemedText>
         </View>
 
@@ -245,6 +248,14 @@ function OrderCard({
           <View style={[styles.codBadge, { backgroundColor: "#fff7ed", borderLeftWidth: 4, borderLeftColor: "#f59e0b" }]}>
             <ThemedText type="small" style={{ color: "#9a3412", fontWeight: '700' }}>COLLECT FROM CUSTOMER:</ThemedText>
             <ThemedText type="h3" style={{ color: "#ea580c" }}>Rp {order.total.toLocaleString()}</ThemedText>
+          </View>
+        )}
+
+        {/* 🆕 QRIS - Show QRIS badge */}
+        {order.paymentMethod === "qris" && !isDelivered && (
+          <View style={[styles.codBadge, { backgroundColor: "#ecfdf5", borderLeftWidth: 4, borderLeftColor: BRAND_MINT }]}>
+            <ThemedText type="small" style={{ color: "#065f46", fontWeight: '700' }}>SHOW QR CODE TO CUSTOMER</ThemedText>
+            <ThemedText type="h3" style={{ color: BRAND_MINT }}>Rp {order.total.toLocaleString()}</ThemedText>
           </View>
         )}
 
@@ -295,7 +306,10 @@ function OrderCard({
               ) : (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Feather name="check-circle" size={16} color="#FFF" />
-                  <ThemedText type="button" style={{ color: "#FFF", fontWeight: '800' }}>Enter PIN</ThemedText>
+                  {/* 🆕 QRIS - Better button text */}
+                  <ThemedText type="button" style={{ color: "#FFF", fontWeight: '800' }}>
+                    {order.paymentMethod === "qris" ? "Show QR & PIN" : "Enter PIN"}
+                  </ThemedText>
                 </View>
               )}
             </Pressable>
@@ -320,6 +334,11 @@ export default function DriverDashboardScreen() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [locationPermission, setLocationPermission] = useState(false);
 
+  // 🆕 QRIS - Add QRIS modal state
+  const [qrisModalVisible, setQrisModalVisible] = useState(false);
+  const [qrisOrderId, setQrisOrderId] = useState<string | null>(null);
+  const [qrisAmount, setQrisAmount] = useState(0);
+
   // ==================== DATA FETCHING ====================
   const { data: dashboard, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["/api/driver/dashboard", user?.id],
@@ -335,72 +354,72 @@ export default function DriverDashboardScreen() {
   });
 
   // ==================== LOCATION TRACKING ====================
-useEffect(() => {
-  (async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    setLocationPermission(status === 'granted');
-    if (status !== 'granted') {
-      Alert.alert(
-        'Location Required',
-        'Please enable location services to use delivery tracking.',
-        [{ text: 'OK' }]
-      );
-    }
-  })();
-}, []);
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(status === 'granted');
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location Required',
+          'Please enable location services to use delivery tracking.',
+          [{ text: 'OK' }]
+        );
+      }
+    })();
+  }, []);
 
-useEffect(() => {
-  if (Platform.OS === 'web' || !locationPermission || !user?.id) return;
+  useEffect(() => {
+    if (Platform.OS === 'web' || !locationPermission || !user?.id) return;
 
-  const activeOrders = dashboard?.orders?.active || [];
-  const activeDelivery = activeOrders.find((o: any) => o.status === 'delivering');
+    const activeOrders = dashboard?.orders?.active || [];
+    const activeDelivery = activeOrders.find((o: any) => o.status === 'delivering');
 
-  if (!activeDelivery) return;
+    if (!activeDelivery) return;
 
-  let locationSubscription: Location.LocationSubscription | null = null;
+    let locationSubscription: Location.LocationSubscription | null = null;
 
-  const startTracking = async () => {
-    try {
-      locationSubscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 3000,
-          distanceInterval: 10,
-        },
-        async (location) => {
-          try {
-            await fetch(
-              `${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/update`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  driverId: user.id,
-                  orderId: activeDelivery.id,
-                  latitude: location.coords.latitude,
-                  longitude: location.coords.longitude,
-                  heading: location.coords.heading || 0,
-                  speed: location.coords.speed || 0,
-                  accuracy: location.coords.accuracy || 0,
-                }),
-              }
-            );
-          } catch (error) {
-            console.error('❌ Location update error:', error);
+    const startTracking = async () => {
+      try {
+        locationSubscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 3000,
+            distanceInterval: 10,
+          },
+          async (location) => {
+            try {
+              await fetch(
+                `${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/update`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    driverId: user.id,
+                    orderId: activeDelivery.id,
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                    heading: location.coords.heading || 0,
+                    speed: location.coords.speed || 0,
+                    accuracy: location.coords.accuracy || 0,
+                  }),
+                }
+              );
+            } catch (error) {
+              console.error('❌ Location update error:', error);
+            }
           }
-        }
-      );
-    } catch (error) {
-      console.error('❌ Failed to start location tracking:', error);
-    }
-  };
+        );
+      } catch (error) {
+        console.error('❌ Failed to start location tracking:', error);
+      }
+    };
 
-  startTracking();
+    startTracking();
 
-  return () => {
-    if (locationSubscription) locationSubscription.remove();
-  };
-}, [dashboard?.orders?.active, user?.id, locationPermission]);
+    return () => {
+      if (locationSubscription) locationSubscription.remove();
+    };
+  }, [dashboard?.orders?.active, user?.id, locationPermission]);
 
   // ==================== MUTATIONS ====================
   const pickupMutation = useMutation({
@@ -442,6 +461,9 @@ useEffect(() => {
       setPinModalVisible(false);
       setSelectedOrderId(null);
       setUpdatingOrderId(null);
+      // 🆕 QRIS - Clear QRIS state too
+      setQrisModalVisible(false);
+      setQrisOrderId(null);
       Alert.alert("✅ Success", "Order delivered successfully!");
     },
     onError: (error: Error) => {
@@ -462,9 +484,35 @@ useEffect(() => {
     );
   };
 
+  // 🆕 QRIS - Updated handleComplete to check payment method
   const handleComplete = (orderId: string) => {
-    setSelectedOrderId(orderId);
-    setPinModalVisible(true);
+    const activeOrders = dashboard?.orders?.active || [];
+    const order = activeOrders.find((o: any) => o.id === orderId);
+    
+    // Check if this is a QRIS order
+    if (order?.paymentMethod === "qris") {
+      console.log("🎯 QRIS order detected, showing QR code first");
+      setQrisOrderId(orderId);
+      setQrisAmount(order.total);
+      setQrisModalVisible(true);
+    } else {
+      // COD or other payment - go straight to PIN
+      console.log("💵 COD/Other order, showing PIN directly");
+      setSelectedOrderId(orderId);
+      setPinModalVisible(true);
+    }
+  };
+
+  // 🆕 QRIS - Handler for when QRIS payment is confirmed
+  const handleQrisConfirmed = () => {
+    console.log("✅ QRIS payment confirmed by driver");
+    setQrisModalVisible(false);
+    
+    // Now show PIN modal for delivery verification
+    if (qrisOrderId) {
+      setSelectedOrderId(qrisOrderId);
+      setPinModalVisible(true);
+    }
   };
 
   const handlePinSubmit = (pin: string) => {
@@ -535,19 +583,13 @@ useEffect(() => {
             ONLINE & READY
           </ThemedText>
         </View>
-        <View style={[styles.statusRow, { marginTop: 8, marginBottom: 16 }]}>
-  <View style={[styles.statusDot, { backgroundColor: BRAND_MINT }]} />
-  <ThemedText type="caption" style={{ color: '#64748b', marginLeft: 6, fontWeight: '700' }}>
-    ONLINE & READY
-  </ThemedText>
-</View>
 
-{/* 💰 STAFF EARNINGS DASHBOARD */}
-{user?.id && (
-  <View style={{ paddingHorizontal: 16, marginTop: 8, marginBottom: 16 }}>
-    <StaffEarningsDashboard userId={user.id} role="driver" />
-  </View>
-)}
+        {/* 💰 STAFF EARNINGS DASHBOARD */}
+        {user?.id && (
+          <View style={{ paddingHorizontal: 16, marginTop: 8, marginBottom: 16 }}>
+            <StaffEarningsDashboard userId={user.id} role="driver" />
+          </View>
+        )}
       </View>
 
       {/* Content */}
@@ -627,11 +669,26 @@ useEffect(() => {
         )}
       </ScrollView>
 
+      {/* PIN Modal (existing) */}
       <PINModal
         visible={pinModalVisible}
-        onClose={() => { setPinModalVisible(false); setSelectedOrderId(null); }}
+        onClose={() => { 
+          setPinModalVisible(false); 
+          setSelectedOrderId(null); 
+        }}
         onSubmit={handlePinSubmit}
         isLoading={completeMutation.isPending}
+      />
+
+      {/* 🆕 QRIS - Add QRIS Payment Modal */}
+      <QRISPaymentModal
+        visible={qrisModalVisible}
+        orderTotal={qrisAmount}
+        onConfirmPayment={handleQrisConfirmed}
+        onCancel={() => {
+          setQrisModalVisible(false);
+          setQrisOrderId(null);
+        }}
       />
     </ThemedView>
   );
@@ -649,8 +706,6 @@ const styles = StyleSheet.create({
   errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 16 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  
-  // ADD THIS BLOCK TO FIX THE ERROR
   addressSection: {
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -658,7 +713,6 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-
   orderCard: { marginBottom: 16, padding: 16, borderRadius: 20, backgroundColor: 'white' },
   orderHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },

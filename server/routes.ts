@@ -418,12 +418,11 @@ app.post("/api/auth/login", async (req, res) => {
     return res.status(401).json({ error: "Invalid phone or password" });
   }
   
-  // ✅ Check if staff needs to reset password on first login
-  const isStaff = ["picker", "driver"].includes(user.role);
+  // ✅ Check if store owner or staff needs to reset password on first login
+  const requiresPasswordReset = ["picker", "driver", "store_owner"].includes(user.role) && user.firstLogin;
   
-  if (isStaff && user.firstLogin) {
-    console.log("⚠️ Staff first login detected - redirecting to password reset");
-    // Staff first login - trigger password reset flow
+  if (requiresPasswordReset) {
+    console.log("⚠️ First login detected - redirecting to password reset");
     return res.json({ 
       error: "first_login_required",
       user: { 
@@ -437,7 +436,6 @@ app.post("/api/auth/login", async (req, res) => {
   
   console.log("✅ Login successful for user:", user.id, "Role:", user.role);
   
-  // Normal login
   res.json({ 
     user: { 
       id: user.id, 
@@ -475,14 +473,15 @@ app.post("/api/auth/check-phone", async (req, res) => {
 
     console.log("✅ User found:", user.id, "Role:", user.role, "FirstLogin:", user.firstLogin);
 
-    // Check if it's a staff member who needs to reset password
-    const isStaff = ["picker", "driver"].includes(user.role);
-    const requiresPasswordReset = isStaff && user.firstLogin === true;
+    // ✅ Check if it's staff OR store owner who needs to reset password
+    const isStaffOrOwner = ["picker", "driver", "store_owner"].includes(user.role);
+    const requiresPasswordReset = isStaffOrOwner && user.firstLogin === true;
 
     return res.json({
       exists: true,
       firstLogin: user.firstLogin || false,
-      isStaff,
+      isStaff: isStaffOrOwner,
+      role: user.role, // ✅ Include role so app knows it's a store owner
       requiresPasswordReset,
       message: requiresPasswordReset 
         ? "Please set your new password" 
@@ -6605,6 +6604,7 @@ console.log("✅ Enhanced financial tracking routes registered");
 console.log("👨‍💼 Registering store owner routes...");
 
 // CREATE STORE + OWNER (Admin Only)
+// CREATE STORE + OWNER (Admin Only)
 app.post("/api/admin/stores-with-owner", async (req, res) => {
   try {
     const { 
@@ -6634,15 +6634,18 @@ app.post("/api/admin/stores-with-owner", async (req, res) => {
       return res.status(400).json({ error: "Phone number already registered" });
     }
 
+    // ✅ Generate a secure temporary password
+    const generatedPassword = tempPassword || `owner${Math.random().toString(36).slice(-8)}`;
+
     // Create store owner user account
     const [ownerUser] = await db.insert(users).values({
       username: ownerPhone.replace(/\+/g, ''),
-      password: tempPassword || "owner123", // Temporary password
+      password: generatedPassword,
       phone: ownerPhone,
       email: ownerEmail || null,
       name: ownerName,
-      role: "store_owner",
-      firstLogin: true, // Force password reset on first login
+      role: "store_owner", // ✅ Important: set role to store_owner
+      firstLogin: true, // ✅ Force password reset on first login
     }).returning();
 
     console.log(`✅ Created store owner user: ${ownerUser.id}`);
@@ -6653,7 +6656,7 @@ app.post("/api/admin/stores-with-owner", async (req, res) => {
       address: storeAddress,
       latitude: String(storeLatitude || -6.2088),
       longitude: String(storeLongitude || 106.8456),
-      ownerId: ownerUser.id,
+      ownerId: ownerUser.id, // ✅ Link owner to store
       codAllowed: codAllowed ?? true,
       isActive: true,
     }).returning();
@@ -6664,7 +6667,7 @@ app.post("/api/admin/stores-with-owner", async (req, res) => {
     const [storeOwner] = await db.insert(storeOwners).values({
       userId: ownerUser.id,
       storeId: newStore.id,
-      commissionRate: "0", // No commission, they get profit
+      commissionRate: "0",
       status: "active",
     }).returning();
 
@@ -6679,7 +6682,8 @@ app.post("/api/admin/stores-with-owner", async (req, res) => {
         phone: ownerUser.phone,
         email: ownerUser.email,
       },
-      message: `Store created! Owner should login with phone ${ownerPhone} and password "${tempPassword || "owner123"}" to set their new password.`
+      tempPassword: generatedPassword, // ✅ Return temp password
+      message: `Store and owner created! Owner should login with phone ${ownerPhone} and temporary password to set their new password.`
     });
 
   } catch (error) {
@@ -6790,13 +6794,27 @@ app.get("/api/store-owner/earnings/history", async (req, res) => {
       return res.status(400).json({ error: "userId required" });
     }
 
+    console.log(`📊 Fetching earnings history for userId: ${userId}`);
+
+    // ✅ Check if user exists
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // ✅ Allow demo-user OR actual store owners
+    if (user.role !== "store_owner" && userId !== "demo-user") {
+      return res.status(403).json({ error: "Store owner access required" });
+    }
+
     const [storeOwner] = await db
       .select()
       .from(storeOwners)
       .where(eq(storeOwners.userId, userId as string));
 
     if (!storeOwner) {
-      return res.status(403).json({ error: "Not a store owner" });
+      // Return empty array instead of error
+      return res.json([]);
     }
 
     const daysAgo = new Date();

@@ -50,6 +50,7 @@ interface StoreData {
   isActive: boolean;
   codAllowed: boolean;
   staff: StaffMember[];
+  owner?: StoreOwner | null; // ✅ ADD THIS
   totalRevenue: number;
   todayRevenue: number;
   todayOrders: number;
@@ -62,6 +63,18 @@ interface StoreData {
   orderCount: number;
   deliveredOrders: number;
   cancelledOrders: number;
+}
+interface StoreOwner {
+  id: string;
+  userId: string;
+  storeId: string;
+  user: {
+    id: string;
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    username: string;
+  } | null;
 }
 
 interface Promotion {
@@ -686,6 +699,10 @@ const StoreWithOwnerModal: React.FC<StoreWithOwnerModalProps> = ({ visible, onCl
               multiline
             />
           </View>
+          {/* Inside store card, after store name/address */}
+{/* ✅ FIXED: Store Owner Display */}
+
+
 
           <Pressable 
             style={[styles.button, styles.buttonSecondary, { borderColor: theme.secondary, marginBottom: Spacing.lg }]}
@@ -2145,7 +2162,35 @@ const handleStoreOwnerSubmit = (data: any) => {
                             {store.isActive ? 'Active' : 'Inactive'}
                           </ThemedText>
                         </View>
-                      </View>
+                      {store.owner && (
+              <View style={{ 
+                marginTop: Spacing.md, 
+                paddingTop: Spacing.md, 
+                borderTopWidth: 1, 
+                borderTopColor: theme.border 
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginBottom: Spacing.xs }}>
+                  <Feather name="user" size={14} color={theme.primary} />
+                  <ThemedText style={{ fontSize: 13, fontWeight: '600', color: theme.primary }}>
+                    Store Owner
+                  </ThemedText>
+                </View>
+                <ThemedText style={{ fontSize: 14, fontWeight: '600' }}>
+                  {store.owner.user?.name || store.owner.user?.username || 'No name'}
+                </ThemedText>
+                {store.owner.user?.phone && (
+                  <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
+                    📱 {store.owner.user.phone}
+                  </ThemedText>
+                )}
+                {store.owner.user?.email && (
+                  <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
+                    ✉️ {store.owner.user.email}
+                  </ThemedText>
+                )}
+              </View>
+            )}
+          </View>
                       <View style={styles.storeActions}>
                         <Pressable 
                           style={[styles.iconButton, { backgroundColor: theme.secondary + '15' }]}

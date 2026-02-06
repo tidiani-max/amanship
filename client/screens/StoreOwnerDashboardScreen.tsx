@@ -83,6 +83,7 @@ interface Promotion {
   bannerImage?: string | null;
 }
 
+
 // ===================== HELPERS =====================
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('id-ID', {
@@ -553,13 +554,24 @@ export default function StoreOwnerDashboardScreen() {
   });
 
   // Get earnings history
-  const { data: earningsHistory = [] } = useQuery({
-    queryKey: ["/api/store-owner/earnings/history"],
-    queryFn: async () => {
+ // Line ~150 - Update the query to handle errors gracefully
+const { data: earningsHistory = [] } = useQuery({
+  queryKey: ["/api/store-owner/earnings/history"],
+  queryFn: async () => {
+    try {
       const response = await apiRequest("GET", `/api/store-owner/earnings/history?userId=demo-user&days=30`);
+      if (!response.ok) {
+        console.warn("Failed to fetch earnings history");
+        return [];
+      }
       return response.json();
-    },
-  });
+    } catch (error) {
+      console.error("Earnings history error:", error);
+      return [];
+    }
+  },
+  retry: false, // Don't retry on failure
+});
 
   if (isLoading) {
     return (
