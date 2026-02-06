@@ -27,6 +27,8 @@ import { Product, Category, Order, CartItem, Address, Voucher } from "@/types";
 import PhoneSignupScreen from "@/screens/onboarding/PhoneSignupScreen"; 
 import { useAuth } from "@/context/AuthContext";
 import ChatScreen from "@/screens/ChatScreen";
+import StoreOwnerDashboardScreen from "@/screens/StoreOwnerDashboardScreen";
+
 
 
 
@@ -55,6 +57,7 @@ export type RootStackParamList = {
   Language: undefined;
   About: undefined;
   StoreProducts: { store: { id: string; name: string; distance: number } }; // NEW
+  StoreOwnerDashboard: undefined;
 };
 
 
@@ -82,6 +85,13 @@ export default function RootStackNavigator() {
           {user?.role === 'admin' && (
             <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} options={{ headerShown: false }} />
           )}
+          {user?.role === 'store_owner' && (
+  <Stack.Screen 
+    name="StoreOwnerDashboard" 
+    component={StoreOwnerDashboardScreen}
+    options={{ headerShown: false }}
+  />
+)}
           {user?.role === 'picker' && (
             <Stack.Screen name="PickerDashboard" component={PickerDashboardScreen} options={{ headerShown: false }} />
           )}

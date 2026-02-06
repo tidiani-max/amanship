@@ -26,6 +26,7 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 import * as ImagePicker from 'expo-image-picker';
 import { getImageUrl } from "@/lib/image-url";
 import { StaffEarningsDashboard } from "@/components/StaffEarningsDashboard";
+
 // ===================== TYPES =====================
 interface StaffMember {
   id: string;
@@ -563,6 +564,211 @@ infoBox: {
 });
 
 // ===================== MODALS =====================
+interface StoreWithOwnerModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onSubmit: (data: any) => void;
+  isLoading: boolean;
+}
+
+
+const StoreWithOwnerModal: React.FC<StoreWithOwnerModalProps> = ({ visible, onClose, onSubmit, isLoading }) => {
+  const { theme } = useTheme();
+  const [storeName, setStoreName] = useState("");
+  const [storeAddress, setStoreAddress] = useState("");
+  const [storeLatitude, setStoreLatitude] = useState("-6.2088");
+  const [storeLongitude, setStoreLongitude] = useState("106.8456");
+  const [codAllowed, setCodAllowed] = useState(true);
+  const [ownerName, setOwnerName] = useState("");
+  const [ownerPhone, setOwnerPhone] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [geocoding, setGeocoding] = useState(false);
+
+  if (!visible) return null;
+
+  const handleGeocode = async () => {
+    if (!storeAddress.trim()) {
+      Alert.alert("Error", "Please enter an address first");
+      return;
+    }
+
+    setGeocoding(true);
+    try {
+      const response = await apiRequest("POST", "/api/admin/geocode", { address: storeAddress });
+      const data = await response.json();
+      
+      if (data.latitude && data.longitude) {
+        setStoreLatitude(String(data.latitude));
+        setStoreLongitude(String(data.longitude));
+        
+        if (data.isDefault) {
+          Alert.alert(
+            "Using Default Location", 
+            data.displayName + "\n\nYou can manually adjust the coordinates if needed."
+          );
+        } else {
+          Alert.alert("Success", `Location found:\n${data.displayName || "Address geocoded"}`);
+        }
+      }
+    } catch (error) {
+      console.error("Geocode error:", error);
+      Alert.alert(
+        "Geocoding Unavailable", 
+        "Using default Jakarta coordinates. You can manually adjust them if needed."
+      );
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (!storeName.trim() || !storeAddress.trim()) {
+      Alert.alert("Error", "Store name and address are required");
+      return;
+    }
+
+    if (!ownerName.trim() || !ownerPhone.trim()) {
+      Alert.alert("Error", "Owner name and phone are required");
+      return;
+    }
+
+    // Generate temporary password
+    const tempPassword = `owner${Math.random().toString(36).slice(-6)}`;
+
+    onSubmit({
+      storeName: storeName.trim(),
+      storeAddress: storeAddress.trim(),
+      storeLatitude: parseFloat(storeLatitude) || -6.2088,
+      storeLongitude: parseFloat(storeLongitude) || 106.8456,
+      codAllowed,
+      ownerName: ownerName.trim(),
+      ownerPhone: ownerPhone.trim(),
+      ownerEmail: ownerEmail.trim() || null,
+      tempPassword,
+    });
+  };
+
+  return (
+    <View style={styles.modalOverlay}>
+      <Card style={StyleSheet.flatten([styles.modalContent, { backgroundColor: theme.backgroundDefault }])}>
+        <KeyboardAwareScrollViewCompat showsVerticalScrollIndicator={false}>
+          <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
+            <ThemedText style={styles.modalTitle}>Add Store + Owner</ThemedText>
+            <Pressable onPress={onClose}>
+              <Feather name="x" size={24} color={theme.text} />
+            </Pressable>
+          </View>
+
+          {/* STORE INFORMATION */}
+          <ThemedText style={{ fontSize: 16, fontWeight: '700', marginBottom: Spacing.md }}>
+            Store Information
+          </ThemedText>
+
+          <View style={styles.formGroup}>
+            <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Store Name *</ThemedText>
+            <TextInput
+              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundTertiary }]}
+              placeholder="e.g. ZendO North Jakarta"
+              placeholderTextColor={theme.textSecondary}
+              value={storeName}
+              onChangeText={setStoreName}
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Address *</ThemedText>
+            <TextInput
+              style={[styles.input, styles.textarea, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundTertiary }]}
+              placeholder="Full store address"
+              placeholderTextColor={theme.textSecondary}
+              value={storeAddress}
+              onChangeText={setStoreAddress}
+              multiline
+            />
+          </View>
+
+          <Pressable 
+            style={[styles.button, styles.buttonSecondary, { borderColor: theme.secondary, marginBottom: Spacing.lg }]}
+            onPress={handleGeocode}
+            disabled={geocoding}
+          >
+            {geocoding ? (
+              <ActivityIndicator size="small" color={theme.secondary} />
+            ) : (
+              <>
+                <Feather name="map-pin" size={16} color={theme.secondary} />
+                <ThemedText style={[styles.buttonText, { color: theme.secondary }]}>Auto-Find Location</ThemedText>
+              </>
+            )}
+          </Pressable>
+
+          {/* OWNER INFORMATION */}
+          <ThemedText style={{ fontSize: 16, fontWeight: '700', marginBottom: Spacing.md, marginTop: Spacing.lg }}>
+            Owner Information
+          </ThemedText>
+
+          <View style={styles.formGroup}>
+            <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Owner Name *</ThemedText>
+            <TextInput
+              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundTertiary }]}
+              placeholder="Full name"
+              placeholderTextColor={theme.textSecondary}
+              value={ownerName}
+              onChangeText={setOwnerName}
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Phone Number *</ThemedText>
+            <TextInput
+              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundTertiary }]}
+              placeholder="+62 812 3456 7890"
+              placeholderTextColor={theme.textSecondary}
+              value={ownerPhone}
+              onChangeText={setOwnerPhone}
+              keyboardType="phone-pad"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Email (Optional)</ThemedText>
+            <TextInput
+              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundTertiary }]}
+              placeholder="owner@example.com"
+              placeholderTextColor={theme.textSecondary}
+              value={ownerEmail}
+              onChangeText={setOwnerEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
+
+          <View style={[styles.infoBox, { backgroundColor: theme.primary + '10', borderColor: theme.primary + '30', marginBottom: Spacing.lg }]}>
+            <Feather name="info" size={16} color={theme.primary} />
+            <ThemedText style={{ flex: 1, marginLeft: Spacing.sm, fontSize: 13, color: theme.text }}>
+              A temporary password will be generated. The owner will be required to reset it on first login.
+            </ThemedText>
+          </View>
+
+          <Pressable
+            style={[styles.button, styles.buttonPrimary, { opacity: isLoading ? 0.6 : 1 }]}
+            onPress={handleSubmit}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <ThemedText style={[styles.buttonText, { color: '#fff' }]}>
+                Create Store + Owner
+              </ThemedText>
+            )}
+          </Pressable>
+        </KeyboardAwareScrollViewCompat>
+      </Card>
+    </View>
+  );
+};
+
 interface StoreModalProps {
   visible: boolean;
   store: StoreData | null;
@@ -580,6 +786,8 @@ const StoreModal: React.FC<StoreModalProps> = ({ visible, store, onClose, onSubm
   const [longitude, setLongitude] = useState(store?.longitude || "106.8456");
   const [codAllowed, setCodAllowed] = useState(store?.codAllowed ?? true);
   const [geocoding, setGeocoding] = useState(false);
+  const [showStoreOwnerModal, setShowStoreOwnerModal] = useState(false);
+
 
   React.useEffect(() => {
     if (store) {
@@ -1257,6 +1465,7 @@ export default function AdminDashboardScreen() {
 
   const [activeTab, setActiveTab] = useState<'overview' | 'stores' | 'promotions' | 'financials'>('overview');
   const [showStoreModal, setShowStoreModal] = useState(false);
+  const [showStoreOwnerModal, setShowStoreOwnerModal] = useState(false);
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [showPromotionModal, setShowPromotionModal] = useState(false);
   const [selectedStore, setSelectedStore] = useState<StoreData | null>(null);
@@ -1322,6 +1531,25 @@ const { data: financialMetrics } = useQuery({
     onError: (error: Error) => Alert.alert("Error", error.message),
   });
 
+const createStoreWithOwnerMutation = useMutation({
+  mutationFn: async (data: any) => {
+    const response = await apiRequest("POST", "/api/admin/stores-with-owner", {
+      userId: "demo-user",
+      ...data
+    });
+    if (!response.ok) throw new Error((await response.json()).error);
+    return response.json();
+  },
+  onSuccess: (data) => {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
+    setShowStoreOwnerModal(false);
+    Alert.alert(
+      "Success!", 
+      `Store and owner created!\n\n${data.message}\n\nThe owner can now login with their phone number.`
+    );
+  },
+  onError: (error: Error) => Alert.alert("Error", error.message),
+});
   const updateStoreMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
       const response = await apiRequest("PATCH", `/api/admin/stores/${id}`, data);
@@ -1567,6 +1795,10 @@ const { data: financialMetrics } = useQuery({
     );
   };
 
+const handleStoreOwnerSubmit = (data: any) => {
+  createStoreWithOwnerMutation.mutate(data);
+};
+
   const handleTogglePromotionActive = (id: string, isActive: boolean) => {
     togglePromotionActiveMutation.mutate({ id, isActive });
   };
@@ -1661,17 +1893,29 @@ const { data: financialMetrics } = useQuery({
             </ThemedText>
             <View style={styles.headerActions}>
               {activeTab === 'stores' && (
-                <Pressable 
-                  style={[styles.button, styles.buttonPrimary]}
-                  onPress={() => {
-                    setSelectedStore(null);
-                    setShowStoreModal(true);
-                  }}
-                >
-                  <Feather name="plus" size={16} color="#fff" />
-                  <ThemedText style={[styles.buttonText, { color: '#fff' }]}>Add Store</ThemedText>
-                </Pressable>
-              )}
+  <>
+    <Pressable 
+      style={[styles.button, styles.buttonPrimary]}
+      onPress={() => {
+        setSelectedStore(null);
+        setShowStoreOwnerModal(true);
+      }}
+    >
+      <Feather name="plus" size={16} color="#fff" />
+      <ThemedText style={[styles.buttonText, { color: '#fff' }]}>Add Store + Owner</ThemedText>
+    </Pressable>
+    <Pressable 
+      style={[styles.button, styles.buttonSecondary, { borderColor: theme.border, marginLeft: Spacing.sm }]}
+      onPress={() => {
+        setSelectedStore(null);
+        setShowStoreModal(true);
+      }}
+    >
+      <Feather name="home" size={16} color={theme.text} />
+      <ThemedText style={[styles.buttonText, { color: theme.text }]}>Add Store Only</ThemedText>
+    </Pressable>
+  </>
+)}
               {activeTab === 'promotions' && (
                 <Pressable 
                   style={[styles.button, styles.buttonPrimary]}
@@ -2535,6 +2779,13 @@ const { data: financialMetrics } = useQuery({
         onDelete={selectedPromotion ? () => handlePromotionDelete(selectedPromotion) : undefined}
         isLoading={isSubmitting}
       />
+      <StoreWithOwnerModal
+  visible={showStoreOwnerModal}
+  onClose={() => setShowStoreOwnerModal(false)}
+  onSubmit={handleStoreOwnerSubmit}
+  isLoading={createStoreWithOwnerMutation.isPending}
+/>
+
     </ThemedView>
   );
 }
