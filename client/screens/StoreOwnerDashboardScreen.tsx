@@ -24,6 +24,7 @@ import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import * as ImagePicker from 'expo-image-picker';
 import { getImageUrl } from "@/lib/image-url";
+import { useAuth } from "@/context/AuthContext"; // ✅ ADD THIS
 
 // ===================== TYPES =====================
 interface StoreOwnerDashboard {
@@ -32,7 +33,7 @@ interface StoreOwnerDashboard {
     name: string;
     address: string;
     isActive: boolean;
-  };
+  } | null;
   today: {
     revenue: number;
     costs: number;
@@ -83,6 +84,22 @@ interface Promotion {
   bannerImage?: string | null;
 }
 
+interface Product {
+  id: string;
+  name: string;
+  brand: string;
+  costPrice: number;
+  price: number;
+  margin: number;
+  stockCount: number;
+  location: string | null;
+  isAvailable: boolean;
+  isFresh: boolean;
+  expiryDate: string | null;
+  requiresRefrigeration: boolean;
+  requiresFreezer: boolean;
+  image: string | null;
+}
 
 // ===================== HELPERS =====================
 const formatCurrency = (amount: number) => {
@@ -199,10 +216,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 4,
   },
-  staffActions: {
-    flexDirection: 'row',
-    gap: Spacing.xs,
-  },
   
   // Promotions
   promotionCard: {
@@ -216,6 +229,24 @@ const styles = StyleSheet.create({
     height: 150,
     borderRadius: BorderRadius.sm,
     marginBottom: Spacing.md,
+  },
+  
+  // Product Cards
+  productCard: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  productImage: {
+    width: 80,
+    height: 80,
+    borderRadius: BorderRadius.sm,
+  },
+  productInfo: {
+    flex: 1,
   },
   
   // Buttons
@@ -236,14 +267,6 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 14,
     fontWeight: '600',
-  },
-  
-  iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   
   statusBadge: {
@@ -282,257 +305,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-  },
-  modalContent: {
-    width: '90%',
-    maxWidth: 600,
-    maxHeight: '90%',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.xl,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.xl,
-    paddingBottom: Spacing.lg,
-    borderBottomWidth: 1,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  formGroup: {
-    marginBottom: Spacing.lg,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: Spacing.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: BorderRadius.sm,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    fontSize: 15,
-  },
-  textarea: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  
 });
-
-// ===================== STORE WITH OWNER MODAL =====================
-interface StoreWithOwnerModalProps {
-  visible: boolean;
-  onClose: () => void;
-  onSubmit: (data: any) => void;
-  isLoading: boolean;
-}
-
-const StoreWithOwnerModal: React.FC<StoreWithOwnerModalProps> = ({ visible, onClose, onSubmit, isLoading }) => {
-  const { theme } = useTheme();
-  const [storeName, setStoreName] = useState("");
-  const [storeAddress, setStoreAddress] = useState("");
-  const [storeLatitude, setStoreLatitude] = useState("-6.2088");
-  const [storeLongitude, setStoreLongitude] = useState("106.8456");
-  const [codAllowed, setCodAllowed] = useState(true);
-  const [ownerName, setOwnerName] = useState("");
-  const [ownerPhone, setOwnerPhone] = useState("");
-  const [ownerEmail, setOwnerEmail] = useState("");
-  const [geocoding, setGeocoding] = useState(false);
-
-  if (!visible) return null;
-
-  const handleGeocode = async () => {
-    if (!storeAddress.trim()) {
-      Alert.alert("Error", "Please enter an address first");
-      return;
-    }
-
-    setGeocoding(true);
-    try {
-      const response = await apiRequest("POST", "/api/admin/geocode", { address: storeAddress });
-      const data = await response.json();
-      
-      if (data.latitude && data.longitude) {
-        setStoreLatitude(String(data.latitude));
-        setStoreLongitude(String(data.longitude));
-        
-        if (data.isDefault) {
-          Alert.alert(
-            "Using Default Location", 
-            data.displayName + "\n\nYou can manually adjust the coordinates if needed."
-          );
-        } else {
-          Alert.alert("Success", `Location found:\n${data.displayName || "Address geocoded"}`);
-        }
-      }
-    } catch (error) {
-      console.error("Geocode error:", error);
-      Alert.alert(
-        "Geocoding Unavailable", 
-        "Using default Jakarta coordinates. You can manually adjust them if needed."
-      );
-    } finally {
-      setGeocoding(false);
-    }
-  };
-
-  const handleSubmit = () => {
-    if (!storeName.trim() || !storeAddress.trim()) {
-      Alert.alert("Error", "Store name and address are required");
-      return;
-    }
-
-    if (!ownerName.trim() || !ownerPhone.trim()) {
-      Alert.alert("Error", "Owner name and phone are required");
-      return;
-    }
-
-    // Generate temporary password
-    const tempPassword = `owner${Math.random().toString(36).slice(-6)}`;
-
-    onSubmit({
-      storeName: storeName.trim(),
-      storeAddress: storeAddress.trim(),
-      storeLatitude: parseFloat(storeLatitude) || -6.2088,
-      storeLongitude: parseFloat(storeLongitude) || 106.8456,
-      codAllowed,
-      ownerName: ownerName.trim(),
-      ownerPhone: ownerPhone.trim(),
-      ownerEmail: ownerEmail.trim() || null,
-      tempPassword,
-    });
-  };
-
-  return (
-    <View style={styles.modalOverlay}>
-      <Card style={StyleSheet.flatten([styles.modalContent, { backgroundColor: theme.backgroundDefault }])}>
-        <KeyboardAwareScrollViewCompat showsVerticalScrollIndicator={false}>
-          <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
-            <ThemedText style={styles.modalTitle}>Add Store + Owner</ThemedText>
-            <Pressable onPress={onClose}>
-              <Feather name="x" size={24} color={theme.text} />
-            </Pressable>
-          </View>
-
-          {/* STORE INFORMATION */}
-          <ThemedText style={{ fontSize: 16, fontWeight: '700', marginBottom: Spacing.md }}>
-            Store Information
-          </ThemedText>
-
-          <View style={styles.formGroup}>
-            <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Store Name *</ThemedText>
-            <TextInput
-              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundTertiary }]}
-              placeholder="e.g. ZendO North Jakarta"
-              placeholderTextColor={theme.textSecondary}
-              value={storeName}
-              onChangeText={setStoreName}
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Address *</ThemedText>
-            <TextInput
-              style={[styles.input, styles.textarea, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundTertiary }]}
-              placeholder="Full store address"
-              placeholderTextColor={theme.textSecondary}
-              value={storeAddress}
-              onChangeText={setStoreAddress}
-              multiline
-            />
-          </View>
-
-          <Pressable 
-            style={[styles.button, styles.buttonSecondary, { borderColor: theme.secondary, marginBottom: Spacing.lg }]}
-            onPress={handleGeocode}
-            disabled={geocoding}
-          >
-            {geocoding ? (
-              <ActivityIndicator size="small" color={theme.secondary} />
-            ) : (
-              <>
-                <Feather name="map-pin" size={16} color={theme.secondary} />
-                <ThemedText style={[styles.buttonText, { color: theme.secondary }]}>Auto-Find Location</ThemedText>
-              </>
-            )}
-          </Pressable>
-
-          {/* OWNER INFORMATION */}
-          <ThemedText style={{ fontSize: 16, fontWeight: '700', marginBottom: Spacing.md, marginTop: Spacing.lg }}>
-            Owner Information
-          </ThemedText>
-
-          <View style={styles.formGroup}>
-            <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Owner Name *</ThemedText>
-            <TextInput
-              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundTertiary }]}
-              placeholder="Full name"
-              placeholderTextColor={theme.textSecondary}
-              value={ownerName}
-              onChangeText={setOwnerName}
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Phone Number *</ThemedText>
-            <TextInput
-              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundTertiary }]}
-              placeholder="+62 812 3456 7890"
-              placeholderTextColor={theme.textSecondary}
-              value={ownerPhone}
-              onChangeText={setOwnerPhone}
-              keyboardType="phone-pad"
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Email (Optional)</ThemedText>
-            <TextInput
-              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundTertiary }]}
-              placeholder="owner@example.com"
-              placeholderTextColor={theme.textSecondary}
-              value={ownerEmail}
-              onChangeText={setOwnerEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-
-          <Pressable
-            style={[styles.button, styles.buttonPrimary, { opacity: isLoading ? 0.6 : 1 }]}
-            onPress={handleSubmit}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <ThemedText style={[styles.buttonText, { color: '#fff' }]}>
-                Create Store + Owner
-              </ThemedText>
-            )}
-          </Pressable>
-        </KeyboardAwareScrollViewCompat>
-      </Card>
-    </View>
-  );
-};
 
 // ===================== MAIN COMPONENT =====================
 export default function StoreOwnerDashboardScreen() {
@@ -540,40 +313,103 @@ export default function StoreOwnerDashboardScreen() {
   const { theme } = useTheme();
   const { t } = useLanguage();
   const queryClient = useQueryClient();
+  const { user } = useAuth(); // ✅ GET ACTUAL USER
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'staff' | 'inventory' | 'promotions'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'staff' | 'products' | 'promotions'>('overview');
+
+  // ✅ FIX 1: Use actual user ID
+  const userId = user?.id;
 
   // Get dashboard data
   const { data: dashboard, isLoading, refetch, isRefetching } = useQuery<StoreOwnerDashboard>({
-    queryKey: ["/api/store-owner/dashboard"],
+    queryKey: ["/api/store-owner/dashboard", userId],
     queryFn: async () => {
-      const response = await apiRequest("GET", `/api/store-owner/dashboard?userId=demo-user`);
+      if (!userId) throw new Error("User not logged in");
+      
+      const response = await apiRequest(
+        "GET",
+        `/api/store-owner/dashboard?userId=${userId}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch dashboard");
+      }
+
       return response.json();
     },
+    enabled: !!userId, // ✅ Only fetch when user is logged in
     refetchInterval: 30000,
   });
 
-  // Get earnings history
- // Line ~150 - Update the query to handle errors gracefully
-const { data: earningsHistory = [] } = useQuery({
-  queryKey: ["/api/store-owner/earnings/history"],
-  queryFn: async () => {
-    try {
-      const response = await apiRequest("GET", `/api/store-owner/earnings/history?userId=demo-user&days=30`);
-      if (!response.ok) {
-        console.warn("Failed to fetch earnings history");
-        return [];
-      }
+  // ✅ FIX 2: Get staff list
+  const { data: staffList = [] } = useQuery<StaffMember[]>({
+    queryKey: ["/api/store-owner/staff", userId],
+    queryFn: async () => {
+      if (!userId || !dashboard?.store?.id) return [];
+      
+      const response = await apiRequest(
+        "GET",
+        `/api/stores/${dashboard.store.id}/staff`
+      );
+      
+      if (!response.ok) return [];
       return response.json();
-    } catch (error) {
-      console.error("Earnings history error:", error);
-      return [];
-    }
-  },
-  retry: false, // Don't retry on failure
-});
+    },
+    enabled: !!userId && !!dashboard?.store?.id,
+  });
 
-  if (isLoading) {
+  // ✅ FIX 3: Get promotions
+  const { data: promotions = [] } = useQuery<Promotion[]>({
+    queryKey: ["/api/store-owner/promotions", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      
+      const response = await apiRequest(
+        "GET",
+        `/api/store-owner/promotions?userId=${userId}`
+      );
+      
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!userId,
+  });
+
+  // ✅ FIX 4: Get products
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["/api/store-owner/products", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      
+      const response = await apiRequest(
+        "GET",
+        `/api/store-owner/products?userId=${userId}`
+      );
+      
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!userId,
+  });
+
+  // ✅ FIX 5: Get fresh products
+  const { data: freshProducts = [] } = useQuery<Product[]>({
+    queryKey: ["/api/store-owner/products/fresh", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      
+      const response = await apiRequest(
+        "GET",
+        `/api/store-owner/products/fresh?userId=${userId}`
+      );
+      
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!userId,
+  });
+
+  if (isLoading || !userId) {
     return (
       <ThemedView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#10b981" />
@@ -584,14 +420,14 @@ const { data: earningsHistory = [] } = useQuery({
     );
   }
 
-  if (!dashboard) {
+  if (!dashboard || !dashboard.store) {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.emptyState}>
           <Feather name="alert-circle" size={64} color={theme.textSecondary} style={styles.emptyIcon} />
-          <ThemedText style={styles.emptyTitle}>No Store Found</ThemedText>
+          <ThemedText style={styles.emptyTitle}>No Store Assigned</ThemedText>
           <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-            You haven't been assigned a store yet. Contact admin for assistance.
+            You haven't been assigned a store yet. Contact admin to set up your store.
           </ThemedText>
         </View>
       </ThemedView>
@@ -624,16 +460,16 @@ const { data: earningsHistory = [] } = useQuery({
           onPress={() => setActiveTab('staff')}
         >
           <ThemedText style={[styles.tabText, { color: activeTab === 'staff' ? '#10b981' : theme.textSecondary }]}>
-            Staff
+            Staff ({dashboard.staff.total})
           </ThemedText>
         </Pressable>
         
         <Pressable 
-          style={[styles.tab, activeTab === 'inventory' && styles.tabActive]}
-          onPress={() => setActiveTab('inventory')}
+          style={[styles.tab, activeTab === 'products' && styles.tabActive]}
+          onPress={() => setActiveTab('products')}
         >
-          <ThemedText style={[styles.tabText, { color: activeTab === 'inventory' ? '#10b981' : theme.textSecondary }]}>
-            Inventory
+          <ThemedText style={[styles.tabText, { color: activeTab === 'products' ? '#10b981' : theme.textSecondary }]}>
+            Products ({products.length})
           </ThemedText>
         </Pressable>
         
@@ -642,7 +478,7 @@ const { data: earningsHistory = [] } = useQuery({
           onPress={() => setActiveTab('promotions')}
         >
           <ThemedText style={[styles.tabText, { color: activeTab === 'promotions' ? '#10b981' : theme.textSecondary }]}>
-            Promotions
+            Promotions ({promotions.length})
           </ThemedText>
         </Pressable>
       </View>
@@ -770,16 +606,201 @@ const { data: earningsHistory = [] } = useQuery({
           </>
         )}
 
-        {/* OTHER TABS - Placeholder for now */}
-        {activeTab !== 'overview' && (
-          <View style={styles.emptyState}>
-            <Feather name="box" size={64} color={theme.textSecondary} style={styles.emptyIcon} />
-            <ThemedText style={styles.emptyTitle}>Coming Soon</ThemedText>
-            <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-              {activeTab === 'staff' && 'Manage your staff members'}
-              {activeTab === 'inventory' && 'View and manage your inventory'}
-              {activeTab === 'promotions' && 'Create store-specific promotions'}
+        {/* ✅ STAFF TAB */}
+        {activeTab === 'staff' && (
+          <View style={styles.contentSection}>
+            <View style={styles.sectionHeader}>
+              <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
+                Store Staff ({staffList.length})
+              </ThemedText>
+            </View>
+            
+            {staffList.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Feather name="users" size={64} color={theme.textSecondary} />
+                <ThemedText style={styles.emptyTitle}>No Staff Yet</ThemedText>
+                <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
+                  Contact admin to add staff members to your store
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={styles.staffGrid}>
+                {staffList.map((member) => (
+                  <View key={member.id} style={[styles.staffCard, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
+                    <View style={[styles.staffAvatar, { backgroundColor: member.status === 'online' ? theme.success + '20' : theme.textSecondary + '20' }]}>
+                      <Feather 
+                        name={member.role === 'picker' ? 'package' : 'truck'} 
+                        size={24} 
+                        color={member.status === 'online' ? theme.success : theme.textSecondary} 
+                      />
+                    </View>
+                    
+                    <View style={styles.staffInfo}>
+                      <ThemedText style={styles.staffName}>
+                        {member.user?.name || member.user?.username || 'Staff Member'}
+                      </ThemedText>
+                      <ThemedText style={[styles.staffRole, { color: theme.textSecondary }]}>
+                        {member.role === 'picker' ? '📦 Picker' : '🚗 Driver'}
+                      </ThemedText>
+                      {member.user?.phone && (
+                        <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
+                          {member.user.phone}
+                        </ThemedText>
+                      )}
+                    </View>
+                    
+                    <View style={[styles.statusBadge, { 
+                      backgroundColor: member.status === 'online' ? theme.success + '20' : theme.textSecondary + '20' 
+                    }]}>
+                      <View style={[styles.statusDot, { 
+                        backgroundColor: member.status === 'online' ? theme.success : theme.textSecondary 
+                      }]} />
+                      <ThemedText style={{ fontSize: 12, color: member.status === 'online' ? theme.success : theme.textSecondary }}>
+                        {member.status}
+                      </ThemedText>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ✅ PRODUCTS TAB */}
+        {activeTab === 'products' && (
+          <View style={styles.contentSection}>
+            <View style={styles.sectionHeader}>
+              <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
+                Store Products ({products.length})
+              </ThemedText>
+            </View>
+            
+            {/* Fresh Products Alert */}
+            {freshProducts.length > 0 && (
+              <View style={{ marginBottom: Spacing.lg }}>
+                <ThemedText style={{ fontSize: 16, fontWeight: '600', marginBottom: Spacing.md }}>
+                  🥬 Fresh Products ({freshProducts.length})
+                </ThemedText>
+                {freshProducts.slice(0, 3).map((product) => (
+                  <View key={product.id} style={[styles.productCard, { borderColor: theme.warning, backgroundColor: theme.warning + '10' }]}>
+                    {product.image && (
+                      <Image 
+                        source={{ uri: getImageUrl(product.image) }} 
+                        style={styles.productImage}
+                        resizeMode="cover"
+                      />
+                    )}
+                    <View style={styles.productInfo}>
+                      <ThemedText style={{ fontSize: 16, fontWeight: '600' }}>{product.name}</ThemedText>
+                      <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>{product.brand}</ThemedText>
+                      <ThemedText style={{ fontSize: 14, marginTop: Spacing.xs }}>
+                        Stock: {product.stockCount} • {product.location || 'No location'}
+                      </ThemedText>
+                      {product.expiryDate && (
+                        <ThemedText style={{ fontSize: 12, color: theme.warning, marginTop: Spacing.xs }}>
+                          ⚠️ Expires: {new Date(product.expiryDate).toLocaleDateString()}
+                        </ThemedText>
+                      )}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+            
+            {/* All Products */}
+            <ThemedText style={{ fontSize: 16, fontWeight: '600', marginBottom: Spacing.md }}>
+              All Products
             </ThemedText>
+            {products.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Feather name="package" size={64} color={theme.textSecondary} />
+                <ThemedText style={styles.emptyTitle}>No Products</ThemedText>
+                <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
+                  Your store doesn't have any products yet
+                </ThemedText>
+              </View>
+            ) : (
+              products.map((product) => (
+                <View key={product.id} style={[styles.productCard, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
+                  {product.image && (
+                    <Image 
+                      source={{ uri: getImageUrl(product.image) }} 
+                      style={styles.productImage}
+                      resizeMode="cover"
+                    />
+                  )}
+                  <View style={styles.productInfo}>
+                    <ThemedText style={{ fontSize: 16, fontWeight: '600' }}>{product.name}</ThemedText>
+                    <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>{product.brand}</ThemedText>
+                    <ThemedText style={{ fontSize: 14, marginTop: Spacing.xs }}>
+                      Cost: {formatCurrency(product.costPrice)} → Sell: {formatCurrency(product.price)}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 14 }}>
+                      Stock: {product.stockCount} • Margin: {product.margin}%
+                    </ThemedText>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+        )}
+
+        {/* ✅ PROMOTIONS TAB */}
+        {activeTab === 'promotions' && (
+          <View style={styles.contentSection}>
+            <View style={styles.sectionHeader}>
+              <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
+                Store Promotions ({promotions.length})
+              </ThemedText>
+            </View>
+            
+            {promotions.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Feather name="gift" size={64} color={theme.textSecondary} />
+                <ThemedText style={styles.emptyTitle}>No Promotions</ThemedText>
+                <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
+                  Create promotions to attract more customers
+                </ThemedText>
+              </View>
+            ) : (
+              promotions.map((promo) => (
+                <View key={promo.id} style={[styles.promotionCard, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
+                  {(promo.bannerImage || promo.image) && (
+                    <Image 
+                      source={{ uri: getImageUrl(promo.bannerImage || promo.image || '') }} 
+                      style={styles.promotionImage}
+                      resizeMode="cover"
+                    />
+                  )}
+                  <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: Spacing.xs }}>
+                    {promo.title}
+                  </ThemedText>
+                  <ThemedText style={{ fontSize: 14, color: theme.textSecondary, marginBottom: Spacing.md }}>
+                    {promo.description}
+                  </ThemedText>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View>
+                      <ThemedText style={{ fontSize: 14 }}>
+                        Used: {promo.usedCount} times
+                      </ThemedText>
+                      <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
+                        Valid until {new Date(promo.validUntil).toLocaleDateString()}
+                      </ThemedText>
+                    </View>
+                    <View style={[styles.statusBadge, { 
+                      backgroundColor: promo.isActive ? theme.success + '20' : theme.error + '20' 
+                    }]}>
+                      <View style={[styles.statusDot, { 
+                        backgroundColor: promo.isActive ? theme.success : theme.error 
+                      }]} />
+                      <ThemedText style={{ fontSize: 12, color: promo.isActive ? theme.success : theme.error }}>
+                        {promo.isActive ? 'Active' : 'Inactive'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                </View>
+              ))
+            )}
           </View>
         )}
       </ScrollView>

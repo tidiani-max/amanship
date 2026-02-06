@@ -19,6 +19,7 @@ interface CardProps {
   children?: React.ReactNode;
   onPress?: () => void;
   style?: ViewStyle;
+  
   interactive?: boolean;
 }
 

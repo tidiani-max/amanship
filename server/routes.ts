@@ -6599,185 +6599,118 @@ app.get("/api/admin/promotions/cost-impact", async (req, res) => {
 console.log("✅ Enhanced financial tracking routes registered");
 
 
-// server/routes.ts - ADD THESE ROUTES
 
-// ==================== STORE OWNER ROUTES ====================
+
+// ==================== STORE OWNER DASHBOARD ROUTE FIXES ====================
 console.log("👨‍💼 Registering store owner routes...");
 
-// CREATE STORE + OWNER (Admin Only)
-// CREATE STORE + OWNER (Admin Only)
-app.post("/api/admin/stores-with-owner", async (req, res) => {
-  try {
-    const { 
-      userId, // Admin user ID
-      storeName,
-      storeAddress,
-      storeLatitude,
-      storeLongitude,
-      codAllowed,
-      ownerName,
-      ownerPhone,
-      ownerEmail,
-      tempPassword
-    } = req.body;
-
-    console.log("🏪 Creating store with owner:", { storeName, ownerPhone });
-
-    // Verify admin access
-    const [admin] = await db.select().from(users).where(eq(users.id, userId));
-    if (!admin || (admin.role !== "admin" && userId !== "demo-user")) {
-      return res.status(403).json({ error: "Admin access required" });
-    }
-
-    // Check if phone already exists
-    const [existingUser] = await db.select().from(users).where(eq(users.phone, ownerPhone));
-    if (existingUser) {
-      return res.status(400).json({ error: "Phone number already registered" });
-    }
-
-    // ✅ Generate a secure temporary password
-    const generatedPassword = tempPassword || `owner${Math.random().toString(36).slice(-8)}`;
-
-    // Create store owner user account
-    const [ownerUser] = await db.insert(users).values({
-      username: ownerPhone.replace(/\+/g, ''),
-      password: generatedPassword,
-      phone: ownerPhone,
-      email: ownerEmail || null,
-      name: ownerName,
-      role: "store_owner", // ✅ Important: set role to store_owner
-      firstLogin: true, // ✅ Force password reset on first login
-    }).returning();
-
-    console.log(`✅ Created store owner user: ${ownerUser.id}`);
-
-    // Create store
-    const [newStore] = await db.insert(stores).values({
-      name: storeName,
-      address: storeAddress,
-      latitude: String(storeLatitude || -6.2088),
-      longitude: String(storeLongitude || 106.8456),
-      ownerId: ownerUser.id, // ✅ Link owner to store
-      codAllowed: codAllowed ?? true,
-      isActive: true,
-    }).returning();
-
-    console.log(`✅ Created store: ${newStore.id}`);
-
-    // Create store owner relationship
-    const [storeOwner] = await db.insert(storeOwners).values({
-      userId: ownerUser.id,
-      storeId: newStore.id,
-      commissionRate: "0",
-      status: "active",
-    }).returning();
-
-    console.log(`✅ Created store owner relationship: ${storeOwner.id}`);
-
-    res.json({
-      success: true,
-      store: newStore,
-      owner: {
-        id: ownerUser.id,
-        name: ownerUser.name,
-        phone: ownerUser.phone,
-        email: ownerUser.email,
-      },
-      tempPassword: generatedPassword, // ✅ Return temp password
-      message: `Store and owner created! Owner should login with phone ${ownerPhone} and temporary password to set their new password.`
-    });
-
-  } catch (error) {
-    console.error("❌ Create store with owner error:", error);
-    res.status(500).json({ error: "Failed to create store and owner" });
-  }
-});
-
-// GET STORE OWNER DASHBOARD
+// ✅ GET STORE OWNER DASHBOARD
 app.get("/api/store-owner/dashboard", async (req, res) => {
   try {
     const { userId } = req.query;
-
+    
     if (!userId) {
       return res.status(400).json({ error: "userId required" });
     }
-
-    // Get store owner record
+    
+    console.log(`📊 Store owner dashboard request for userId: ${userId}`);
+    
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    
+    if (user.role !== "store_owner" && userId !== "demo-user") {
+      return res.status(403).json({ error: "Store owner access required" });
+    }
+    
     const [storeOwner] = await db
       .select()
       .from(storeOwners)
       .where(eq(storeOwners.userId, userId as string));
-
+    
     if (!storeOwner) {
-      return res.status(403).json({ error: "Not a store owner" });
+      console.log(`⚠️ No store owner record found for ${userId}`);
+      
+      return res.json({
+        store: null,
+        today: { revenue: 0, costs: 0, netProfit: 0, orders: 0 },
+        month: { revenue: 0, costs: 0, netProfit: 0, orders: 0 },
+        staff: { total: 0, online: 0, pickers: 0, drivers: 0 }
+      });
     }
 
-    // Get store details
     const [store] = await db
       .select()
       .from(stores)
       .where(eq(stores.id, storeOwner.storeId));
 
-    // Get today's earnings
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [todayEarnings] = await db
+    const [todayFinancials] = await db
       .select()
-      .from(storeOwnerDailyEarnings)
+      .from(storeDailyFinancials)
       .where(
         and(
-          eq(storeOwnerDailyEarnings.storeOwnerId, storeOwner.id),
-          eq(storeOwnerDailyEarnings.date, today)
+          eq(storeDailyFinancials.storeId, storeOwner.storeId),
+          eq(storeDailyFinancials.date, today)
         )
       );
 
-    // Get this month's earnings
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    
-    const monthEarnings = await db
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+
+    const monthFinancials = await db
       .select({
-        totalRevenue: sql<string>`SUM(${storeOwnerDailyEarnings.totalRevenue})`,
-        totalCosts: sql<string>`SUM(${storeOwnerDailyEarnings.productCosts} + ${storeOwnerDailyEarnings.staffBonuses} + ${storeOwnerDailyEarnings.storePromoCosts})`,
-        netProfit: sql<string>`SUM(${storeOwnerDailyEarnings.netProfit})`,
-        totalOrders: sql<number>`SUM(${storeOwnerDailyEarnings.ordersCompleted})::int`,
+        totalOrders: sql<number>`SUM(${storeDailyFinancials.totalOrders})::int`,
+        totalRevenue: sql<string>`SUM(${storeDailyFinancials.grossRevenue})`,
+        totalCosts: sql<string>`SUM(${storeDailyFinancials.productCosts} + ${storeDailyFinancials.staffBonuses})`,
+        netProfit: sql<string>`SUM(${storeDailyFinancials.netProfit})`,
       })
-      .from(storeOwnerDailyEarnings)
+      .from(storeDailyFinancials)
       .where(
         and(
-          eq(storeOwnerDailyEarnings.storeOwnerId, storeOwner.id),
-          gte(storeOwnerDailyEarnings.date, monthStart)
+          eq(storeDailyFinancials.storeId, storeOwner.storeId),
+          gte(storeDailyFinancials.date, monthStart)
         )
       );
 
-    // Get staff count
     const staff = await db
       .select()
       .from(storeStaff)
-      .where(eq(storeStaff.storeId, store.id));
+      .where(eq(storeStaff.storeId, storeOwner.storeId));
+
+    const staffMetrics = {
+      total: staff.length,
+      online: staff.filter(s => s.status === "online").length,
+      pickers: staff.filter(s => s.role === "picker").length,
+      drivers: staff.filter(s => s.role === "driver").length,
+    };
 
     res.json({
-      store,
+      store: {
+        id: store?.id,
+        name: store?.name || "Store Dashboard",
+        address: store?.address,
+        isActive: store?.isActive || false,
+      },
       today: {
-        revenue: parseFloat(todayEarnings?.totalRevenue || "0"),
-        costs: parseFloat(todayEarnings?.productCosts || "0") + 
-               parseFloat(todayEarnings?.staffBonuses || "0") + 
-               parseFloat(todayEarnings?.storePromoCosts || "0"),
-        netProfit: parseFloat(todayEarnings?.netProfit || "0"),
-        orders: todayEarnings?.ordersCompleted || 0,
+        revenue: parseFloat(String(todayFinancials?.grossRevenue || 0)),
+        costs: parseFloat(String(todayFinancials?.productCosts || 0)) + 
+               parseFloat(String(todayFinancials?.staffBonuses || 0)),
+        netProfit: parseFloat(String(todayFinancials?.netProfit || 0)),
+        orders: todayFinancials?.totalOrders || 0,
       },
       month: {
-        revenue: parseFloat(monthEarnings[0]?.totalRevenue || "0"),
-        costs: parseFloat(monthEarnings[0]?.totalCosts || "0"),
-        netProfit: parseFloat(monthEarnings[0]?.netProfit || "0"),
-        orders: monthEarnings[0]?.totalOrders || 0,
+        revenue: parseFloat(String(monthFinancials[0]?.totalRevenue || "0")),
+        costs: parseFloat(String(monthFinancials[0]?.totalCosts || "0")),
+        netProfit: parseFloat(String(monthFinancials[0]?.netProfit || "0")),
+        orders: monthFinancials[0]?.totalOrders || 0,
       },
-      staff: {
-        total: staff.length,
-        online: staff.filter(s => s.status === 'online').length,
-        pickers: staff.filter(s => s.role === 'picker').length,
-        drivers: staff.filter(s => s.role === 'driver').length,
-      }
+      staff: staffMetrics,
     });
 
   } catch (error) {
@@ -6786,24 +6719,22 @@ app.get("/api/store-owner/dashboard", async (req, res) => {
   }
 });
 
-// GET EARNINGS HISTORY
-app.get("/api/store-owner/earnings/history", async (req, res) => {
+// ✅ GET STORE OWNER PRODUCTS
+app.get("/api/store-owner/products", async (req, res) => {
   try {
-    const { userId, days = 30 } = req.query;
+    const { userId } = req.query;
 
     if (!userId) {
       return res.status(400).json({ error: "userId required" });
     }
 
-    console.log(`📊 Fetching earnings history for userId: ${userId}`);
+    console.log(`📦 Fetching products for store owner: ${userId}`);
 
-    // ✅ Check if user exists
     const [user] = await db.select().from(users).where(eq(users.id, userId as string));
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // ✅ Allow demo-user OR actual store owners
     if (user.role !== "store_owner" && userId !== "demo-user") {
       return res.status(403).json({ error: "Store owner access required" });
     }
@@ -6814,7 +6745,177 @@ app.get("/api/store-owner/earnings/history", async (req, res) => {
       .where(eq(storeOwners.userId, userId as string));
 
     if (!storeOwner) {
-      // Return empty array instead of error
+      console.log(`⚠️ No store owner record, returning empty array`);
+      return res.json([]);
+    }
+
+    const results = await db
+      .select({
+        product: products,
+        inventory: storeInventory,
+      })
+      .from(products)
+      .innerJoin(
+        storeInventory,
+        eq(products.id, storeInventory.productId)
+      )
+      .where(eq(storeInventory.storeId, storeOwner.storeId));
+
+    const formatted = results.map(({ product, inventory }) => ({
+      ...product,
+      stockCount: inventory.stockCount,
+      location: inventory.location,
+      isAvailable: inventory.isAvailable,
+    }));
+
+    console.log(`✅ Found ${formatted.length} products for store owner`);
+    res.json(formatted);
+
+  } catch (error) {
+    console.error("❌ Get store products error:", error);
+    res.status(500).json({ error: "Failed to fetch store products" });
+  }
+});
+
+// ✅ GET FRESH PRODUCTS
+app.get("/api/store-owner/products/fresh", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    console.log(`🥬 Fetching fresh products for: ${userId}`);
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.role !== "store_owner" && userId !== "demo-user") {
+      return res.status(403).json({ error: "Store owner access required" });
+    }
+
+    const [storeOwner] = await db
+      .select()
+      .from(storeOwners)
+      .where(eq(storeOwners.userId, userId as string));
+
+    if (!storeOwner) {
+      console.log(`⚠️ No store owner record, returning empty array`);
+      return res.json([]);
+    }
+
+    const freshProducts = await db
+      .select({
+        product: products,
+        inventory: storeInventory,
+      })
+      .from(products)
+      .innerJoin(
+        storeInventory,
+        eq(products.id, storeInventory.productId)
+      )
+      .where(
+        and(
+          eq(storeInventory.storeId, storeOwner.storeId),
+          eq(products.isFresh, true)
+        )
+      )
+      .orderBy(desc(products.freshnessPriority));
+
+    const formatted = freshProducts.map(({ product, inventory }) => ({
+      ...product,
+      stockCount: inventory.stockCount,
+      location: inventory.location,
+      isExpiringSoon:
+        product.expiryDate
+          ? new Date(product.expiryDate).getTime() - Date.now() <
+            1000 * 60 * 60 * 24 * 3
+          : false,
+    }));
+
+    console.log(`✅ Found ${formatted.length} fresh products`);
+    res.json(formatted);
+
+  } catch (error) {
+    console.error("❌ Get fresh products error:", error);
+    res.status(500).json({ error: "Failed to fetch fresh products" });
+  }
+});
+
+// ✅ GET STORE OWNER PROMOTIONS  
+app.get("/api/store-owner/promotions", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    console.log(`🎁 Fetching promotions for: ${userId}`);
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.role !== "store_owner" && userId !== "demo-user") {
+      return res.status(403).json({ error: "Store owner access required" });
+    }
+
+    const [storeOwner] = await db
+      .select()
+      .from(storeOwners)
+      .where(eq(storeOwners.userId, userId as string));
+
+    if (!storeOwner) {
+      console.log(`⚠️ No store owner record, returning empty array`);
+      return res.json([]);
+    }
+
+    const promos = await db
+      .select()
+      .from(promotions)
+      .where(eq(promotions.storeId, storeOwner.storeId))
+      .orderBy(desc(promotions.createdAt));
+
+    console.log(`✅ Found ${promos.length} promotions`);
+    res.json(promos);
+
+  } catch (error) {
+    console.error("❌ Store owner promotions error:", error);
+    res.status(500).json({ error: "Failed to fetch promotions" });
+  }
+});
+
+// ✅ GET EARNINGS HISTORY
+app.get("/api/store-owner/earnings/history", async (req, res) => {
+  try {
+    const { userId, days = 30 } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    console.log(`📊 Fetching earnings history for userId: ${userId}`);
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.role !== "store_owner" && userId !== "demo-user") {
+      return res.status(403).json({ error: "Store owner access required" });
+    }
+
+    const [storeOwner] = await db
+      .select()
+      .from(storeOwners)
+      .where(eq(storeOwners.userId, userId as string));
+
+    if (!storeOwner) {
       return res.json([]);
     }
 
@@ -6841,11 +6942,8 @@ app.get("/api/store-owner/earnings/history", async (req, res) => {
   }
 });
 
-console.log("✅ Store owner routes registered");
+console.log("✅ Store owner dashboard routes registered");
 
-
-
-// server/routes.ts - ADD THESE ROUTES FOR FRESH PRODUCTS
 
 // ==================== FRESH PRODUCT MANAGEMENT ====================
 console.log("🥬 Registering fresh product routes...");
