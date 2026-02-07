@@ -24,7 +24,7 @@ import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import * as ImagePicker from 'expo-image-picker';
 import { getImageUrl } from "@/lib/image-url";
-import { useAuth } from "@/context/AuthContext"; // ✅ ADD THIS
+import { useAuth } from "@/context/AuthContext";
 
 // ===================== TYPES =====================
 interface StoreOwnerDashboard {
@@ -54,36 +54,6 @@ interface StoreOwnerDashboard {
   };
 }
 
-interface StaffMember {
-  id: string;
-  userId: string;
-  role: "picker" | "driver";
-  status: "online" | "offline";
-  user: { 
-    id: string; 
-    username: string; 
-    phone: string | null; 
-    email: string | null; 
-    name: string | null 
-  } | null;
-}
-
-interface Promotion {
-  id: string;
-  title: string;
-  description: string;
-  type: string;
-  discountValue: number | null;
-  minOrder: number;
-  validFrom: string;
-  validUntil: string;
-  isActive: boolean;
-  usedCount: number;
-  showInBanner: boolean;
-  image?: string | null;
-  bannerImage?: string | null;
-}
-
 interface Product {
   id: string;
   name: string;
@@ -99,6 +69,7 @@ interface Product {
   requiresRefrigeration: boolean;
   requiresFreezer: boolean;
   image: string | null;
+  freshnessPriority: number;
 }
 
 // ===================== HELPERS =====================
@@ -109,6 +80,28 @@ const formatCurrency = (amount: number) => {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount);
+};
+
+const getDaysUntilExpiry = (expiryDate: string): number => {
+  const expiry = new Date(expiryDate);
+  const now = new Date();
+  const diffTime = expiry.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+};
+
+const getUrgencyColor = (priority: number, theme: any) => {
+  if (priority >= 95) return '#dc2626'; // Critical (0-5 days)
+  if (priority >= 85) return '#f59e0b'; // Urgent (6-15 days)
+  if (priority >= 70) return '#fbbf24'; // Medium (16-30 days)
+  return theme.success;
+};
+
+const getUrgencyLabel = (priority: number) => {
+  if (priority >= 95) return '🚨 CRITICAL';
+  if (priority >= 85) return '⚠️ URGENT';
+  if (priority >= 70) return '🟡 MEDIUM';
+  return '🟢 LOW';
 };
 
 // ===================== STYLES =====================
@@ -185,50 +178,33 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   
-  // Staff Cards
-  staffGrid: {
-    gap: Spacing.md,
-  },
-  staffCard: {
+  // Fresh Products Alert
+  freshProductsAlert: {
     padding: Spacing.lg,
-    borderRadius: BorderRadius.sm,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  staffAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  staffInfo: {
-    flex: 1,
-  },
-  staffName: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  staffRole: {
-    fontSize: 13,
-    marginBottom: 4,
-  },
-  
-  // Promotions
-  promotionCard: {
-    padding: Spacing.xl,
     borderRadius: BorderRadius.md,
-    borderWidth: 1,
+    borderWidth: 2,
     marginBottom: Spacing.lg,
   },
-  promotionImage: {
-    width: '100%',
-    height: 150,
-    borderRadius: BorderRadius.sm,
+  alertHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: Spacing.md,
+  },
+  alertIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Spacing.md,
+  },
+  alertTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  alertSubtitle: {
+    fontSize: 14,
+    marginTop: 2,
   },
   
   // Product Cards
@@ -248,6 +224,24 @@ const styles = StyleSheet.create({
   productInfo: {
     flex: 1,
   },
+  urgencyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+    alignSelf: 'flex-start',
+    marginBottom: Spacing.xs,
+  },
+  expiryWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+  },
   
   // Buttons
   button: {
@@ -261,26 +255,12 @@ const styles = StyleSheet.create({
   buttonPrimary: {
     backgroundColor: '#10b981',
   },
-  buttonSecondary: {
-    borderWidth: 1,
+  buttonWarning: {
+    backgroundColor: '#f59e0b',
   },
   buttonText: {
     fontSize: 14,
     fontWeight: '600',
-  },
-  
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.full,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
   },
   
   loadingContainer: {
@@ -313,11 +293,10 @@ export default function StoreOwnerDashboardScreen() {
   const { theme } = useTheme();
   const { t } = useLanguage();
   const queryClient = useQueryClient();
-  const { user } = useAuth(); // ✅ GET ACTUAL USER
+  const { user } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'staff' | 'products' | 'promotions'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'fresh' | 'products' | 'promotions'>('overview');
 
-  // ✅ FIX 1: Use actual user ID
   const userId = user?.id;
 
   // Get dashboard data
@@ -337,62 +316,11 @@ export default function StoreOwnerDashboardScreen() {
 
       return response.json();
     },
-    enabled: !!userId, // ✅ Only fetch when user is logged in
+    enabled: !!userId,
     refetchInterval: 30000,
   });
 
-  // ✅ FIX 2: Get staff list
-  const { data: staffList = [] } = useQuery<StaffMember[]>({
-    queryKey: ["/api/store-owner/staff", userId],
-    queryFn: async () => {
-      if (!userId || !dashboard?.store?.id) return [];
-      
-      const response = await apiRequest(
-        "GET",
-        `/api/stores/${dashboard.store.id}/staff`
-      );
-      
-      if (!response.ok) return [];
-      return response.json();
-    },
-    enabled: !!userId && !!dashboard?.store?.id,
-  });
-
-  // ✅ FIX 3: Get promotions
-  const { data: promotions = [] } = useQuery<Promotion[]>({
-    queryKey: ["/api/store-owner/promotions", userId],
-    queryFn: async () => {
-      if (!userId) return [];
-      
-      const response = await apiRequest(
-        "GET",
-        `/api/store-owner/promotions?userId=${userId}`
-      );
-      
-      if (!response.ok) return [];
-      return response.json();
-    },
-    enabled: !!userId,
-  });
-
-  // ✅ FIX 4: Get products
-  const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ["/api/store-owner/products", userId],
-    queryFn: async () => {
-      if (!userId) return [];
-      
-      const response = await apiRequest(
-        "GET",
-        `/api/store-owner/products?userId=${userId}`
-      );
-      
-      if (!response.ok) return [];
-      return response.json();
-    },
-    enabled: !!userId,
-  });
-
-  // ✅ FIX 5: Get fresh products
+  // Get fresh products
   const { data: freshProducts = [] } = useQuery<Product[]>({
     queryKey: ["/api/store-owner/products/fresh", userId],
     queryFn: async () => {
@@ -401,6 +329,40 @@ export default function StoreOwnerDashboardScreen() {
       const response = await apiRequest(
         "GET",
         `/api/store-owner/products/fresh?userId=${userId}`
+      );
+      
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!userId,
+  });
+
+  // Get expiring soon products (next 7 days)
+  const { data: expiringProducts = [] } = useQuery<Product[]>({
+    queryKey: ["/api/store-owner/products/expiring-soon", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      
+      const response = await apiRequest(
+        "GET",
+        `/api/store-owner/products/expiring-soon?userId=${userId}&days=7`
+      );
+      
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!userId,
+  });
+
+  // Get all products
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["/api/store-owner/products", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      
+      const response = await apiRequest(
+        "GET",
+        `/api/store-owner/products?userId=${userId}`
       );
       
       if (!response.ok) return [];
@@ -434,6 +396,10 @@ export default function StoreOwnerDashboardScreen() {
     );
   }
 
+  // Calculate freshness stats
+  const criticalProducts = freshProducts.filter(p => p.freshnessPriority >= 95);
+  const urgentProducts = freshProducts.filter(p => p.freshnessPriority >= 85 && p.freshnessPriority < 95);
+
   return (
     <ThemedView style={styles.container}>
       {/* HEADER */}
@@ -456,12 +422,29 @@ export default function StoreOwnerDashboardScreen() {
         </Pressable>
         
         <Pressable 
-          style={[styles.tab, activeTab === 'staff' && styles.tabActive]}
-          onPress={() => setActiveTab('staff')}
+          style={[styles.tab, activeTab === 'fresh' && styles.tabActive]}
+          onPress={() => setActiveTab('fresh')}
         >
-          <ThemedText style={[styles.tabText, { color: activeTab === 'staff' ? '#10b981' : theme.textSecondary }]}>
-            Staff ({dashboard.staff.total})
-          </ThemedText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <ThemedText style={[styles.tabText, { color: activeTab === 'fresh' ? '#10b981' : theme.textSecondary }]}>
+              🥬 Fresh
+            </ThemedText>
+            {expiringProducts.length > 0 && (
+              <View style={{ 
+                backgroundColor: '#dc2626', 
+                borderRadius: 10, 
+                minWidth: 20, 
+                height: 20, 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                paddingHorizontal: 6,
+              }}>
+                <ThemedText style={{ color: 'white', fontSize: 11, fontWeight: '700' }}>
+                  {expiringProducts.length}
+                </ThemedText>
+              </View>
+            )}
+          </View>
         </Pressable>
         
         <Pressable 
@@ -470,15 +453,6 @@ export default function StoreOwnerDashboardScreen() {
         >
           <ThemedText style={[styles.tabText, { color: activeTab === 'products' ? '#10b981' : theme.textSecondary }]}>
             Products ({products.length})
-          </ThemedText>
-        </Pressable>
-        
-        <Pressable 
-          style={[styles.tab, activeTab === 'promotions' && styles.tabActive]}
-          onPress={() => setActiveTab('promotions')}
-        >
-          <ThemedText style={[styles.tabText, { color: activeTab === 'promotions' ? '#10b981' : theme.textSecondary }]}>
-            Promotions ({promotions.length})
           </ThemedText>
         </Pressable>
       </View>
@@ -496,6 +470,43 @@ export default function StoreOwnerDashboardScreen() {
         {/* OVERVIEW TAB */}
         {activeTab === 'overview' && (
           <>
+            {/* FRESHNESS ALERT */}
+            {expiringProducts.length > 0 && (
+              <View style={styles.contentSection}>
+                <View style={[
+                  styles.freshProductsAlert, 
+                  { 
+                    backgroundColor: '#fee2e2', 
+                    borderColor: '#dc2626' 
+                  }
+                ]}>
+                  <View style={styles.alertHeader}>
+                    <View style={[styles.alertIcon, { backgroundColor: '#dc2626' }]}>
+                      <Feather name="alert-triangle" size={24} color="white" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={[styles.alertTitle, { color: '#dc2626' }]}>
+                        {expiringProducts.length} Products Expiring Soon!
+                      </ThemedText>
+                      <ThemedText style={[styles.alertSubtitle, { color: '#991b1b' }]}>
+                        Action needed within 7 days
+                      </ThemedText>
+                    </View>
+                  </View>
+                  
+                  <Pressable 
+                    style={[styles.button, styles.buttonWarning]}
+                    onPress={() => setActiveTab('fresh')}
+                  >
+                    <Feather name="eye" size={16} color="white" />
+                    <ThemedText style={[styles.buttonText, { color: 'white' }]}>
+                      View All Fresh Products
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
             {/* TODAY'S EARNINGS */}
             <View style={styles.statsGrid}>
               <View style={[styles.statCard, { backgroundColor: theme.success + '10', borderColor: theme.success + '30' }]}>
@@ -505,16 +516,6 @@ export default function StoreOwnerDashboardScreen() {
                 </ThemedText>
                 <ThemedText style={[styles.statSubtext, { color: theme.textSecondary }]}>
                   {dashboard.today.orders} orders
-                </ThemedText>
-              </View>
-
-              <View style={[styles.statCard, { backgroundColor: theme.error + '10', borderColor: theme.error + '30' }]}>
-                <ThemedText style={[styles.statLabel, { color: theme.error }]}>Today's Costs</ThemedText>
-                <ThemedText style={[styles.statValue, { color: theme.error }]}>
-                  {formatCurrency(dashboard.today.costs)}
-                </ThemedText>
-                <ThemedText style={[styles.statSubtext, { color: theme.textSecondary }]}>
-                  Products + Staff + Promos
                 </ThemedText>
               </View>
 
@@ -539,66 +540,38 @@ export default function StoreOwnerDashboardScreen() {
               </View>
             </View>
 
-            {/* MONTHLY SUMMARY */}
+            {/* QUICK STATS */}
             <View style={styles.contentSection}>
-              <View style={styles.sectionHeader}>
-                <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
-                  This Month
-                </ThemedText>
-              </View>
+              <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: Spacing.lg }}>
+                Quick Stats
+              </ThemedText>
               
-              <View style={[styles.statCard, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.md }}>
-                  <View>
-                    <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Revenue</ThemedText>
-                    <ThemedText style={[styles.statValue, { fontSize: 24, color: theme.success }]}>
-                      {formatCurrency(dashboard.month.revenue)}
-                    </ThemedText>
-                  </View>
-                  <View>
-                    <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Net Profit</ThemedText>
-                    <ThemedText style={[styles.statValue, { fontSize: 24, color: dashboard.month.netProfit >= 0 ? theme.primary : theme.error }]}>
-                      {formatCurrency(dashboard.month.netProfit)}
-                    </ThemedText>
-                  </View>
+              <View style={{ gap: Spacing.md }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <ThemedText>🥬 Fresh Products</ThemedText>
+                  <ThemedText style={{ fontWeight: '700', fontSize: 18 }}>
+                    {freshProducts.length}
+                  </ThemedText>
                 </View>
                 
-                <ThemedText style={[styles.statSubtext, { color: theme.textSecondary }]}>
-                  {dashboard.month.orders} orders completed
-                </ThemedText>
-              </View>
-            </View>
-
-            {/* STAFF SUMMARY */}
-            <View style={styles.contentSection}>
-              <View style={styles.sectionHeader}>
-                <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
-                  Staff Overview
-                </ThemedText>
-              </View>
-              
-              <View style={{ flexDirection: 'row', gap: Spacing.md }}>
-                <View style={[styles.statCard, { flex: 1, backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
-                  <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Total Staff</ThemedText>
-                  <ThemedText style={[styles.statValue, { fontSize: 32 }]}>
-                    {dashboard.staff.total}
-                  </ThemedText>
-                  <ThemedText style={[styles.statSubtext, { color: theme.success }]}>
-                    {dashboard.staff.online} online
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <ThemedText>🚨 Critical (0-5 days)</ThemedText>
+                  <ThemedText style={{ fontWeight: '700', fontSize: 18, color: '#dc2626' }}>
+                    {criticalProducts.length}
                   </ThemedText>
                 </View>
-
-                <View style={[styles.statCard, { flex: 1, backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
-                  <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Pickers</ThemedText>
-                  <ThemedText style={[styles.statValue, { fontSize: 32 }]}>
-                    {dashboard.staff.pickers}
+                
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <ThemedText>⚠️ Urgent (6-15 days)</ThemedText>
+                  <ThemedText style={{ fontWeight: '700', fontSize: 18, color: '#f59e0b' }}>
+                    {urgentProducts.length}
                   </ThemedText>
                 </View>
-
-                <View style={[styles.statCard, { flex: 1, backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
-                  <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>Drivers</ThemedText>
-                  <ThemedText style={[styles.statValue, { fontSize: 32 }]}>
-                    {dashboard.staff.drivers}
+                
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <ThemedText>👥 Staff Online</ThemedText>
+                  <ThemedText style={{ fontWeight: '700', fontSize: 18, color: theme.success }}>
+                    {dashboard.staff.online} / {dashboard.staff.total}
                   </ThemedText>
                 </View>
               </View>
@@ -606,83 +579,179 @@ export default function StoreOwnerDashboardScreen() {
           </>
         )}
 
-        {/* ✅ STAFF TAB */}
-        {activeTab === 'staff' && (
+        {/* FRESH PRODUCTS TAB */}
+        {activeTab === 'fresh' && (
           <View style={styles.contentSection}>
             <View style={styles.sectionHeader}>
               <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
-                Store Staff ({staffList.length})
+                Fresh Products Management
               </ThemedText>
             </View>
             
-            {staffList.length === 0 ? (
+            {/* CRITICAL PRODUCTS */}
+            {criticalProducts.length > 0 && (
+              <>
+                <ThemedText style={{ fontSize: 16, fontWeight: '700', color: '#dc2626', marginBottom: Spacing.md }}>
+                  🚨 CRITICAL (0-5 Days) - {criticalProducts.length}
+                </ThemedText>
+                {criticalProducts.map(product => {
+                  const daysLeft = getDaysUntilExpiry(product.expiryDate!);
+                  return (
+                    <View 
+                      key={product.id} 
+                      style={[
+                        styles.productCard, 
+                        { 
+                          borderColor: '#dc2626', 
+                          borderWidth: 2,
+                          backgroundColor: '#fee2e2' 
+                        }
+                      ]}
+                    >
+                      {product.image && (
+                        <Image 
+                          source={{ uri: getImageUrl(product.image) }} 
+                          style={styles.productImage}
+                          resizeMode="cover"
+                        />
+                      )}
+                      <View style={styles.productInfo}>
+                        <View style={[styles.urgencyBadge, { backgroundColor: '#dc2626' }]}>
+                          <ThemedText style={{ color: 'white', fontSize: 11, fontWeight: '800' }}>
+                            {getUrgencyLabel(product.freshnessPriority)}
+                          </ThemedText>
+                        </View>
+                        
+                        <ThemedText style={{ fontSize: 16, fontWeight: '700' }}>
+                          {product.name}
+                        </ThemedText>
+                        <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>
+                          {product.brand}
+                        </ThemedText>
+                        
+                        <View style={[styles.expiryWarning, { backgroundColor: '#fee2e2' }]}>
+                          <Feather name="clock" size={14} color="#dc2626" />
+                          <ThemedText style={{ fontSize: 13, color: '#dc2626', fontWeight: '600' }}>
+                            Expires in {daysLeft} day{daysLeft !== 1 ? 's' : ''} - {new Date(product.expiryDate!).toLocaleDateString()}
+                          </ThemedText>
+                        </View>
+                        
+                        <ThemedText style={{ fontSize: 13, marginTop: Spacing.xs }}>
+                          Stock: {product.stockCount} • {product.location || 'No location'}
+                        </ThemedText>
+                        
+                        {product.requiresRefrigeration && (
+                          <ThemedText style={{ fontSize: 12, color: '#3b82f6', marginTop: Spacing.xs }}>
+                            ❄️ Requires refrigeration
+                          </ThemedText>
+                        )}
+                        
+                        <Pressable 
+                          style={[styles.button, styles.buttonWarning, { marginTop: Spacing.md }]}
+                          onPress={() => Alert.alert(
+                            'Create Discount?',
+                            `Create a promotion for ${product.name} before it expires?`,
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              { text: 'Create Promo', onPress: () => {
+                                // Navigate to promotion creation
+                                Alert.alert('Feature Coming Soon', 'Quick promotion creation is being developed!')
+                              }}
+                            ]
+                          )}
+                        >
+                          <Feather name="tag" size={16} color="white" />
+                          <ThemedText style={[styles.buttonText, { color: 'white' }]}>
+                            Create Discount Promo
+                          </ThemedText>
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                })}
+              </>
+            )}
+            
+            {/* URGENT PRODUCTS */}
+            {urgentProducts.length > 0 && (
+              <>
+                <ThemedText style={{ fontSize: 16, fontWeight: '700', color: '#f59e0b', marginTop: Spacing.lg, marginBottom: Spacing.md }}>
+                  ⚠️ URGENT (6-15 Days) - {urgentProducts.length}
+                </ThemedText>
+                {urgentProducts.map(product => {
+                  const daysLeft = getDaysUntilExpiry(product.expiryDate!);
+                  return (
+                    <View 
+                      key={product.id} 
+                      style={[
+                        styles.productCard, 
+                        { 
+                          borderColor: '#f59e0b', 
+                          backgroundColor: '#fef3c7' 
+                        }
+                      ]}
+                    >
+                      {product.image && (
+                        <Image 
+                          source={{ uri: getImageUrl(product.image) }} 
+                          style={styles.productImage}
+                          resizeMode="cover"
+                        />
+                      )}
+                      <View style={styles.productInfo}>
+                        <View style={[styles.urgencyBadge, { backgroundColor: '#f59e0b' }]}>
+                          <ThemedText style={{ color: 'white', fontSize: 11, fontWeight: '800' }}>
+                            {getUrgencyLabel(product.freshnessPriority)}
+                          </ThemedText>
+                        </View>
+                        
+                        <ThemedText style={{ fontSize: 16, fontWeight: '700' }}>
+                          {product.name}
+                        </ThemedText>
+                        <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>
+                          {product.brand}
+                        </ThemedText>
+                        
+                        <View style={[styles.expiryWarning, { backgroundColor: '#fef3c7' }]}>
+                          <Feather name="clock" size={14} color="#f59e0b" />
+                          <ThemedText style={{ fontSize: 13, color: '#f59e0b', fontWeight: '600' }}>
+                            Expires in {daysLeft} days - {new Date(product.expiryDate!).toLocaleDateString()}
+                          </ThemedText>
+                        </View>
+                        
+                        <ThemedText style={{ fontSize: 13, marginTop: Spacing.xs }}>
+                          Stock: {product.stockCount} • {product.location || 'No location'}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  );
+                })}
+              </>
+            )}
+            
+            {/* ALL FRESH PRODUCTS */}
+            <ThemedText style={{ fontSize: 16, fontWeight: '700', marginTop: Spacing.lg, marginBottom: Spacing.md }}>
+              🟢 All Fresh Products - {freshProducts.length}
+            </ThemedText>
+            {freshProducts.length === 0 ? (
               <View style={styles.emptyState}>
-                <Feather name="users" size={64} color={theme.textSecondary} />
-                <ThemedText style={styles.emptyTitle}>No Staff Yet</ThemedText>
+                <Feather name="package" size={64} color={theme.textSecondary} />
+                <ThemedText style={styles.emptyTitle}>No Fresh Products</ThemedText>
                 <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-                  Contact admin to add staff members to your store
+                  No fresh products in your inventory
                 </ThemedText>
               </View>
             ) : (
-              <View style={styles.staffGrid}>
-                {staffList.map((member) => (
-                  <View key={member.id} style={[styles.staffCard, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
-                    <View style={[styles.staffAvatar, { backgroundColor: member.status === 'online' ? theme.success + '20' : theme.textSecondary + '20' }]}>
-                      <Feather 
-                        name={member.role === 'picker' ? 'package' : 'truck'} 
-                        size={24} 
-                        color={member.status === 'online' ? theme.success : theme.textSecondary} 
-                      />
-                    </View>
-                    
-                    <View style={styles.staffInfo}>
-                      <ThemedText style={styles.staffName}>
-                        {member.user?.name || member.user?.username || 'Staff Member'}
-                      </ThemedText>
-                      <ThemedText style={[styles.staffRole, { color: theme.textSecondary }]}>
-                        {member.role === 'picker' ? '📦 Picker' : '🚗 Driver'}
-                      </ThemedText>
-                      {member.user?.phone && (
-                        <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
-                          {member.user.phone}
-                        </ThemedText>
-                      )}
-                    </View>
-                    
-                    <View style={[styles.statusBadge, { 
-                      backgroundColor: member.status === 'online' ? theme.success + '20' : theme.textSecondary + '20' 
-                    }]}>
-                      <View style={[styles.statusDot, { 
-                        backgroundColor: member.status === 'online' ? theme.success : theme.textSecondary 
-                      }]} />
-                      <ThemedText style={{ fontSize: 12, color: member.status === 'online' ? theme.success : theme.textSecondary }}>
-                        {member.status}
-                      </ThemedText>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* ✅ PRODUCTS TAB */}
-        {activeTab === 'products' && (
-          <View style={styles.contentSection}>
-            <View style={styles.sectionHeader}>
-              <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
-                Store Products ({products.length})
-              </ThemedText>
-            </View>
-            
-            {/* Fresh Products Alert */}
-            {freshProducts.length > 0 && (
-              <View style={{ marginBottom: Spacing.lg }}>
-                <ThemedText style={{ fontSize: 16, fontWeight: '600', marginBottom: Spacing.md }}>
-                  🥬 Fresh Products ({freshProducts.length})
-                </ThemedText>
-                {freshProducts.slice(0, 3).map((product) => (
-                  <View key={product.id} style={[styles.productCard, { borderColor: theme.warning, backgroundColor: theme.warning + '10' }]}>
+              freshProducts
+                .filter(p => p.freshnessPriority < 85)
+                .map(product => (
+                  <View 
+                    key={product.id} 
+                    style={[
+                      styles.productCard, 
+                      { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }
+                    ]}
+                  >
                     {product.image && (
                       <Image 
                         source={{ uri: getImageUrl(product.image) }} 
@@ -691,37 +760,52 @@ export default function StoreOwnerDashboardScreen() {
                       />
                     )}
                     <View style={styles.productInfo}>
-                      <ThemedText style={{ fontSize: 16, fontWeight: '600' }}>{product.name}</ThemedText>
-                      <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>{product.brand}</ThemedText>
-                      <ThemedText style={{ fontSize: 14, marginTop: Spacing.xs }}>
-                        Stock: {product.stockCount} • {product.location || 'No location'}
+                      <ThemedText style={{ fontSize: 16, fontWeight: '700' }}>
+                        {product.name}
                       </ThemedText>
+                      <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>
+                        {product.brand}
+                      </ThemedText>
+                      
                       {product.expiryDate && (
-                        <ThemedText style={{ fontSize: 12, color: theme.warning, marginTop: Spacing.xs }}>
-                          ⚠️ Expires: {new Date(product.expiryDate).toLocaleDateString()}
+                        <ThemedText style={{ fontSize: 13, marginTop: Spacing.xs }}>
+                          📅 Expires: {new Date(product.expiryDate).toLocaleDateString()}
                         </ThemedText>
                       )}
+                      
+                      <ThemedText style={{ fontSize: 13 }}>
+                        Stock: {product.stockCount}
+                      </ThemedText>
                     </View>
                   </View>
-                ))}
-              </View>
+                ))
             )}
+          </View>
+        )}
+
+        {/* PRODUCTS TAB */}
+        {activeTab === 'products' && (
+          <View style={styles.contentSection}>
+            <View style={styles.sectionHeader}>
+              <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
+                All Products ({products.length})
+              </ThemedText>
+            </View>
             
-            {/* All Products */}
-            <ThemedText style={{ fontSize: 16, fontWeight: '600', marginBottom: Spacing.md }}>
-              All Products
-            </ThemedText>
             {products.length === 0 ? (
               <View style={styles.emptyState}>
                 <Feather name="package" size={64} color={theme.textSecondary} />
                 <ThemedText style={styles.emptyTitle}>No Products</ThemedText>
-                <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-                  Your store doesn't have any products yet
-                </ThemedText>
               </View>
             ) : (
-              products.map((product) => (
-                <View key={product.id} style={[styles.productCard, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
+              products.map(product => (
+                <View 
+                  key={product.id} 
+                  style={[
+                    styles.productCard, 
+                    { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }
+                  ]}
+                >
                   {product.image && (
                     <Image 
                       source={{ uri: getImageUrl(product.image) }} 
@@ -730,8 +814,21 @@ export default function StoreOwnerDashboardScreen() {
                     />
                   )}
                   <View style={styles.productInfo}>
-                    <ThemedText style={{ fontSize: 16, fontWeight: '600' }}>{product.name}</ThemedText>
-                    <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>{product.brand}</ThemedText>
+                    {product.isFresh && (
+                      <View style={[styles.urgencyBadge, { backgroundColor: '#10b981' }]}>
+                        <ThemedText style={{ color: 'white', fontSize: 11, fontWeight: '800' }}>
+                          🥬 FRESH
+                        </ThemedText>
+                      </View>
+                    )}
+                    
+                    <ThemedText style={{ fontSize: 16, fontWeight: '700' }}>
+                      {product.name}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>
+                      {product.brand}
+                    </ThemedText>
+                    
                     <ThemedText style={{ fontSize: 14, marginTop: Spacing.xs }}>
                       Cost: {formatCurrency(product.costPrice)} → Sell: {formatCurrency(product.price)}
                     </ThemedText>
@@ -744,66 +841,7 @@ export default function StoreOwnerDashboardScreen() {
             )}
           </View>
         )}
-
-        {/* ✅ PROMOTIONS TAB */}
-        {activeTab === 'promotions' && (
-          <View style={styles.contentSection}>
-            <View style={styles.sectionHeader}>
-              <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
-                Store Promotions ({promotions.length})
-              </ThemedText>
-            </View>
-            
-            {promotions.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Feather name="gift" size={64} color={theme.textSecondary} />
-                <ThemedText style={styles.emptyTitle}>No Promotions</ThemedText>
-                <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-                  Create promotions to attract more customers
-                </ThemedText>
-              </View>
-            ) : (
-              promotions.map((promo) => (
-                <View key={promo.id} style={[styles.promotionCard, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
-                  {(promo.bannerImage || promo.image) && (
-                    <Image 
-                      source={{ uri: getImageUrl(promo.bannerImage || promo.image || '') }} 
-                      style={styles.promotionImage}
-                      resizeMode="cover"
-                    />
-                  )}
-                  <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: Spacing.xs }}>
-                    {promo.title}
-                  </ThemedText>
-                  <ThemedText style={{ fontSize: 14, color: theme.textSecondary, marginBottom: Spacing.md }}>
-                    {promo.description}
-                  </ThemedText>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View>
-                      <ThemedText style={{ fontSize: 14 }}>
-                        Used: {promo.usedCount} times
-                      </ThemedText>
-                      <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
-                        Valid until {new Date(promo.validUntil).toLocaleDateString()}
-                      </ThemedText>
-                    </View>
-                    <View style={[styles.statusBadge, { 
-                      backgroundColor: promo.isActive ? theme.success + '20' : theme.error + '20' 
-                    }]}>
-                      <View style={[styles.statusDot, { 
-                        backgroundColor: promo.isActive ? theme.success : theme.error 
-                      }]} />
-                      <ThemedText style={{ fontSize: 12, color: promo.isActive ? theme.success : theme.error }}>
-                        {promo.isActive ? 'Active' : 'Inactive'}
-                      </ThemedText>
-                    </View>
-                  </View>
-                </View>
-              ))
-            )}
-          </View>
-        )}
       </ScrollView>
     </ThemedView>
   );
-}
+} 

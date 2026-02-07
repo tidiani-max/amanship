@@ -2894,10 +2894,6 @@ async function logPromotionCost(
   console.log(`💰 Logged ${costBearer} promotion cost: Rp ${discountAmount.toLocaleString()} for order ${orderId}`);
 }
 
-
-
-
-
   // ==================== 12. STORES ====================
   console.log("🏪 Registering store routes...");
   

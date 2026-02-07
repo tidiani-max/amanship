@@ -189,6 +189,7 @@ export const orders = pgTable("orders", {
   codCollected: boolean("cod_collected").default(false),
   deliveryPin: text("delivery_pin").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  qrisConfirmed: boolean("qris_confirmed").default(false).notNull(),
   pickedAt: timestamp("picked_at"),
   packedAt: timestamp("packed_at"),
   deliveredAt: timestamp("delivered_at"),
