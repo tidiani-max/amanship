@@ -1,24 +1,16 @@
-import React, { useEffect } from "react";
-import { View, StyleSheet, ScrollView, ActivityIndicator, Pressable} from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, StyleSheet, ScrollView, ActivityIndicator, Pressable, Alert, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withSequence,
-  withDelay,
-} from "react-native-reanimated";
 import { useQuery } from "@tanstack/react-query";
+import QRCode from 'react-native-qrcode-svg';
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import { Button } from "@/components/Button";
-import { useTheme } from "@/hooks/useTheme";
-import { useLanguage } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -26,19 +18,17 @@ type OrderSuccessRouteProp = RouteProp<RootStackParamList, "OrderSuccess">;
 
 export default function OrderSuccessScreen() {
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
-  const { t } = useLanguage();
+  const { user } = useAuth();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<OrderSuccessRouteProp>();
   const { orderId } = route.params;
 
-  const scale = useSharedValue(0);
-  const opacity = useSharedValue(0);
-
   const orderIds = orderId.includes(',') ? orderId.split(',') : [orderId];
+  const [qrisData, setQrisData] = useState<Record<string, any>>({});
 
-  const { data: orders = [], isLoading } = useQuery({
+  const { data: orders = [], isLoading, refetch } = useQuery({
     queryKey: ["order-success", orderIds],
+    refetchInterval: 3000,
     queryFn: async () => {
       const orderPromises = orderIds.map(async (id) => {
         const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${id.trim()}`);
@@ -55,38 +45,43 @@ export default function OrderSuccessScreen() {
           storeName: storeData.name,
           total: orderData.total,
           estimatedDelivery: 15,
+          paymentMethod: orderData.paymentMethod,
+          paymentStatus: orderData.paymentStatus,
+          qrisConfirmed: orderData.qrisConfirmed,
+          qrisUrl: orderData.qrisUrl,
+          qrisExpiresAt: orderData.qrisExpiresAt,
         };
       });
       return Promise.all(orderPromises);
     },
   });
 
+  // Generate QRIS for unpaid orders
   useEffect(() => {
-    scale.value = withSequence(
-      withSpring(1.2, { damping: 8 }),
-      withSpring(1, { damping: 12 })
-    );
-    opacity.value = withDelay(300, withSpring(1));
-  }, []);
+    orders.forEach(async (order) => {
+      if (order.paymentMethod === "qris" && !order.qrisConfirmed && !qrisData[order.id]) {
+        try {
+          const res = await fetch(
+            `${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${order.id}/create-qris`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: user?.id }),
+            }
+          );
 
-  const iconAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const contentAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-  }));
-
-  const handleTrackOrder = (trackOrderId: string) => {
-    navigation.replace("OrderTracking", { orderId: trackOrderId });
-  };
-
-  const handleGoHome = () => {
-    navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-  };
+          if (res.ok) {
+            const data = await res.json();
+            setQrisData(prev => ({ ...prev, [order.id]: data }));
+          }
+        } catch (error) {
+          console.error("Failed to create QRIS:", error);
+        }
+      }
+    });
+  }, [orders, user?.id]);
 
   const formatPrice = (price: number) => `Rp ${price.toLocaleString("id-ID")}`;
-  const totalAmount = orders.reduce((sum, order) => sum + order.total, 0);
 
   if (isLoading) {
     return (
@@ -98,67 +93,112 @@ export default function OrderSuccessScreen() {
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: '#f8fafc' }]}>
-      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 40 }]} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 40 }]} 
+        showsVerticalScrollIndicator={false}
+      >
         
-        {/* Animated Celebration Icon */}
-        <Animated.View style={[styles.checkCircle, iconAnimatedStyle]}>
+        <View style={styles.checkCircle}>
           <LinearGradient colors={['#10b981', '#059669']} style={styles.gradientCircle}>
             <Feather name="check" size={60} color="#FFFFFF" />
           </LinearGradient>
-        </Animated.View>
+        </View>
         
-        <Animated.View style={[styles.content, contentAnimatedStyle]}>
-          <ThemedText style={styles.title}>{t.orderSuccess.title}</ThemedText>
-          <ThemedText style={styles.subtitle}>
-            {orders.length > 1 ? `${orders.length} orders are being prepared!` : t.orderSuccess.orderConfirmed}
-          </ThemedText>
+        <ThemedText style={styles.title}>Order Placed!</ThemedText>
+        <ThemedText style={styles.subtitle}>
+          {orders.length > 1 ? `${orders.length} orders placed successfully!` : "Order confirmed successfully"}
+        </ThemedText>
 
-          {/* Grand Total Summary */}
-          {orders.length > 1 && (
-            <View style={styles.grandTotalCard}>
-              <ThemedText style={styles.totalLabel}>TOTAL PAID</ThemedText>
-              <ThemedText style={styles.totalValue}>{formatPrice(totalAmount)}</ThemedText>
-            </View>
-          )}
-
-          {/* Individual Store Cards */}
-          <View style={styles.ordersList}>
-            {orders.map((order) => (
-              <View key={order.id} style={styles.orderCard}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.storeIconBox}>
-                    <Feather name="shopping-bag" size={18} color="#4f46e5" />
-                  </View>
-                  <View style={{ flex: 1, marginLeft: 12 }}>
-                    <ThemedText style={styles.storeName}>{order.storeName}</ThemedText>
-                    <ThemedText style={styles.orderNumber}>#{order.orderNumber}</ThemedText>
-                  </View>
-                  <View style={styles.priceTag}>
-                    <ThemedText style={styles.priceText}>{formatPrice(order.total)}</ThemedText>
-                  </View>
+        <View style={styles.ordersList}>
+          {orders.map((order) => (
+            <View key={order.id} style={styles.orderCard}>
+              <View style={styles.cardHeader}>
+                <View style={styles.storeIconBox}>
+                  <Feather name="shopping-bag" size={18} color="#4f46e5" />
                 </View>
-
-                <View style={styles.cardFooter}>
-                  <View style={styles.etaBox}>
-                    <Feather name="clock" size={14} color="#64748b" />
-                    <ThemedText style={styles.etaText}>Arriving in {order.estimatedDelivery} mins</ThemedText>
-                  </View>
-                  <Pressable onPress={() => handleTrackOrder(order.id)}>
-                    <LinearGradient colors={['#4f46e5', '#7c3aed']} style={styles.trackMiniBtn}>
-                      <ThemedText style={styles.trackBtnText}>Track</ThemedText>
-                    </LinearGradient>
-                  </Pressable>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <ThemedText style={styles.storeName}>{order.storeName}</ThemedText>
+                  <ThemedText style={styles.orderNumber}>#{order.orderNumber}</ThemedText>
+                </View>
+                <View style={styles.priceTag}>
+                  <ThemedText style={styles.priceText}>{formatPrice(order.total)}</ThemedText>
                 </View>
               </View>
-            ))}
-          </View>
-        </Animated.View>
+
+              {/* ✅ QRIS Payment Section */}
+              {order.paymentMethod === "qris" && !order.qrisConfirmed && (
+                <View style={styles.qrisSection}>
+                  <ThemedText style={styles.qrisTitle}>💳 Scan to Pay</ThemedText>
+                  <ThemedText style={styles.qrisInstructions}>
+                    Scan with GoPay, OVO, Dana, ShopeePay, or any banking app
+                  </ThemedText>
+
+                  {qrisData[order.id]?.qrCodeUrl ? (
+                    <View style={styles.qrCodeContainer}>
+                      <QRCode
+                        value={qrisData[order.id].qrCodeUrl}
+                        size={200}
+                        backgroundColor="white"
+                      />
+                      <ThemedText style={styles.qrisExpiry}>
+                        Expires in {Math.max(0, Math.floor((new Date(qrisData[order.id].expiresAt).getTime() - Date.now()) / 60000))} min
+                      </ThemedText>
+                    </View>
+                  ) : (
+                    <ActivityIndicator size="large" color="#4f46e5" style={{ marginVertical: 20 }} />
+                  )}
+
+                  <View style={styles.qrisSteps}>
+                    <View style={styles.step}>
+                      <View style={styles.stepBadge}><ThemedText style={styles.stepText}>1</ThemedText></View>
+                      <ThemedText style={styles.stepLabel}>Open payment app</ThemedText>
+                    </View>
+                    <View style={styles.step}>
+                      <View style={styles.stepBadge}><ThemedText style={styles.stepText}>2</ThemedText></View>
+                      <ThemedText style={styles.stepLabel}>Scan QR code</ThemedText>
+                    </View>
+                    <View style={styles.step}>
+                      <View style={styles.stepBadge}><ThemedText style={styles.stepText}>3</ThemedText></View>
+                      <ThemedText style={styles.stepLabel}>Confirm payment</ThemedText>
+                    </View>
+                  </View>
+
+                  <View style={styles.qrisAlert}>
+                    <Feather name="info" size={16} color="#f59e0b" />
+                    <ThemedText style={styles.qrisAlertText}>
+                      Your order will automatically proceed once payment is detected
+                    </ThemedText>
+                  </View>
+                </View>
+              )}
+
+              {/* ✅ Payment Confirmed */}
+              {order.qrisConfirmed && (
+                <View style={styles.qrisSuccess}>
+                  <Feather name="check-circle" size={20} color="#10b981" />
+                  <ThemedText style={styles.qrisSuccessText}>
+                    ✅ Payment confirmed! Order is being prepared
+                  </ThemedText>
+                </View>
+              )}
+
+              {/* COD Info */}
+              {order.paymentMethod === "cod" && (
+                <View style={styles.codInfo}>
+                  <Feather name="dollar-sign" size={16} color="#64748b" />
+                  <ThemedText style={styles.codText}>
+                    Pay cash when delivered: {formatPrice(order.total)}
+                  </ThemedText>
+                </View>
+              )}
+            </View>
+          ))}
+        </View>
       </ScrollView>
       
-      {/* Floating Bottom Action */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
-        <Pressable onPress={handleGoHome} style={styles.homeBtn}>
-          <ThemedText style={styles.homeBtnText}>{t.orderSuccess.backToHome}</ThemedText>
+        <Pressable onPress={() => navigation.reset({ index: 0, routes: [{ name: "Main" }] })} style={styles.homeBtn}>
+          <ThemedText style={styles.homeBtnText}>Back to Home</ThemedText>
         </Pressable>
       </View>
     </ThemedView>
@@ -170,7 +210,6 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 24, paddingBottom: 140, alignItems: 'center' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
-  // Celebration Icon
   checkCircle: {
     width: 120,
     height: 120,
@@ -190,25 +229,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  content: { width: '100%', alignItems: 'center' },
   title: { fontSize: 28, fontWeight: '900', color: '#1e293b', textAlign: 'center' },
   subtitle: { fontSize: 16, color: '#64748b', textAlign: 'center', marginTop: 8, marginBottom: 32, fontWeight: '600' },
 
-  // Grand Total Card
-  grandTotalCard: {
-    backgroundColor: '#ffffff',
-    width: '100%',
-    borderRadius: 24,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  totalLabel: { fontSize: 12, fontWeight: '800', color: '#94a3b8', letterSpacing: 1 },
-  totalValue: { fontSize: 28, fontWeight: '900', color: '#4f46e5', marginTop: 4 },
-
-  // Individual Order Cards
   ordersList: { width: '100%', gap: 16 },
   orderCard: {
     backgroundColor: '#ffffff',
@@ -234,20 +257,112 @@ const styles = StyleSheet.create({
   priceTag: { backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
   priceText: { fontSize: 13, fontWeight: '800', color: '#1e293b' },
 
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+  // QRIS Styles
+  qrisSection: {
+    backgroundColor: '#f8fafc',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
   },
-  etaBox: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  etaText: { fontSize: 13, fontWeight: '700', color: '#64748b' },
-  trackMiniBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 },
-  trackBtnText: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  qrisTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#1e293b',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  qrisInstructions: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 20,
+    fontWeight: '600',
+  },
+  qrCodeContainer: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 20,
+  },
+  qrisExpiry: {
+    fontSize: 12,
+    color: '#f59e0b',
+    fontWeight: '700',
+    marginTop: 12,
+  },
+  qrisSteps: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+  },
+  step: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#4f46e5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  stepLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  qrisAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fffbeb',
+    padding: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  qrisAlertText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#92400e',
+    fontWeight: '600',
+  },
 
-  // Footer
+  qrisSuccess: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  qrisSuccessText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#10b981',
+    flex: 1,
+  },
+
+  codInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    padding: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  codText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+
   footer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 24 },
   homeBtn: {
     backgroundColor: '#ffffff',
@@ -256,10 +371,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
   },
   homeBtnText: { color: '#64748b', fontWeight: '800', fontSize: 16 },
 });

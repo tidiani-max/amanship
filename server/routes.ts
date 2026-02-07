@@ -2584,6 +2584,269 @@ app.get("/api/orders/:id", async (req, res) => {
   }
 });
 
+
+// ===== CREATE XENDIT QRIS PAYMENT =====
+app.post("/api/orders/:orderId/create-qris", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    console.log(`💳 Creating QRIS payment for order ${orderId}`);
+
+    // Get order
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // Verify user owns this order
+    if (order.userId !== userId) {
+      return res.status(403).json({ error: "Not your order" });
+    }
+
+    // Only QRIS orders
+    if (order.paymentMethod !== "qris") {
+      return res.status(400).json({ error: "Only QRIS orders need QR generation" });
+    }
+
+    // Check if QR already exists and is not expired
+    if (order.qrisUrl && order.qrisExpiresAt && new Date(order.qrisExpiresAt) > new Date()) {
+      return res.json({
+        success: true,
+        qrCodeUrl: order.qrisUrl,
+        expiresAt: order.qrisExpiresAt,
+        invoiceId: order.xenditInvoiceId,
+      });
+    }
+
+    // Create Xendit QRIS payment
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+    const xenditResponse = await fetch('https://api.xendit.co/qr_codes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${Buffer.from(process.env.XENDIT_SECRET_KEY + ':').toString('base64')}`,
+      },
+      body: JSON.stringify({
+        external_id: order.orderNumber,
+        type: 'DYNAMIC',
+        callback_url: `${process.env.EXPO_PUBLIC_DOMAIN}/api/xendit/webhook`,
+        amount: order.total,
+        expires_at: expiresAt.toISOString(),
+      }),
+    });
+
+    if (!xenditResponse.ok) {
+      const error = await xenditResponse.json();
+      console.error('❌ Xendit error:', error);
+      return res.status(500).json({ error: 'Failed to create QRIS payment' });
+    }
+
+    const xenditData = await xenditResponse.json();
+
+    // Update order with QR code
+    const [updated] = await db
+      .update(orders)
+      .set({
+        qrisUrl: xenditData.qr_string,
+        qrisExpiresAt: expiresAt,
+        xenditInvoiceId: xenditData.id,
+      })
+      .where(eq(orders.id, orderId))
+      .returning();
+
+    console.log(`✅ QRIS created: ${xenditData.id}`);
+
+    res.json({
+      success: true,
+      qrCodeUrl: xenditData.qr_string,
+      expiresAt: expiresAt,
+      invoiceId: xenditData.id,
+    });
+
+  } catch (error) {
+    console.error("❌ Create QRIS error:", error);
+    res.status(500).json({ error: "Failed to create QRIS payment" });
+  }
+});
+
+// ===== XENDIT WEBHOOK - PAYMENT CONFIRMATION =====
+// ===== CREATE XENDIT QRIS PAYMENT =====
+app.post("/api/orders/:orderId/create-qris", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    console.log(`💳 Creating QRIS payment for order ${orderId}`);
+
+    // Get order
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // Verify user owns this order
+    if (order.userId !== userId) {
+      return res.status(403).json({ error: "Not your order" });
+    }
+
+    // Only QRIS orders
+    if (order.paymentMethod !== "qris") {
+      return res.status(400).json({ error: "Only QRIS orders need QR generation" });
+    }
+
+    // Check if QR already exists and is not expired
+    if (order.qrisUrl && order.qrisExpiresAt && new Date(order.qrisExpiresAt) > new Date()) {
+      return res.json({
+        success: true,
+        qrCodeUrl: order.qrisUrl,
+        expiresAt: order.qrisExpiresAt,
+        invoiceId: order.xenditInvoiceId,
+      });
+    }
+
+    // Create Xendit QRIS payment
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+    const xenditResponse = await fetch('https://api.xendit.co/qr_codes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${Buffer.from(process.env.XENDIT_SECRET_KEY + ':').toString('base64')}`,
+      },
+      body: JSON.stringify({
+        external_id: order.orderNumber,
+        type: 'DYNAMIC',
+        callback_url: `${process.env.EXPO_PUBLIC_DOMAIN}/api/xendit/webhook`,
+        amount: order.total,
+        expires_at: expiresAt.toISOString(),
+      }),
+    });
+
+    if (!xenditResponse.ok) {
+      const error = await xenditResponse.json();
+      console.error('❌ Xendit error:', error);
+      return res.status(500).json({ error: 'Failed to create QRIS payment' });
+    }
+
+    const xenditData = await xenditResponse.json();
+
+    // Update order with QR code
+    const [updated] = await db
+      .update(orders)
+      .set({
+        qrisUrl: xenditData.qr_string,
+        qrisExpiresAt: expiresAt,
+        xenditInvoiceId: xenditData.id,
+      })
+      .where(eq(orders.id, orderId))
+      .returning();
+
+    console.log(`✅ QRIS created: ${xenditData.id}`);
+
+    res.json({
+      success: true,
+      qrCodeUrl: xenditData.qr_string,
+      expiresAt: expiresAt,
+      invoiceId: xenditData.id,
+    });
+
+  } catch (error) {
+    console.error("❌ Create QRIS error:", error);
+    res.status(500).json({ error: "Failed to create QRIS payment" });
+  }
+});
+
+// ===== XENDIT WEBHOOK - PAYMENT CONFIRMATION =====
+app.post("/api/xendit/webhook", async (req, res) => {
+  try {
+    const payload = req.body;
+    
+    console.log('🔔 Xendit webhook received:', payload);
+
+    // Verify webhook is from Xendit (optional but recommended)
+    const callbackToken = req.headers['x-callback-token'];
+    if (callbackToken !== process.env.XENDIT_WEBHOOK_TOKEN) {
+      console.warn('⚠️ Invalid webhook token');
+      // Still process for development, but log warning
+    }
+
+    // Handle QR code payment
+    if (payload.type === 'QR_CODE' && payload.status === 'COMPLETED') {
+      const externalId = payload.external_id; // This is our orderNumber
+
+      // Find order by orderNumber
+      const [order] = await db
+        .select()
+        .from(orders)
+        .where(eq(orders.orderNumber, externalId))
+        .limit(1);
+
+      if (!order) {
+        console.error(`❌ Order not found: ${externalId}`);
+        return res.status(404).json({ error: 'Order not found' });
+      }
+
+      // Update payment status
+      await db
+        .update(orders)
+        .set({
+          qrisConfirmed: true,
+          paymentStatus: 'paid',
+        })
+        .where(eq(orders.id, order.id));
+
+      console.log(`✅ Payment confirmed for order ${order.id}`);
+
+      // Notify pickers that order is ready
+      await notifyPickersNewOrder(order.storeId!, order.id);
+
+      // Send push notification to customer
+      const [user] = await db.select().from(users).where(eq(users.id, order.userId));
+      if (user?.pushToken) {
+        await fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: user.pushToken,
+            sound: 'default',
+            title: '✅ Payment Confirmed!',
+            body: `Your order #${order.orderNumber} is being prepared`,
+            data: { orderId: order.id, type: 'payment_confirmed' },
+          }),
+        });
+      }
+
+      return res.json({ success: true });
+    }
+
+    res.json({ success: true });
+
+  } catch (error) {
+    console.error('❌ Xendit webhook error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
 // Add this NEW endpoint to your routes.ts
 
 // ===== CORRECTED DRIVER ORDER COMPLETE ROUTE =====
@@ -2667,6 +2930,10 @@ app.put("/api/driver/orders/:id/complete", async (req, res) => {
     res.status(500).json({ error: "Failed to complete delivery" });
   }
 });
+
+
+
+
 
   // ==================== 11. MESSAGES ====================
   console.log("💬 Registering message routes...");
