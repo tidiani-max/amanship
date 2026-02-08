@@ -2412,7 +2412,7 @@ app.post("/api/orders", async (req, res) => {
           .limit(1);
 
         if (!inv) {
-          throw new Error(`Product not available`);
+          throw new Error(`Product ${item.productId} not available`);
         }
         
         return { ...item, storeId: inv.storeId };
@@ -2446,15 +2446,15 @@ app.post("/api/orders", async (req, res) => {
       const deliveryPin = Math.floor(1000 + Math.random() * 9000).toString();
       const orderNumber = `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`;
 
-      console.log(`💾 Creating order:`, {
+      console.log(`💾 Creating order for store ${storeId}:`, {
         orderNumber,
+        paymentMethod,
         itemsTotal,
         actualDeliveryFee,
         totalDiscount,
         finalTotal,
       });
 
-      // ✅ CRITICAL: Create order with exact field matching
       try {
         const [order] = await db
           .insert(orders)
@@ -2484,15 +2484,15 @@ app.post("/api/orders", async (req, res) => {
             customerLat: String(customerLat),
             customerLng: String(customerLng),
             
-            // Payment
+            // Payment - ✅ CRITICAL FIX
             paymentMethod: paymentMethod || "midtrans",
-            paymentStatus: paymentMethod === "qris" ? "pending" : "paid",
+            paymentStatus: paymentMethod === "qris" ? "pending" : "paid", // COD = paid immediately
             deliveryPin,
             qrisConfirmed: false,
           })
           .returning();
 
-        console.log(`✅ Order created: ${order.id}`);
+        console.log(`✅ Order created: ${order.id} (${paymentMethod})`);
 
         // Create order items
         await db.insert(orderItems).values(
@@ -2504,8 +2504,13 @@ app.post("/api/orders", async (req, res) => {
           }))
         );
 
-        // Notify pickers (not for QRIS until paid)
-        if (paymentMethod !== "qris") {
+        // ✅ CRITICAL: Notify pickers based on payment method
+        if (paymentMethod === "qris") {
+          console.log(`⏳ QRIS order ${order.id} - waiting for payment confirmation`);
+          // Don't notify pickers yet - will notify after payment confirmed
+        } else {
+          // COD or other methods - notify pickers immediately
+          console.log(`🔔 Notifying pickers for ${paymentMethod} order ${order.id}`);
           await notifyPickersNewOrder(storeId, order.id);
         }
 
@@ -2519,6 +2524,7 @@ app.post("/api/orders", async (req, res) => {
     // Clear cart
     try {
       await db.delete(cartItems).where(eq(cartItems.userId, userId));
+      console.log(`🗑️ Cart cleared for user ${userId}`);
     } catch (cartError) {
       console.error("⚠️ Cart clear failed:", cartError);
     }
@@ -2527,7 +2533,7 @@ app.post("/api/orders", async (req, res) => {
     res.status(201).json(createdOrders);
 
   } catch (error) {
-    console.error("❌ ORDER ERROR:", error);
+    console.error("❌ ORDER CREATION ERROR:", error);
     res.status(500).json({ 
       error: "Failed to create order",
       details: error instanceof Error ? error.message : "Unknown error"
@@ -2686,6 +2692,7 @@ app.get("/api/orders/:id", async (req, res) => {
 
 
 // ===== CREATE XENDIT QRIS PAYMENT =====
+// ===== CREATE XENDIT QRIS PAYMENT ===== (Keep only ONE)
 app.post("/api/orders/:orderId/create-qris", async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -2720,6 +2727,7 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
 
     // Check if QR already exists and is not expired
     if (order.qrisUrl && order.qrisExpiresAt && new Date(order.qrisExpiresAt) > new Date()) {
+      console.log(`✅ Using existing QRIS for order ${orderId}`);
       return res.json({
         success: true,
         qrCodeUrl: order.qrisUrl,
@@ -2728,102 +2736,14 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
       });
     }
 
-    // Create Xendit QRIS payment
+    // ✅ Create Xendit QRIS
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
-    const xenditResponse = await fetch('https://api.xendit.co/qr_codes', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Basic ${Buffer.from(process.env.XENDIT_SECRET_KEY + ':').toString('base64')}`,
-      },
-      body: JSON.stringify({
-        external_id: order.orderNumber,
-        type: 'DYNAMIC',
-        callback_url: `${process.env.EXPO_PUBLIC_DOMAIN}/api/xendit/webhook`,
-        amount: order.total,
-        expires_at: expiresAt.toISOString(),
-      }),
+    console.log(`🔐 Calling Xendit API with:`, {
+      external_id: order.orderNumber,
+      amount: order.total,
+      type: 'DYNAMIC',
     });
-
-    if (!xenditResponse.ok) {
-      const error = await xenditResponse.json();
-      console.error('❌ Xendit error:', error);
-      return res.status(500).json({ error: 'Failed to create QRIS payment' });
-    }
-
-    const xenditData = await xenditResponse.json();
-
-    // Update order with QR code
-    const [updated] = await db
-      .update(orders)
-      .set({
-        qrisUrl: xenditData.qr_string,
-        qrisExpiresAt: expiresAt,
-        xenditInvoiceId: xenditData.id,
-      })
-      .where(eq(orders.id, orderId))
-      .returning();
-
-    console.log(`✅ QRIS created: ${xenditData.id}`);
-
-    res.json({
-      success: true,
-      qrCodeUrl: xenditData.qr_string,
-      expiresAt: expiresAt,
-      invoiceId: xenditData.id,
-    });
-
-  } catch (error) {
-    console.error("❌ Create QRIS error:", error);
-    res.status(500).json({ error: "Failed to create QRIS payment" });
-  }
-});
-
-// ===== XENDIT WEBHOOK - PAYMENT CONFIRMATION =====
-// ===== CREATE XENDIT QRIS PAYMENT =====
-app.post("/api/orders/:orderId/create-qris", async (req, res) => {
-  try {
-    const { orderId } = req.params;
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: "userId required" });
-    }
-
-    console.log(`💳 Creating QRIS payment for order ${orderId}`);
-
-    // Get order
-    const [order] = await db
-      .select()
-      .from(orders)
-      .where(eq(orders.id, orderId))
-      .limit(1);
-
-    if (!order) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    if (order.userId !== userId) {
-      return res.status(403).json({ error: "Not your order" });
-    }
-
-    if (order.paymentMethod !== "qris") {
-      return res.status(400).json({ error: "Only QRIS orders need QR generation" });
-    }
-
-    // Check if QR already exists and is not expired
-    if (order.qrisUrl && order.qrisExpiresAt && new Date(order.qrisExpiresAt) > new Date()) {
-      return res.json({
-        success: true,
-        qrCodeUrl: order.qrisUrl,
-        expiresAt: order.qrisExpiresAt,
-        invoiceId: order.xenditInvoiceId,
-      });
-    }
-
-    // ✅ Create Xendit QRIS WITHOUT callback_url
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
     const xenditResponse = await fetch('https://api.xendit.co/qr_codes', {
       method: 'POST',
@@ -2835,17 +2755,22 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
         external_id: order.orderNumber,
         type: 'DYNAMIC',
         amount: order.total,
-        // ✅ REMOVED callback_url - we'll poll for status instead
       }),
     });
 
+    const responseText = await xenditResponse.text();
+    console.log(`📥 Xendit response status: ${xenditResponse.status}`);
+    console.log(`📥 Xendit response body:`, responseText);
+
     if (!xenditResponse.ok) {
-      const error = await xenditResponse.json();
-      console.error('❌ Xendit error:', error);
-      return res.status(500).json({ error: 'Failed to create QRIS payment' });
+      console.error('❌ Xendit API error:', responseText);
+      return res.status(500).json({ 
+        error: 'Failed to create QRIS payment',
+        details: responseText 
+      });
     }
 
-    const xenditData = await xenditResponse.json();
+    const xenditData = JSON.parse(responseText);
 
     // Update order with QR code
     await db
@@ -2857,7 +2782,7 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
       })
       .where(eq(orders.id, orderId));
 
-    console.log(`✅ QRIS created: ${xenditData.id}`);
+    console.log(`✅ QRIS created successfully: ${xenditData.id}`);
 
     res.json({
       success: true,
@@ -2868,7 +2793,10 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
 
   } catch (error) {
     console.error("❌ Create QRIS error:", error);
-    res.status(500).json({ error: "Failed to create QRIS payment" });
+    res.status(500).json({ 
+      error: "Failed to create QRIS payment",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
   }
 });
 

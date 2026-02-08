@@ -58,34 +58,43 @@ export default function OrderSuccessScreen() {
   });
 
   // ✅ Generate QRIS for unpaid orders
-  useEffect(() => {
-    orders.forEach(async (order) => {
-      if (order.paymentMethod === "qris" && !order.qrisConfirmed && !qrisData[order.id]) {
-        try {
-          console.log(`🔄 Creating QRIS for order ${order.id}`);
-          const res = await fetch(
-            `${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${order.id}/create-qris`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ userId: user?.id }),
-            }
-          );
-
-          if (res.ok) {
-            const data = await res.json();
-            console.log(`✅ QRIS created:`, data);
-            setQrisData(prev => ({ ...prev, [order.id]: data }));
-          } else {
-            const error = await res.text();
-            console.error(`❌ QRIS creation failed:`, error);
+// Generate QRIS for unpaid orders
+useEffect(() => {
+  orders.forEach(async (order) => {
+    if (order.paymentMethod === "qris" && !order.qrisConfirmed && !qrisData[order.id]) {
+      try {
+        console.log(`🔄 Creating QRIS for order ${order.id}`);
+        const res = await fetch(
+          `${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${order.id}/create-qris`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user?.id }),
           }
-        } catch (error) {
-          console.error("Failed to create QRIS:", error);
+        );
+
+        const responseText = await res.text();
+        console.log(`📥 QRIS creation response:`, responseText);
+
+        if (res.ok) {
+          const data = JSON.parse(responseText);
+          console.log(`✅ QRIS created:`, data);
+          setQrisData(prev => ({ ...prev, [order.id]: data }));
+        } else {
+          console.error(`❌ QRIS creation failed (${res.status}):`, responseText);
+          // ✅ Show error to user
+          Alert.alert(
+            'QRIS Generation Failed',
+            'Unable to generate QR code. Please contact support or try COD payment.',
+            [{ text: 'OK' }]
+          );
         }
+      } catch (error) {
+        console.error("Failed to create QRIS:", error);
       }
-    });
-  }, [orders, user?.id]);
+    }
+  });
+}, [orders, user?.id]);
 
   // ✅ Poll QRIS payment status
   useEffect(() => {
