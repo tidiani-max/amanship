@@ -39,12 +39,6 @@ interface PaymentOption {
 
 const PAYMENT_METHODS: PaymentOption[] = [
   { id: "qris", name: "QRIS (Scan QR)", icon: "smartphone", type: "qris" },
-  { id: "gopay", name: "GoPay", icon: "credit-card", type: "ewallet" },
-  { id: "ovo", name: "OVO", icon: "credit-card", type: "ewallet" },
-  { id: "shopeepay", name: "ShopeePay", icon: "credit-card", type: "ewallet" },
-  { id: "dana", name: "DANA", icon: "credit-card", type: "ewallet" },
-  { id: "bca", name: "BCA Virtual Account", icon: "briefcase", type: "bank" },
-  { id: "card", name: "Credit Card", icon: "credit-card", type: "card" },
 ];
 
 const COD_OPTION: PaymentOption = {

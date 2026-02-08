@@ -2356,7 +2356,19 @@ console.log("📦 Registering order routes...");
 
 app.post("/api/orders", async (req, res) => {
   try {
-    const { userId, addressId, items, customerLat, customerLng } = req.body;
+    const { 
+      userId, 
+      addressId, 
+      items, 
+      customerLat, 
+      customerLng,
+      paymentMethod = "midtrans", // ✅ Default to midtrans
+      voucherCode,
+      voucherDiscount = 0,
+      promotionId,
+      promotionDiscount = 0,
+      freeDelivery = false,
+    } = req.body;
 
     if (!userId || !items?.length || !customerLat || !customerLng) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -2385,7 +2397,7 @@ app.post("/api/orders", async (req, res) => {
 
     for (const storeId of Object.keys(itemsByStore)) {
       const storeItems = itemsByStore[storeId];
-      const DELIVERY_FEE_PER_STORE = DELIVERY_FEE;
+      const DELIVERY_FEE_PER_STORE = 12000;
       const itemsTotal = storeItems.reduce(
         (sum, i) => sum + Number(i.price) * Number(i.quantity),
         0
@@ -2394,22 +2406,32 @@ app.post("/api/orders", async (req, res) => {
       const deliveryPin = Math.floor(1000 + Math.random() * 9000).toString();
 
       const [order] = await db
-  .insert(orders)
-  .values({
-    userId,
-    storeId,
-    addressId,
-    subtotal: itemsTotal,  // ✅ ADD THIS LINE
-    total,
-    deliveryFee: DELIVERY_FEE_PER_STORE,
-    status: "pending",
-    orderNumber: `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`,
-    items: storeItems,
-    customerLat: String(customerLat),
-    customerLng: String(customerLng),
-    deliveryPin,
-  })
-  .returning();
+        .insert(orders)
+        .values({
+          userId,
+          storeId,
+          addressId,
+          subtotal: itemsTotal,
+          total,
+          deliveryFee: DELIVERY_FEE_PER_STORE,
+          status: "pending",
+          orderNumber: `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`,
+          items: storeItems,
+          customerLat: String(customerLat),
+          customerLng: String(customerLng),
+          deliveryPin,
+          
+          // ✅ PAYMENT FIELDS (only include fields that exist in schema)
+          paymentMethod: paymentMethod || "midtrans",
+          paymentStatus: paymentMethod === "qris" ? "pending" : "paid",
+          qrisConfirmed: false,
+          
+          // ✅ PROMOTION FIELDS (only if they exist in your schema)
+          ...(promotionId && { appliedPromotionId: promotionId }),
+          ...(promotionDiscount > 0 && { promotionDiscount }),
+          ...(voucherDiscount > 0 && { voucherDiscount }),
+        })
+        .returning();
 
       await db.insert(orderItems).values(
         storeItems.map(i => ({
@@ -2420,8 +2442,11 @@ app.post("/api/orders", async (req, res) => {
         }))
       );
 
-      // 🔔 NOTIFY PICKERS ABOUT NEW ORDER
-      await notifyPickersNewOrder(storeId, order.id);
+      // ✅ Only notify pickers if payment confirmed OR COD
+      if (paymentMethod === "cod" || paymentMethod === "midtrans") {
+        await notifyPickersNewOrder(storeId, order.id);
+      }
+      // For QRIS, webhook will notify pickers after payment
 
       createdOrders.push(order);
     }
@@ -2431,7 +2456,10 @@ app.post("/api/orders", async (req, res) => {
 
   } catch (error) {
     console.error("❌ Create order error:", error);
-    res.status(500).json({ error: "Failed to create order" });
+    res.status(500).json({ 
+      error: "Failed to create order",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
   }
 });
 
