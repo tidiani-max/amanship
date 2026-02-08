@@ -6,7 +6,6 @@ import {
   RefreshControl,
   ActivityIndicator,
   Pressable,
-  TextInput,
   Alert,
   Image,
 } from "react-native";
@@ -16,13 +15,10 @@ import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import { Card } from "@/components/Card";
-import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useTheme } from "@/hooks/useTheme";
 import { useLanguage } from "@/context/LanguageContext";
 import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import * as ImagePicker from 'expo-image-picker';
 import { getImageUrl } from "@/lib/image-url";
 import { useAuth } from "@/context/AuthContext";
 
@@ -117,9 +113,9 @@ const getDaysUntilExpiry = (expiryDate: string): number => {
 };
 
 const getUrgencyColor = (priority: number, theme: any) => {
-  if (priority >= 95) return '#dc2626'; // Critical (0-5 days)
-  if (priority >= 85) return '#f59e0b'; // Urgent (6-15 days)
-  if (priority >= 70) return '#fbbf24'; // Medium (16-30 days)
+  if (priority >= 95) return '#dc2626';
+  if (priority >= 85) return '#f59e0b';
+  if (priority >= 70) return '#fbbf24';
   return theme.success;
 };
 
@@ -165,7 +161,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   
-  // Stats Grid
   statsGrid: {
     padding: Spacing.xl,
     gap: Spacing.md,
@@ -191,7 +186,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   
-  // Tabs
   tabContainer: {
     paddingHorizontal: Spacing.xl,
     borderBottomWidth: 1,
@@ -212,7 +206,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   
-  // Content
   contentSection: {
     padding: Spacing.xl,
   },
@@ -223,7 +216,6 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   
-  // ✅ NEW: Automation Alert Card
   automationAlertCard: {
     padding: Spacing.lg,
     borderRadius: BorderRadius.md,
@@ -245,7 +237,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   
-  // Fresh Products Alert
   freshProductsAlert: {
     padding: Spacing.lg,
     borderRadius: BorderRadius.md,
@@ -274,7 +265,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   
-  // Product Cards
   productCard: {
     padding: Spacing.lg,
     borderRadius: BorderRadius.sm,
@@ -310,7 +300,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   
-  // Buttons
   button: {
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
@@ -407,7 +396,7 @@ export default function StoreOwnerDashboardScreen() {
       return response.json();
     },
     enabled: !!dashboard?.store?.id && !!userId,
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: 60000,
   });
 
   // Get fresh products
@@ -427,7 +416,7 @@ export default function StoreOwnerDashboardScreen() {
     enabled: !!userId,
   });
 
-  // Get expiring soon products (next 7 days)
+  // Get expiring soon products
   const { data: expiringProducts = [] } = useQuery<Product[]>({
     queryKey: ["/api/store-owner/products/expiring-soon", userId],
     queryFn: async () => {
@@ -514,11 +503,8 @@ export default function StoreOwnerDashboardScreen() {
     );
   }
 
-  // Calculate freshness stats
   const criticalProducts = freshProducts.filter(p => p.freshnessPriority >= 95);
   const urgentProducts = freshProducts.filter(p => p.freshnessPriority >= 85 && p.freshnessPriority < 95);
-  
-  // Get high priority alerts
   const highPriorityAlerts = alertsData?.alerts.filter(a => a.priority === 'HIGH') || [];
 
   return (
@@ -530,7 +516,7 @@ export default function StoreOwnerDashboardScreen() {
           {dashboard.store.address}
         </ThemedText>
         
-        {/* ✅ NEW: Manual Scan Button */}
+        {/* ✅ Manual Scan Button */}
         <Pressable 
           style={[styles.button, styles.buttonPrimary, { marginTop: Spacing.md }]}
           onPress={() => scanStoreMutation.mutate()}
@@ -549,34 +535,16 @@ export default function StoreOwnerDashboardScreen() {
 
       {/* TABS */}
       <View style={[styles.tabContainer, { borderBottomColor: theme.border }]}>
-        {/* Around line 537-558 */}
-<Pressable 
-  style={[styles.tab, activeTab === 'alerts' && styles.tabActive]}
-  onPress={() => setActiveTab('alerts')}
->
-  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-    <ThemedText style={[styles.tabText, { color: activeTab === 'alerts' ? '#10b981' : theme.textSecondary }]}>
-      🚨 Alerts
-    </ThemedText>
-    {alertsData && alertsData.highPriority > 0 && (
-      <View style={{ 
-        backgroundColor: '#dc2626', 
-        borderRadius: 10, 
-        minWidth: 20, 
-        height: 20, 
-        justifyContent: 'center', 
-        alignItems: 'center',
-        paddingHorizontal: 6,
-      }}>
-        <ThemedText style={{ color: 'white', fontSize: 11, fontWeight: '700' }}>
-          {alertsData.highPriority}
-        </ThemedText>
-      </View>
-    )}
-  </View>
-</Pressable>
+        <Pressable 
+          style={[styles.tab, activeTab === 'overview' && styles.tabActive]}
+          onPress={() => setActiveTab('overview')}
+        >
+          <ThemedText style={[styles.tabText, { color: activeTab === 'overview' ? '#10b981' : theme.textSecondary }]}>
+            Overview
+          </ThemedText>
+        </Pressable>
         
-        {/* ✅ NEW: Alerts Tab */}
+        {/* ✅ Alerts Tab */}
         <Pressable 
           style={[styles.tab, activeTab === 'alerts' && styles.tabActive]}
           onPress={() => setActiveTab('alerts')}
@@ -649,7 +617,7 @@ export default function StoreOwnerDashboardScreen() {
           />
         }
       >
-        {/* ✅ NEW: ALERTS TAB */}
+        {/* ✅ ALERTS TAB */}
         {activeTab === 'alerts' && (
           <View style={styles.contentSection}>
             <View style={styles.sectionHeader}>
@@ -859,7 +827,6 @@ export default function StoreOwnerDashboardScreen() {
               </ThemedText>
               
               <View style={{ gap: Spacing.md }}>
-                {/* ✅ NEW: Automation Stats */}
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <ThemedText>🚨 High Priority Alerts</ThemedText>
                   <ThemedText style={{ fontWeight: '700', fontSize: 18, color: '#dc2626' }}>
@@ -906,24 +873,246 @@ export default function StoreOwnerDashboardScreen() {
           </>
         )}
 
-        {/* FRESH PRODUCTS TAB - Keep your existing implementation */}
+        {/* FRESH PRODUCTS TAB */}
         {activeTab === 'fresh' && (
           <View style={styles.contentSection}>
-            {/* Your existing fresh products code */}
             <View style={styles.sectionHeader}>
               <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
                 Fresh Products Management
               </ThemedText>
             </View>
             
-            {/* ... rest of your existing fresh products implementation ... */}
+            {/* CRITICAL PRODUCTS */}
+            {criticalProducts.length > 0 && (
+              <>
+                <ThemedText style={{ fontSize: 16, fontWeight: '700', color: '#dc2626', marginBottom: Spacing.md }}>
+                  🚨 CRITICAL (0-5 Days) - {criticalProducts.length}
+                </ThemedText>
+                {criticalProducts.map(product => {
+                  const daysLeft = getDaysUntilExpiry(product.expiryDate!);
+                  return (
+                    <View 
+                      key={product.id} 
+                      style={[
+                        styles.productCard, 
+                        { 
+                          borderColor: '#dc2626', 
+                          borderWidth: 2,
+                          backgroundColor: '#fee2e2' 
+                        }
+                      ]}
+                    >
+                      {product.image && (
+                        <Image 
+                          source={{ uri: getImageUrl(product.image) }} 
+                          style={styles.productImage}
+                          resizeMode="cover"
+                        />
+                      )}
+                      <View style={styles.productInfo}>
+                        <View style={[styles.urgencyBadge, { backgroundColor: '#dc2626' }]}>
+                          <ThemedText style={{ color: 'white', fontSize: 11, fontWeight: '800' }}>
+                            {getUrgencyLabel(product.freshnessPriority)}
+                          </ThemedText>
+                        </View>
+                        
+                        <ThemedText style={{ fontSize: 16, fontWeight: '700' }}>
+                          {product.name}
+                        </ThemedText>
+                        <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>
+                          {product.brand}
+                        </ThemedText>
+                        
+                        <View style={[styles.expiryWarning, { backgroundColor: '#fee2e2' }]}>
+                          <Feather name="clock" size={14} color="#dc2626" />
+                          <ThemedText style={{ fontSize: 13, color: '#dc2626', fontWeight: '600' }}>
+                            Expires in {daysLeft} day{daysLeft !== 1 ? 's' : ''} - {new Date(product.expiryDate!).toLocaleDateString()}
+                          </ThemedText>
+                        </View>
+                        
+                        <ThemedText style={{ fontSize: 13, marginTop: Spacing.xs }}>
+                          Stock: {product.stockCount} • {product.location || 'No location'}
+                        </ThemedText>
+                        
+                        {product.requiresRefrigeration && (
+                          <ThemedText style={{ fontSize: 12, color: '#3b82f6', marginTop: Spacing.xs }}>
+                            ❄️ Requires refrigeration
+                          </ThemedText>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </>
+            )}
+            
+            {/* URGENT PRODUCTS */}
+            {urgentProducts.length > 0 && (
+              <>
+                <ThemedText style={{ fontSize: 16, fontWeight: '700', color: '#f59e0b', marginTop: Spacing.lg, marginBottom: Spacing.md }}>
+                  ⚠️ URGENT (6-15 Days) - {urgentProducts.length}
+                </ThemedText>
+                {urgentProducts.map(product => {
+                  const daysLeft = getDaysUntilExpiry(product.expiryDate!);
+                  return (
+                    <View 
+                      key={product.id} 
+                      style={[
+                        styles.productCard, 
+                        { 
+                          borderColor: '#f59e0b', 
+                          backgroundColor: '#fef3c7' 
+                        }
+                      ]}
+                    >
+                      {product.image && (
+                        <Image 
+                          source={{ uri: getImageUrl(product.image) }} 
+                          style={styles.productImage}
+                          resizeMode="cover"
+                        />
+                      )}
+                      <View style={styles.productInfo}>
+                        <View style={[styles.urgencyBadge, { backgroundColor: '#f59e0b' }]}>
+                          <ThemedText style={{ color: 'white', fontSize: 11, fontWeight: '800' }}>
+                            {getUrgencyLabel(product.freshnessPriority)}
+                          </ThemedText>
+                        </View>
+                        
+                        <ThemedText style={{ fontSize: 16, fontWeight: '700' }}>
+                          {product.name}
+                        </ThemedText>
+                        <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>
+                          {product.brand}
+                        </ThemedText>
+                        
+                        <View style={[styles.expiryWarning, { backgroundColor: '#fef3c7' }]}>
+                          <Feather name="clock" size={14} color="#f59e0b" />
+                          <ThemedText style={{ fontSize: 13, color: '#f59e0b', fontWeight: '600' }}>
+                            Expires in {daysLeft} days - {new Date(product.expiryDate!).toLocaleDateString()}
+                          </ThemedText>
+                        </View>
+                        
+                        <ThemedText style={{ fontSize: 13, marginTop: Spacing.xs }}>
+                          Stock: {product.stockCount} • {product.location || 'No location'}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  );
+                })}
+              </>
+            )}
+            
+            {/* ALL FRESH PRODUCTS */}
+            <ThemedText style={{ fontSize: 16, fontWeight: '700', marginTop: Spacing.lg, marginBottom: Spacing.md }}>
+              🟢 All Fresh Products - {freshProducts.length}
+            </ThemedText>
+            {freshProducts.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Feather name="package" size={64} color={theme.textSecondary} />
+                <ThemedText style={styles.emptyTitle}>No Fresh Products</ThemedText>
+                <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
+                  No fresh products in your inventory
+                </ThemedText>
+              </View>
+            ) : (
+              freshProducts
+                .filter(p => p.freshnessPriority < 85)
+                .map(product => (
+                  <View 
+                    key={product.id} 
+                    style={[
+                      styles.productCard, 
+                      { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }
+                    ]}
+                  >
+                    {product.image && (
+                      <Image 
+                        source={{ uri: getImageUrl(product.image) }} 
+                        style={styles.productImage}
+                        resizeMode="cover"
+                      />
+                    )}
+                    <View style={styles.productInfo}>
+                      <ThemedText style={{ fontSize: 16, fontWeight: '700' }}>
+                        {product.name}
+                      </ThemedText>
+                      <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>
+                        {product.brand}
+                      </ThemedText>
+                      
+                      {product.expiryDate && (
+                        <ThemedText style={{ fontSize: 13, marginTop: Spacing.xs }}>
+                          📅 Expires: {new Date(product.expiryDate).toLocaleDateString()}
+                        </ThemedText>
+                      )}
+                      
+                      <ThemedText style={{ fontSize: 13 }}>
+                        Stock: {product.stockCount}
+                      </ThemedText>
+                    </View>
+                  </View>
+                ))
+            )}
           </View>
         )}
 
-        {/* PRODUCTS TAB - Keep your existing implementation */}
+        {/* PRODUCTS TAB */}
         {activeTab === 'products' && (
           <View style={styles.contentSection}>
-            {/* Your existing products code */}
+            <View style={styles.sectionHeader}>
+              <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
+                All Products ({products.length})
+              </ThemedText>
+            </View>
+            
+            {products.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Feather name="package" size={64} color={theme.textSecondary} />
+                <ThemedText style={styles.emptyTitle}>No Products</ThemedText>
+              </View>
+            ) : (
+              products.map(product => (
+                <View 
+                  key={product.id} 
+                  style={[
+                    styles.productCard, 
+                    { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }
+                  ]}
+                >
+                  {product.image && (
+                    <Image 
+                      source={{ uri: getImageUrl(product.image) }} 
+                      style={styles.productImage}
+                      resizeMode="cover"
+                    />
+                  )}
+                  <View style={styles.productInfo}>
+                    {product.isFresh && (
+                      <View style={[styles.urgencyBadge, { backgroundColor: '#10b981' }]}>
+                        <ThemedText style={{ color: 'white', fontSize: 11, fontWeight: '800' }}>
+                          🥬 FRESH
+                        </ThemedText>
+                      </View>
+                    )}
+                    
+                    <ThemedText style={{ fontSize: 16, fontWeight: '700' }}>
+                      {product.name}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>
+                      {product.brand}
+                    </ThemedText>
+                    
+                    <ThemedText style={{ fontSize: 14, marginTop: Spacing.xs }}>
+                      Cost: {formatCurrency(product.costPrice)} → Sell: {formatCurrency(product.price)}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 14 }}>
+                      Stock: {product.stockCount} • Margin: {product.margin}%
+                    </ThemedText>
+                  </View>
+                </View>
+              ))
+            )}
           </View>
         )}
       </ScrollView>
