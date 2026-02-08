@@ -709,9 +709,23 @@ app.get("/api/picker/dashboard", async (req, res) => {
     const [storeInfo] = await db.select().from(stores).where(eq(stores.id, storeId));
 
     const pending = await db
-      .select()
-      .from(orders)
-      .where(and(eq(orders.storeId, storeId), eq(orders.status, "pending")));
+  .select()
+  .from(orders)
+  .where(
+    and(
+      eq(orders.storeId, storeId),
+      eq(orders.status, "pending"),
+      // ✅ CRITICAL: Only show if COD OR if QRIS is confirmed
+      or(
+        eq(orders.paymentMethod, "cod"),
+        and(
+          eq(orders.paymentMethod, "qris"),
+          eq(orders.qrisConfirmed, true)
+        )
+      )
+    )
+  );
+
 
     const active = await db
       .select()
@@ -2787,22 +2801,28 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 60); // QRIS expires in 60 minutes
 
-    await db
-      .update(orders)
-      .set({
-        xenditInvoiceId: qrisData.id,
-        qrisUrl: qrisData.qr_string, // ✅ Save the QR string
-        qrisExpiresAt: expiresAt,
-      })
-      .where(eq(orders.id, orderId));
+   await db
+  .update(orders)
+  .set({
+    xenditInvoiceId: qrisData.id,
+    qrisUrl: qrisData.qr_string,
+    qrisExpiresAt: expiresAt,
+  })
+  .where(eq(orders.id, orderId));
 
-    console.log(`💾 QRIS data saved to database for order ${orderId}`);
+console.log(`💾 QRIS data saved to database for order ${orderId}`);
 
-    // ✅ Return the full QRIS data including qr_string
-    res.json({
-      ...qrisData,
-      qrCodeUrl: qrisData.qr_string, // ✅ Include as qrCodeUrl for compatibility
-    });
+// ✅ Calculate minutes until expiry
+const now = new Date();
+const minutesUntilExpiry = Math.floor((expiresAt.getTime() - now.getTime()) / (1000 * 60));
+
+// ✅ Return the full QRIS data including expiry info
+res.json({
+  ...qrisData,
+  qrCodeUrl: qrisData.qr_string,
+  qrisExpiresAt: expiresAt.toISOString(), // ✅ ISO string for frontend
+  minutesUntilExpiry, // ✅ Minutes remaining (should be 60)
+});
 
   } catch (error) {
     console.error("❌ QRIS creation error:", error);
