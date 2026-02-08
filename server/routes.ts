@@ -2362,18 +2362,24 @@ app.post("/api/orders", async (req, res) => {
       items, 
       customerLat, 
       customerLng,
-      paymentMethod = "midtrans", // ✅ Default to midtrans
-      voucherCode,
-      voucherDiscount = 0,
-      promotionId,
-      promotionDiscount = 0,
-      freeDelivery = false,
+      paymentMethod = "midtrans",
     } = req.body;
 
+    console.log("📦 Order request:", { 
+      userId, 
+      paymentMethod, 
+      itemCount: items?.length,
+      hasAddress: !!addressId,
+      hasLocation: !!(customerLat && customerLng)
+    });
+
+    // Validation
     if (!userId || !items?.length || !customerLat || !customerLng) {
+      console.log("❌ Missing required fields");
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    // Get store for each item
     const itemsWithStore = await Promise.all(
       items.map(async (item: any) => {
         const [inv] = await db
@@ -2382,11 +2388,18 @@ app.post("/api/orders", async (req, res) => {
           .where(eq(storeInventory.productId, item.productId))
           .limit(1);
 
-        if (!inv) throw new Error("Product not available");
+        if (!inv) {
+          console.log(`❌ Product not found: ${item.productId}`);
+          throw new Error(`Product not available`);
+        }
+        
         return { ...item, storeId: inv.storeId };
       })
     );
 
+    console.log(`✅ Found stores for ${itemsWithStore.length} items`);
+
+    // Group by store
     const itemsByStore: Record<string, any[]> = {};
     for (const item of itemsWithStore) {
       if (!itemsByStore[item.storeId]) itemsByStore[item.storeId] = [];
@@ -2394,17 +2407,28 @@ app.post("/api/orders", async (req, res) => {
     }
 
     const createdOrders = [];
+    const DELIVERY_FEE = 12000;
 
+    // Create order per store
     for (const storeId of Object.keys(itemsByStore)) {
       const storeItems = itemsByStore[storeId];
-      const DELIVERY_FEE_PER_STORE = 12000;
+      
       const itemsTotal = storeItems.reduce(
         (sum, i) => sum + Number(i.price) * Number(i.quantity),
         0
       );
-      const total = itemsTotal + DELIVERY_FEE_PER_STORE;
+      
+      const total = itemsTotal + DELIVERY_FEE;
       const deliveryPin = Math.floor(1000 + Math.random() * 9000).toString();
+      const orderNumber = `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`;
 
+      console.log(`💾 Creating order for store ${storeId}:`, {
+        orderNumber,
+        total,
+        paymentMethod
+      });
+
+      // ✅ MINIMAL ORDER - Only required fields
       const [order] = await db
         .insert(orders)
         .values({
@@ -2413,26 +2437,22 @@ app.post("/api/orders", async (req, res) => {
           addressId,
           subtotal: itemsTotal,
           total,
-          deliveryFee: DELIVERY_FEE_PER_STORE,
+          deliveryFee: DELIVERY_FEE,
           status: "pending",
-          orderNumber: `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`,
+          orderNumber,
           items: storeItems,
           customerLat: String(customerLat),
           customerLng: String(customerLng),
           deliveryPin,
-          
-          // ✅ PAYMENT FIELDS (only include fields that exist in schema)
           paymentMethod: paymentMethod || "midtrans",
           paymentStatus: paymentMethod === "qris" ? "pending" : "paid",
           qrisConfirmed: false,
-          
-          // ✅ PROMOTION FIELDS (only if they exist in your schema)
-          ...(promotionId && { appliedPromotionId: promotionId }),
-          ...(promotionDiscount > 0 && { promotionDiscount }),
-          ...(voucherDiscount > 0 && { voucherDiscount }),
         })
         .returning();
 
+      console.log(`✅ Order created: ${order.id}`);
+
+      // Create order items
       await db.insert(orderItems).values(
         storeItems.map(i => ({
           orderId: order.id,
@@ -2442,20 +2462,29 @@ app.post("/api/orders", async (req, res) => {
         }))
       );
 
-      // ✅ Only notify pickers if payment confirmed OR COD
-      if (paymentMethod === "cod" || paymentMethod === "midtrans") {
+      console.log(`✅ Order items created for order ${order.id}`);
+
+      // Notify pickers (skip for QRIS until payment confirmed)
+      if (paymentMethod !== "qris") {
         await notifyPickersNewOrder(storeId, order.id);
+        console.log(`🔔 Pickers notified for order ${order.id}`);
       }
-      // For QRIS, webhook will notify pickers after payment
 
       createdOrders.push(order);
     }
 
+    // Clear cart
     await storage.clearCart(userId);
+    console.log(`✅ Cart cleared for user ${userId}`);
+
+    console.log(`🎉 SUCCESS: Created ${createdOrders.length} orders`);
     res.status(201).json(createdOrders);
 
   } catch (error) {
-    console.error("❌ Create order error:", error);
+    console.error("❌ CREATE ORDER ERROR:", error);
+    console.error("Error details:", error instanceof Error ? error.message : "Unknown");
+    console.error("Stack:", error instanceof Error ? error.stack : "No stack");
+    
     res.status(500).json({ 
       error: "Failed to create order",
       details: error instanceof Error ? error.message : "Unknown error"
