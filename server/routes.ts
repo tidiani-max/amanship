@@ -2373,6 +2373,8 @@ app.post("/api/orders", async (req, res) => {
       hasLocation: !!(customerLat && customerLng)
     });
 
+    console.log("📦 Full request body:", JSON.stringify(req.body, null, 2)); // ✅ ADD THIS LINE
+
     // Validation
     if (!userId || !items?.length || !customerLat || !customerLng) {
       console.log("❌ Missing required fields");

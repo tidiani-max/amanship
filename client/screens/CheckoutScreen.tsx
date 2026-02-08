@@ -55,7 +55,7 @@ export default function CheckoutScreen() {
   const queryClient = useQueryClient();
   const { theme } = useTheme();
 
-  const { items, subtotal } = useCart();
+  const { items, subtotal, clearCart } = useCart(); // ✅ Add clearCart
   const { 
     location, 
     codAllowed, 
@@ -65,6 +65,7 @@ export default function CheckoutScreen() {
   } = useLocation();
   const { user } = useAuth();
   const { t } = useLanguage();
+  
 
   const [selectedPayment, setSelectedPayment] = useState<PaymentOption>(PAYMENT_METHODS[0]); // QRIS by default
   const [itemsWithStore, setItemsWithStore] = useState<any[]>([]);
@@ -248,51 +249,138 @@ export default function CheckoutScreen() {
       orderMutation.mutate(addr.id);
     },
   });
-
-  const orderMutation = useMutation({
+const orderMutation = useMutation({
     mutationFn: async (addressId?: string) => {
-      if (!user?.id || !location) throw new Error("Missing data");
-      const itemsPayload = items.map((i) => ({
-        productId: i.product.id, name: i.product.name, price: i.product.price, quantity: i.quantity,
+      if (!user?.id || !location) {
+        throw new Error("Missing user or location data");
+      }
+
+      if (items.length === 0) {
+        throw new Error("Cart is empty");
+      }
+
+      console.log("🛒 Creating order with:", {
+        userId: user.id,
+        itemCount: items.length,
+        subtotal,
+        finalTotal,
+        paymentMethod: selectedPayment.type,
+        addressId: addressId || selectedAddress?.id,
+      });
+
+      // ✅ Prepare items payload
+      const itemsPayload = items.map((item) => ({
+        productId: item.product.id,
+        name: item.product.name,
+        price: item.product.price,
+        quantity: item.quantity,
       }));
+
+      // ✅ Determine payment method - MUST match backend expectations
+      let paymentMethod = "midtrans"; // Default fallback
       
-      // ✅ Determine payment method type
-      let paymentMethod = "midtrans"; // Default
       if (selectedPayment.type === "cod") {
         paymentMethod = "cod";
       } else if (selectedPayment.type === "qris") {
         paymentMethod = "qris";
       }
-      
-      const res = await apiRequest("POST", "/api/orders", {
-        customerLat: location.latitude.toString(), 
-        customerLng: location.longitude.toString(),
-        paymentMethod, // ✅ Send correct payment method
-        items: itemsPayload, 
-        total: finalTotal, 
-        voucherCode: appliedVoucher?.code,
-        voucherDiscount, 
-        promotionId: autoAppliedPromotion?.id, 
-        promotionDiscount,
-        freeDelivery, 
-        addressId, 
+
+      console.log("💳 Payment method:", paymentMethod);
+
+      // ✅ Build order payload with ALL required fields
+      const orderPayload = {
         userId: user.id,
-      });
-      if (!res.ok) throw new Error("Order failed");
+        items: itemsPayload,
+        
+        // ✅ Location (REQUIRED)
+        customerLat: location.latitude,
+        customerLng: location.longitude,
+        
+        // ✅ Address (use existing or the one we just created)
+        addressId: addressId || selectedAddress?.id || null,
+        
+        // ✅ Payment
+        paymentMethod,
+        
+        // ✅ Pricing
+        subtotal,
+        total: finalTotal,
+        deliveryFee: totalDeliveryFee,
+        
+        // ✅ Discounts
+        voucherCode: appliedVoucher?.code || null,
+        voucherDiscount: voucherDiscount || 0,
+        promotionId: autoAppliedPromotion?.id || null,
+        promotionDiscount: promotionDiscount || 0,
+        freeDelivery,
+      };
+
+      console.log("📤 Sending order payload:", orderPayload);
+
+      const res = await apiRequest("POST", "/api/orders", orderPayload);
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("❌ Order creation failed:", errorText);
+        throw new Error(`Order failed: ${errorText}`);
+      }
+
       return res.json();
     },
     onSuccess: (data) => {
-      const orderIds = Array.isArray(data) ? data.map(o => o.id).join(',') : data.id;
+      console.log("✅ Order created successfully:", data);
+      
+      // Clear cart
+      clearCart();
+      
+      // Navigate to success screen
+      const orderIds = Array.isArray(data) 
+        ? data.map(o => o.id).join(',') 
+        : data.id;
+      
       navigation.navigate("OrderSuccess", { orderId: orderIds });
     },
-    onError: (e: any) => Alert.alert("Order Failed", e.message),
+    onError: (error: any) => {
+      console.error("❌ Order mutation error:", error);
+      Alert.alert(
+        "Order Failed", 
+        error.message || "Failed to place order. Please try again."
+      );
+    },
   });
 
-  const handlePlaceOrder = () => {
-    if (!user?.id) return Alert.alert("Login required");
-    if (!location) return Alert.alert("Enable GPS to continue");
-    if (!selectedAddress) saveAddressMutation.mutate();
-    else orderMutation.mutate(selectedAddress.id);
+const handlePlaceOrder = () => {
+    console.log("🚀 Place order clicked");
+    
+    // Validation
+    if (!user?.id) {
+      Alert.alert("Login Required", "Please login to place an order");
+      return;
+    }
+
+    if (!location) {
+      Alert.alert("Location Required", "Please enable GPS to continue");
+      return;
+    }
+
+    if (items.length === 0) {
+      Alert.alert("Empty Cart", "Your cart is empty");
+      return;
+    }
+
+    if (storeTotals.some(st => st.storeId === "unknown")) {
+      Alert.alert("Store Error", "Some items don't have a valid store");
+      return;
+    }
+
+    // If no address exists, save one first
+    if (!selectedAddress) {
+      console.log("📍 No address found, saving current location...");
+      saveAddressMutation.mutate();
+    } else {
+      console.log("📍 Using existing address:", selectedAddress.id);
+      orderMutation.mutate(selectedAddress.id);
+    }
   };
 
   const isProcessing = saveAddressMutation.isPending || orderMutation.isPending;
