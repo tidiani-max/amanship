@@ -105,7 +105,7 @@ export default function CheckoutScreen() {
   });
 
   const selectedAddress = addresses[0] ?? null;
-  const DELIVERY_FEE_PER_STORE = 10000;
+  const DELIVERY_FEE_PER_STORE = 12000;
 
   useEffect(() => {
     async function enrichItemsWithStores() {

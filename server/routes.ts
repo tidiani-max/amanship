@@ -2745,14 +2745,14 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
     }
 
     // ✅ CRITICAL FIX: Add callback_url (required by Xendit)
-    const callbackUrl = `${process.env.EXPO_PUBLIC_DOMAIN}/api/webhooks/xendit/qris`;
-    
-    const xenditPayload = {
-      external_id: order.orderNumber,
-      type: "DYNAMIC",
-      callback_url: callbackUrl, // ✅ REQUIRED FIELD
-      amount: Number(order.total),
-    };
+    const callbackUrl = `https://amanship-production.up.railway.app/api/webhooks/xendit/qris`;
+
+const xenditPayload = {
+  external_id: order.orderNumber,
+  type: "DYNAMIC",
+  callback_url: callbackUrl,
+  amount: Number(order.total),
+};
 
     console.log(`📤 Xendit request:`, xenditPayload);
 
