@@ -2708,7 +2708,6 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    // Verify payment method is QRIS
     if (order.paymentMethod !== "qris") {
       return res.status(400).json({ 
         error: "Order payment method is not QRIS",
@@ -2716,10 +2715,9 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
       });
     }
 
-    // ✅ FIXED: Check for existing QRIS data using xenditInvoiceId instead
+    // ✅ Check for existing valid QRIS
     if (order.xenditInvoiceId) {
       console.log(`✅ Order already has QRIS invoice: ${order.xenditInvoiceId}`);
-      // Check if it's still valid
       try {
         const checkResponse = await fetch(
           `https://api.xendit.co/qr_codes/${order.xenditInvoiceId}`,
@@ -2744,15 +2742,19 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
       }
     }
 
-    // ✅ CRITICAL FIX: Add callback_url (required by Xendit)
-    const callbackUrl = `https://amanship-production.up.railway.app/api/webhooks/xendit/qris`;
-
-const xenditPayload = {
-  external_id: order.orderNumber,
-  type: "DYNAMIC",
-  callback_url: callbackUrl,
-  amount: Number(order.total),
-};
+    // ✅ Build proper callback URL
+    const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+      : process.env.EXPO_PUBLIC_DOMAIN || 'https://amanship-production.up.railway.app';
+    
+    const callbackUrl = `${baseUrl}/api/webhooks/xendit/qris`;
+    
+    const xenditPayload = {
+      external_id: order.orderNumber,
+      type: "DYNAMIC",
+      callback_url: callbackUrl,
+      amount: Number(order.total),
+    };
 
     console.log(`📤 Xendit request:`, xenditPayload);
 
@@ -2769,7 +2771,6 @@ const xenditPayload = {
 
     const responseText = await xenditResponse.text();
     console.log(`📥 Xendit response status: ${xenditResponse.status}`);
-    console.log(`📥 Xendit response body:`, responseText);
 
     if (!xenditResponse.ok) {
       console.error(`❌ Xendit API error:`, responseText);
@@ -2780,17 +2781,29 @@ const xenditPayload = {
     }
 
     const qrisData = JSON.parse(responseText);
+    console.log(`✅ QRIS created:`, qrisData);
 
-    // ✅ FIXED: Save Xendit invoice ID instead of full qrisData
+    // ✅✅✅ CRITICAL FIX: Save QRIS data to database
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 60); // QRIS expires in 60 minutes
+
     await db
       .update(orders)
       .set({
-        xenditInvoiceId: qrisData.id, // Store the Xendit QR code ID
+        xenditInvoiceId: qrisData.id,
+        qrisUrl: qrisData.qr_string, // ✅ Save the QR string
+        qrisExpiresAt: expiresAt,
       })
       .where(eq(orders.id, orderId));
 
-    console.log(`✅ QRIS created successfully for order ${orderId}`);
-    res.json(qrisData);
+    console.log(`💾 QRIS data saved to database for order ${orderId}`);
+
+    // ✅ Return the full QRIS data including qr_string
+    res.json({
+      ...qrisData,
+      qrCodeUrl: qrisData.qr_string, // ✅ Include as qrCodeUrl for compatibility
+    });
+
   } catch (error) {
     console.error("❌ QRIS creation error:", error);
     res.status(500).json({

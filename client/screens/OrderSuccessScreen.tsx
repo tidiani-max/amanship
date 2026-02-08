@@ -59,6 +59,7 @@ export default function OrderSuccessScreen() {
 
   // ✅ Generate QRIS for unpaid orders
 // Generate QRIS for unpaid orders
+// ✅ Generate QRIS for unpaid orders
 useEffect(() => {
   orders.forEach(async (order) => {
     if (order.paymentMethod === "qris" && !order.qrisConfirmed && !qrisData[order.id]) {
@@ -69,23 +70,27 @@ useEffect(() => {
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: user?.id }),
           }
         );
 
-        const responseText = await res.text();
-        console.log(`📥 QRIS creation response:`, responseText);
-
         if (res.ok) {
-          const data = JSON.parse(responseText);
+          const data = await res.json();
           console.log(`✅ QRIS created:`, data);
-          setQrisData(prev => ({ ...prev, [order.id]: data }));
+          
+          // ✅ Save QRIS data with the correct field name
+          setQrisData(prev => ({ 
+            ...prev, 
+            [order.id]: {
+              ...data,
+              qrCodeUrl: data.qr_string || data.qrCodeUrl // ✅ Handle both formats
+            }
+          }));
         } else {
-          console.error(`❌ QRIS creation failed (${res.status}):`, responseText);
-          // ✅ Show error to user
+          const errorText = await res.text();
+          console.error(`❌ QRIS creation failed (${res.status}):`, errorText);
           Alert.alert(
             'QRIS Generation Failed',
-            'Unable to generate QR code. Please contact support or try COD payment.',
+            'Unable to generate QR code. Please try again or use COD payment.',
             [{ text: 'OK' }]
           );
         }
