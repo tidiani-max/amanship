@@ -2363,6 +2363,8 @@ app.post("/api/orders", async (req, res) => {
       customerLat, 
       customerLng,
       paymentMethod = "midtrans",
+      voucherCode,
+      promotionId,
     } = req.body;
 
     console.log("📦 Order request:", { 
@@ -2370,16 +2372,33 @@ app.post("/api/orders", async (req, res) => {
       paymentMethod, 
       itemCount: items?.length,
       hasAddress: !!addressId,
-      hasLocation: !!(customerLat && customerLng)
+      hasLocation: !!(customerLat && customerLng),
+      customerLat,
+      customerLng,
     });
 
-    console.log("📦 Full request body:", JSON.stringify(req.body, null, 2)); // ✅ ADD THIS LINE
-
-    // Validation
-    if (!userId || !items?.length || !customerLat || !customerLng) {
-      console.log("❌ Missing required fields");
-      return res.status(400).json({ error: "Missing required fields" });
+    // ✅ CRITICAL: Validate required fields
+    if (!userId || !items?.length) {
+      console.log("❌ Missing required fields: userId or items");
+      return res.status(400).json({ error: "Missing required fields: userId and items" });
     }
+
+    // ✅ CRITICAL: Validate location coordinates
+    if (!customerLat || !customerLng) {
+      console.log("❌ Missing location coordinates");
+      return res.status(400).json({ error: "Location coordinates are required" });
+    }
+
+    // ✅ Convert coordinates to numbers and validate
+    const lat = parseFloat(String(customerLat));
+    const lng = parseFloat(String(customerLng));
+
+    if (isNaN(lat) || isNaN(lng)) {
+      console.log("❌ Invalid coordinates:", { customerLat, customerLng });
+      return res.status(400).json({ error: "Invalid location coordinates" });
+    }
+
+    console.log("✅ Validated coordinates:", { lat, lng });
 
     // Get store for each item
     const itemsWithStore = await Promise.all(
@@ -2392,7 +2411,7 @@ app.post("/api/orders", async (req, res) => {
 
         if (!inv) {
           console.log(`❌ Product not found: ${item.productId}`);
-          throw new Error(`Product not available`);
+          throw new Error(`Product not available: ${item.name || item.productId}`);
         }
         
         return { ...item, storeId: inv.storeId };
@@ -2427,24 +2446,26 @@ app.post("/api/orders", async (req, res) => {
       console.log(`💾 Creating order for store ${storeId}:`, {
         orderNumber,
         total,
-        paymentMethod
+        paymentMethod,
+        coordinates: { lat, lng }
       });
 
-      // ✅ MINIMAL ORDER - Only required fields
+      // ✅ FIX: Create order with proper decimal conversion
       const [order] = await db
         .insert(orders)
         .values({
           userId,
           storeId,
-          addressId,
+          addressId: addressId || null,
           subtotal: itemsTotal,
           total,
           deliveryFee: DELIVERY_FEE,
           status: "pending",
           orderNumber,
           items: storeItems,
-          customerLat: String(customerLat),
-          customerLng: String(customerLng),
+          // ✅ CRITICAL FIX: Store as strings (DECIMAL columns accept strings)
+          customerLat: String(lat),
+          customerLng: String(lng),
           deliveryPin,
           paymentMethod: paymentMethod || "midtrans",
           paymentStatus: paymentMethod === "qris" ? "pending" : "paid",
@@ -2476,8 +2497,13 @@ app.post("/api/orders", async (req, res) => {
     }
 
     // Clear cart
-    await storage.clearCart(userId);
-    console.log(`✅ Cart cleared for user ${userId}`);
+    try {
+      await db.delete(cartItems).where(eq(cartItems.userId, userId));
+      console.log(`✅ Cart cleared for user ${userId}`);
+    } catch (cartError) {
+      console.error("⚠️ Failed to clear cart:", cartError);
+      // Don't fail the order if cart clear fails
+    }
 
     console.log(`🎉 SUCCESS: Created ${createdOrders.length} orders`);
     res.status(201).json(createdOrders);

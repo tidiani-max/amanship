@@ -249,95 +249,102 @@ export default function CheckoutScreen() {
       orderMutation.mutate(addr.id);
     },
   });
+
+
 const orderMutation = useMutation({
-    mutationFn: async (addressId?: string) => {
-      if (!user?.id || !location) {
-        throw new Error("Missing user or location data");
-      }
+  mutationFn: async (addressId?: string) => {
+    if (!user?.id || !location) {
+      throw new Error("Missing user or location data");
+    }
 
-      if (items.length === 0) {
-        throw new Error("Cart is empty");
-      }
+    if (items.length === 0) {
+      throw new Error("Cart is empty");
+    }
 
-      console.log("🛒 Creating order with:", {
-        userId: user.id,
-        itemCount: items.length,
-        subtotal,
-        finalTotal,
-        paymentMethod: selectedPayment.type,
-        addressId: addressId || selectedAddress?.id,
-      });
+    console.log("🛒 Creating order with:", {
+      userId: user.id,
+      itemCount: items.length,
+      subtotal,
+      finalTotal,
+      paymentMethod: selectedPayment.type,
+      addressId: addressId || selectedAddress?.id,
+    });
 
-      // ✅ Prepare items payload
-      const itemsPayload = items.map((item) => ({
-        productId: item.product.id,
-        name: item.product.name,
-        price: item.product.price,
-        quantity: item.quantity,
-      }));
+    // ✅ Prepare items payload with storeId
+    const itemsPayload = items.map((item) => ({
+      productId: item.product.id,
+      name: item.product.name,
+      price: item.product.price,
+      quantity: item.quantity,
+      storeId: item.product.storeId, // ✅ Include storeId from product
+    }));
 
-      // ✅ Determine payment method - MUST match backend expectations
-      let paymentMethod = "midtrans"; // Default fallback
-      
-      if (selectedPayment.type === "cod") {
-        paymentMethod = "cod";
-      } else if (selectedPayment.type === "qris") {
-        paymentMethod = "qris";
-      }
+    // ✅ Determine payment method
+    let paymentMethod = "midtrans";
+    
+    if (selectedPayment.type === "cod") {
+      paymentMethod = "cod";
+    } else if (selectedPayment.type === "qris") {
+      paymentMethod = "qris";
+    }
 
-      console.log("💳 Payment method:", paymentMethod);
+    console.log("💳 Payment method:", paymentMethod);
 
-      // ✅ Build order payload with ALL required fields
-      const orderPayload = {
-  userId: user.id,
-  items: itemsPayload,
-  customerLat: String(location.latitude),    // ✅ CONVERT TO STRING
-  customerLng: String(location.longitude),   // ✅ CONVERT TO STRING
-  addressId: addressId || selectedAddress?.id || null,
-  paymentMethod,
-  subtotal,
-  total: finalTotal,
-  deliveryFee: totalDeliveryFee,
-  voucherCode: appliedVoucher?.code || null,
-  voucherDiscount: voucherDiscount || 0,
-  promotionId: autoAppliedPromotion?.id || null,
-  promotionDiscount: promotionDiscount || 0,
-  freeDelivery,
-};
+    // ✅ Build order payload with correct data types
+    const orderPayload = {
+      userId: user.id,
+      items: itemsPayload,
+      // ✅ CRITICAL FIX: Send as numbers, not strings
+      customerLat: location.latitude,
+      customerLng: location.longitude,
+      addressId: addressId || selectedAddress?.id || null,
+      paymentMethod,
+      subtotal,
+      total: finalTotal,
+      deliveryFee: totalDeliveryFee,
+      voucherCode: appliedVoucher?.code || null,
+      voucherDiscount: voucherDiscount || 0,
+      promotionId: autoAppliedPromotion?.id || null,
+      promotionDiscount: promotionDiscount || 0,
+      freeDelivery,
+    };
 
-      console.log("📤 Sending order payload:", orderPayload);
+    console.log("📤 Sending order payload:", JSON.stringify(orderPayload, null, 2));
 
-      const res = await apiRequest("POST", "/api/orders", orderPayload);
+    const res = await apiRequest("POST", "/api/orders", orderPayload);
 
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("❌ Order creation failed:", errorText);
-        throw new Error(`Order failed: ${errorText}`);
-      }
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error("❌ Order creation failed:", errorText);
+      throw new Error(`Order failed: ${errorText}`);
+    }
 
-      return res.json();
-    },
-    onSuccess: (data) => {
-      console.log("✅ Order created successfully:", data);
-      
-      // Clear cart
-      clearCart();
-      
-      // Navigate to success screen
-      const orderIds = Array.isArray(data) 
-        ? data.map(o => o.id).join(',') 
-        : data.id;
-      
-      navigation.navigate("OrderSuccess", { orderId: orderIds });
-    },
-    onError: (error: any) => {
-      console.error("❌ Order mutation error:", error);
-      Alert.alert(
-        "Order Failed", 
-        error.message || "Failed to place order. Please try again."
-      );
-    },
-  });
+    const responseData = await res.json();
+    console.log("✅ Order response:", responseData);
+    
+    return responseData;
+  },
+  onSuccess: (data) => {
+    console.log("✅ Order created successfully:", data);
+    
+    // Clear cart
+    clearCart();
+    
+    // Navigate to success screen
+    const orderIds = Array.isArray(data) 
+      ? data.map(o => o.id).join(',') 
+      : data.id;
+    
+    navigation.navigate("OrderSuccess", { orderId: orderIds });
+  },
+  onError: (error: any) => {
+    console.error("❌ Order mutation error:", error);
+    Alert.alert(
+      "Order Failed", 
+      error.message || "Failed to place order. Please try again."
+    );
+  },
+});
 
 const handlePlaceOrder = () => {
     console.log("🚀 Place order clicked");
