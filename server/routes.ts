@@ -2354,6 +2354,9 @@ app.post("/api/cart/cleanup", async (req, res) => {
   // ==================== 10. ORDERS ====================
 console.log("📦 Registering order routes...");
 
+// ==================== FIXED ORDER CREATION ROUTE ====================
+// Replace your app.post("/api/orders", ...) route in routes.ts with this:
+
 app.post("/api/orders", async (req, res) => {
   try {
     const { 
@@ -2363,8 +2366,10 @@ app.post("/api/orders", async (req, res) => {
       customerLat, 
       customerLng,
       paymentMethod = "midtrans",
-      voucherCode,
       promotionId,
+      promotionDiscount = 0,
+      voucherDiscount = 0,
+      freeDelivery = false,
     } = req.body;
 
     console.log("📦 Order request:", { 
@@ -2372,33 +2377,22 @@ app.post("/api/orders", async (req, res) => {
       paymentMethod, 
       itemCount: items?.length,
       hasAddress: !!addressId,
-      hasLocation: !!(customerLat && customerLng),
       customerLat,
       customerLng,
+      promotionId,
+      promotionDiscount,
     });
 
-    // ✅ CRITICAL: Validate required fields
+    // Validation
     if (!userId || !items?.length) {
       console.log("❌ Missing required fields: userId or items");
       return res.status(400).json({ error: "Missing required fields: userId and items" });
     }
 
-    // ✅ CRITICAL: Validate location coordinates
     if (!customerLat || !customerLng) {
       console.log("❌ Missing location coordinates");
       return res.status(400).json({ error: "Location coordinates are required" });
     }
-
-    // ✅ Convert coordinates to numbers and validate
-    const lat = parseFloat(String(customerLat));
-    const lng = parseFloat(String(customerLng));
-
-    if (isNaN(lat) || isNaN(lng)) {
-      console.log("❌ Invalid coordinates:", { customerLat, customerLng });
-      return res.status(400).json({ error: "Invalid location coordinates" });
-    }
-
-    console.log("✅ Validated coordinates:", { lat, lng });
 
     // Get store for each item
     const itemsWithStore = await Promise.all(
@@ -2411,7 +2405,7 @@ app.post("/api/orders", async (req, res) => {
 
         if (!inv) {
           console.log(`❌ Product not found: ${item.productId}`);
-          throw new Error(`Product not available: ${item.name || item.productId}`);
+          throw new Error(`Product not available`);
         }
         
         return { ...item, storeId: inv.storeId };
@@ -2439,38 +2433,60 @@ app.post("/api/orders", async (req, res) => {
         0
       );
       
-      const total = itemsTotal + DELIVERY_FEE;
+      // Calculate final total
+      const baseTotal = itemsTotal + DELIVERY_FEE;
+      const finalTotal = baseTotal - (promotionDiscount || 0) - (voucherDiscount || 0);
+      
       const deliveryPin = Math.floor(1000 + Math.random() * 9000).toString();
       const orderNumber = `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`;
 
       console.log(`💾 Creating order for store ${storeId}:`, {
         orderNumber,
-        total,
+        itemsTotal,
+        deliveryFee: DELIVERY_FEE,
+        promotionDiscount,
+        voucherDiscount,
+        finalTotal,
         paymentMethod,
-        coordinates: { lat, lng }
       });
 
-      // ✅ FIX: Create order with proper decimal conversion
+      // ✅ CRITICAL FIX: Provide ALL required order fields
+      const orderData: any = {
+        userId,
+        storeId,
+        addressId: addressId || null,
+        orderNumber,
+        items: storeItems,
+        status: "pending",
+        
+        // ✅ Financial fields
+        subtotal: itemsTotal,
+        total: finalTotal,
+        deliveryFee: DELIVERY_FEE,
+        discount: (promotionDiscount || 0) + (voucherDiscount || 0),
+        
+        // ✅ Promotion fields
+        appliedPromotionId: promotionId || null,
+        promotionDiscount: promotionDiscount || 0,
+        voucherDiscount: voucherDiscount || 0,
+        freeDelivery: freeDelivery || false,
+        
+        // ✅ Location - Convert to string for DECIMAL columns
+        customerLat: customerLat.toString(),
+        customerLng: customerLng.toString(),
+        
+        // ✅ Payment fields
+        paymentMethod: paymentMethod || "midtrans",
+        paymentStatus: paymentMethod === "qris" ? "pending" : "paid",
+        deliveryPin,
+        qrisConfirmed: false,
+      };
+
+      console.log("📝 Order data to insert:", JSON.stringify(orderData, null, 2));
+
       const [order] = await db
         .insert(orders)
-        .values({
-          userId,
-          storeId,
-          addressId: addressId || null,
-          subtotal: itemsTotal,
-          total,
-          deliveryFee: DELIVERY_FEE,
-          status: "pending",
-          orderNumber,
-          items: storeItems,
-          // ✅ CRITICAL FIX: Store as strings (DECIMAL columns accept strings)
-          customerLat: String(lat),
-          customerLng: String(lng),
-          deliveryPin,
-          paymentMethod: paymentMethod || "midtrans",
-          paymentStatus: paymentMethod === "qris" ? "pending" : "paid",
-          qrisConfirmed: false,
-        })
+        .values(orderData)
         .returning();
 
       console.log(`✅ Order created: ${order.id}`);
