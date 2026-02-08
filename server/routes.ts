@@ -2804,12 +2804,10 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    // Verify user owns this order
     if (order.userId !== userId) {
       return res.status(403).json({ error: "Not your order" });
     }
 
-    // Only QRIS orders
     if (order.paymentMethod !== "qris") {
       return res.status(400).json({ error: "Only QRIS orders need QR generation" });
     }
@@ -2824,7 +2822,7 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
       });
     }
 
-    // Create Xendit QRIS payment
+    // ✅ Create Xendit QRIS WITHOUT callback_url
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
     const xenditResponse = await fetch('https://api.xendit.co/qr_codes', {
@@ -2836,9 +2834,8 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
       body: JSON.stringify({
         external_id: order.orderNumber,
         type: 'DYNAMIC',
-        callback_url: `${process.env.EXPO_PUBLIC_DOMAIN}/api/xendit/webhook`,
         amount: order.total,
-        expires_at: expiresAt.toISOString(),
+        // ✅ REMOVED callback_url - we'll poll for status instead
       }),
     });
 
@@ -2851,15 +2848,14 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
     const xenditData = await xenditResponse.json();
 
     // Update order with QR code
-    const [updated] = await db
+    await db
       .update(orders)
       .set({
         qrisUrl: xenditData.qr_string,
         qrisExpiresAt: expiresAt,
         xenditInvoiceId: xenditData.id,
       })
-      .where(eq(orders.id, orderId))
-      .returning();
+      .where(eq(orders.id, orderId));
 
     console.log(`✅ QRIS created: ${xenditData.id}`);
 
@@ -2873,6 +2869,111 @@ app.post("/api/orders/:orderId/create-qris", async (req, res) => {
   } catch (error) {
     console.error("❌ Create QRIS error:", error);
     res.status(500).json({ error: "Failed to create QRIS payment" });
+  }
+});
+
+// ✅ FIX 2: Add QRIS status polling endpoint
+app.get("/api/orders/:orderId/qris-status", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!order || order.userId !== userId) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // If already confirmed, return success
+    if (order.qrisConfirmed) {
+      return res.json({ 
+        paid: true, 
+        status: 'COMPLETED',
+        message: 'Payment already confirmed'
+      });
+    }
+
+    // Check Xendit status
+    if (!order.xenditInvoiceId) {
+      return res.json({ 
+        paid: false, 
+        status: 'PENDING',
+        message: 'Waiting for payment'
+      });
+    }
+
+    try {
+      const xenditResponse = await fetch(
+        `https://api.xendit.co/qr_codes/${order.xenditInvoiceId}`,
+        {
+          headers: {
+            'Authorization': `Basic ${Buffer.from(process.env.XENDIT_SECRET_KEY + ':').toString('base64')}`,
+          },
+        }
+      );
+
+      if (xenditResponse.ok) {
+        const xenditData = await xenditResponse.json();
+        
+        if (xenditData.status === 'COMPLETED') {
+          // ✅ Payment confirmed! Update order and notify pickers
+          await db
+            .update(orders)
+            .set({
+              qrisConfirmed: true,
+              paymentStatus: 'paid',
+            })
+            .where(eq(orders.id, orderId));
+
+          // Notify pickers that order is ready
+          if (order.storeId) {
+            await notifyPickersNewOrder(order.storeId, order.id);
+          }
+
+          // Send push to customer
+          const [user] = await db.select().from(users).where(eq(users.id, order.userId));
+          if (user?.pushToken) {
+            await fetch('https://exp.host/--/api/v2/push/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                to: user.pushToken,
+                sound: 'default',
+                title: '✅ Payment Confirmed!',
+                body: `Your order #${order.orderNumber} is being prepared`,
+                data: { orderId: order.id, type: 'payment_confirmed' },
+              }),
+            });
+          }
+
+          return res.json({ 
+            paid: true, 
+            status: 'COMPLETED',
+            message: 'Payment successful!'
+          });
+        }
+      }
+    } catch (xenditError) {
+      console.error('Failed to check Xendit status:', xenditError);
+    }
+
+    res.json({ 
+      paid: false, 
+      status: 'PENDING',
+      message: 'Waiting for payment'
+    });
+
+  } catch (error) {
+    console.error("❌ Check QRIS status error:", error);
+    res.status(500).json({ error: "Failed to check status" });
   }
 });
 

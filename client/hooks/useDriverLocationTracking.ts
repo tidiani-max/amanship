@@ -1,377 +1,195 @@
-import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, decimal } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+import { useState, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
-// --- Enums ---
-export const userRoles = ["customer", "picker", "driver", "owner", "admin"] as const;
-export type UserRole = typeof userRoles[number];
+interface DriverLocation {
+  latitude: number;
+  longitude: number;
+  heading: number;
+  speed: number;
+  accuracy: number;
+  timestamp: Date;
+}
 
-export const staffStatuses = ["online", "offline"] as const;
-export type StaffStatus = typeof staffStatuses[number];
+interface UseDriverTrackingResult {
+  currentLocation: DriverLocation | null;
+  distance: number | null;
+  eta: number | null;
+  isTracking: boolean;
+  error: Error | null;
+}
 
-export const orderStatuses = ["pending", "confirmed", "picking", "packed", "delivering", "delivered", "cancelled"] as const;
-export type OrderStatus = typeof orderStatuses[number];
+const UPDATE_INTERVAL = 2000; // 2 seconds
+const INTERPOLATION_STEPS = 10; // Smooth animation in 10 steps
 
-export const paymentMethodTypes = ["midtrans", "cod"] as const;
-export type PaymentMethodType = typeof paymentMethodTypes[number];
+/**
+ * Custom hook for real-time driver location tracking with smooth interpolation
+ * 
+ * @param orderId - The order ID to track
+ * @param enabled - Whether tracking should be active
+ * @returns Driver location data with smooth position updates
+ */
+export function useDriverTracking(
+  orderId: string | null,
+  enabled: boolean = true
+): UseDriverTrackingResult {
+  const [currentLocation, setCurrentLocation] = useState<DriverLocation | null>(null);
+  const [previousLocation, setPreviousLocation] = useState<DriverLocation | null>(null);
+  const interpolationRef = useRef<NodeJS.Timeout | null>(null);
 
-// --- Tables ---
+  // Fetch driver location from server
+  const { 
+    data: serverData, 
+    error,
+    isLoading 
+  } = useQuery({
+    queryKey: ['driver-location', orderId],
+    queryFn: async () => {
+      if (!orderId) return null;
+      
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/${orderId}`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch driver location');
+      }
+      
+      return response.json();
+    },
+    enabled: enabled && !!orderId,
+    refetchInterval: UPDATE_INTERVAL,
+    staleTime: UPDATE_INTERVAL - 500, // Prevent unnecessary refetches
+  });
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-  name: text("name"),
-  phone: text("phone"),
-  email: text("email"),
-  appleId: text("apple_id"),
-  googleId: text("google_id"),
-  role: text("role").notNull().default("customer"),
-  accountStatus: text("account_status").notNull().default("active"), 
-  areaId: integer("area_id"),
-  storeId: integer("store_id"),
-  pushToken: text("push_token"),
-  firstLogin: boolean("first_login").default(true).notNull(), 
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+  // Interpolate between previous and new location for smooth movement
+  useEffect(() => {
+    if (!serverData?.location) return;
 
-export const otpCodes = pgTable("otp_codes", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  phone: text("phone").notNull(),
-  code: text("code").notNull(),
-  expiresAt: timestamp("expires_at").notNull(),
-  verified: boolean("verified").default(false).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+    const newLocation: DriverLocation = {
+      latitude: parseFloat(serverData.location.latitude),
+      longitude: parseFloat(serverData.location.longitude),
+      heading: parseFloat(serverData.location.heading || 0),
+      speed: parseFloat(serverData.location.speed || 0),
+      accuracy: parseFloat(serverData.location.accuracy || 0),
+      timestamp: new Date(serverData.location.timestamp),
+    };
 
-export const messages = pgTable("messages", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orderId: varchar("order_id").notNull().references(() => orders.id),
-  senderId: varchar("user_id").notNull().references(() => users.id),
-  type: varchar("type").default("text").notNull(),
-  content: text("content").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+    // If we have a previous location, interpolate smoothly
+    if (currentLocation && previousLocation) {
+      let step = 0;
+      const stepInterval = UPDATE_INTERVAL / INTERPOLATION_STEPS;
 
-export const stores = pgTable("stores", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  address: text("address").notNull(),
-  latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
-  longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
-  ownerId: varchar("owner_id").references(() => users.id),
-  codAllowed: boolean("cod_allowed").default(true).notNull(),
-  isActive: boolean("is_active").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+      // Clear any existing interpolation
+      if (interpolationRef.current) {
+        clearInterval(interpolationRef.current);
+      }
 
-export const storeStaff = pgTable("store_staff", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  storeId: varchar("store_id").notNull().references(() => stores.id),
-  role: text("role").notNull(),
-  status: text("status").notNull().default("offline"),
-  lastStatusChange: timestamp("last_status_change").defaultNow().notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+      // Interpolate position
+      interpolationRef.current = setInterval(() => {
+        step++;
+        const progress = step / INTERPOLATION_STEPS;
 
-export const categories = pgTable("categories", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  icon: text("icon").notNull(),
-  color: text("color").notNull(),
-  image: text("image"),
-});
+        if (progress >= 1) {
+          setCurrentLocation(newLocation);
+          setPreviousLocation(newLocation);
+          if (interpolationRef.current) {
+            clearInterval(interpolationRef.current);
+          }
+          return;
+        }
 
-export const products = pgTable("products", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  brand: text("brand").notNull().default("Generic"),
-  price: integer("price").notNull(),  originalPrice: integer("original_price"),
-  image: text("image"),
-  categoryId: varchar("category_id").notNull().references(() => categories.id),
-  description: text("description"),
-  nutrition: jsonb("nutrition"),
-});
+        // Linear interpolation (lerp)
+        const interpolated: DriverLocation = {
+          latitude: lerp(currentLocation.latitude, newLocation.latitude, progress),
+          longitude: lerp(currentLocation.longitude, newLocation.longitude, progress),
+          heading: lerpAngle(currentLocation.heading, newLocation.heading, progress),
+          speed: lerp(currentLocation.speed, newLocation.speed, progress),
+          accuracy: newLocation.accuracy,
+          timestamp: newLocation.timestamp,
+        };
 
-export const storeInventory = pgTable("store_inventory", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  storeId: varchar("store_id").notNull().references(() => stores.id),
-  productId: varchar("product_id").notNull().references(() => products.id),
-  stockCount: integer("stock_count").notNull().default(0),
-  location: text("location"),
-  isAvailable: boolean("is_available").default(true).notNull(),
-});
+        setCurrentLocation(interpolated);
+      }, stepInterval);
+    } else {
+      // First location or no interpolation needed
+      setCurrentLocation(newLocation);
+      setPreviousLocation(newLocation);
+    }
 
-export const addresses = pgTable("addresses", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  label: text("label").notNull(),
-  fullAddress: text("full_address").notNull(),
-  details: text("details"),
-  latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
-  longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
-  isDefault: boolean("is_default").default(false).notNull(),
-});
+    return () => {
+      if (interpolationRef.current) {
+        clearInterval(interpolationRef.current);
+      }
+    };
+  }, [serverData]);
 
-export const cartItems = pgTable("cart_items", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  productId: varchar("product_id").notNull().references(() => products.id),
-  quantity: integer("quantity").notNull().default(1),
-});
+  return {
+    currentLocation,
+    distance: serverData?.distance || null,
+    eta: serverData?.estimatedArrival 
+      ? new Date(serverData.estimatedArrival).getTime() - Date.now() 
+      : null,
+    isTracking: enabled && !isLoading,
+    error: error as Error | null,
+  };
+}
 
-// ===== ENHANCED: Added tracking fields to existing orders table =====
-export const orders = pgTable("orders", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orderNumber: text("order_number").notNull().unique(),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  storeId: varchar("store_id").references(() => stores.id),
-  pickerId: varchar("picker_id").references(() => users.id),
-  driverId: varchar("driver_id").references(() => users.id),
-  items: jsonb("items").notNull(),
-  status: text("status").notNull().default("pending"),
-  total: integer("total").notNull(),
-  deliveryFee: integer("delivery_fee").notNull().default(10000),
-  addressId: varchar("address_id").references(() => addresses.id),
-  paymentMethod: text("payment_method").default("midtrans"),
-  paymentStatus: text("payment_status").default("pending"),
-  codCollected: boolean("cod_collected").default(false),
-  deliveryPin: text("delivery_pin").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  pickedAt: timestamp("picked_at"),
-  packedAt: timestamp("packed_at"),
-  deliveredAt: timestamp("delivered_at"),
-  estimatedDelivery: timestamp("estimated_delivery"),
-  customerLat: decimal("customer_lat", { precision: 10, scale: 7 }),
-  customerLng: decimal("customer_lng", { precision: 10, scale: 7 }),
-  // NEW FIELDS FOR TRACKING
-  estimatedArrival: timestamp("estimated_arrival"),
-  actualDistance: decimal("actual_distance", { precision: 6, scale: 2 }),
-  trackingStarted: timestamp("tracking_started"),
-});
+/**
+ * Linear interpolation between two values
+ */
+function lerp(start: number, end: number, progress: number): number {
+  return start + (end - start) * progress;
+}
 
-export const orderItems = pgTable("order_items", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orderId: varchar("order_id").references(() => orders.id).notNull(),
-  productId: varchar("product_id").references(() => products.id).notNull(),
-  quantity: integer("quantity").notNull(),
-  priceAtEntry: decimal("price_at_entry", { precision: 10, scale: 2 }).notNull(),
-});
+/**
+ * Interpolate between two angles (handles 360° wrapping)
+ */
+function lerpAngle(start: number, end: number, progress: number): number {
+  const diff = ((end - start + 180) % 360) - 180;
+  return start + diff * progress;
+}
 
-// ===== NEW TABLE: Driver location tracking =====
-export const driverLocations = pgTable("driver_locations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  driverId: varchar("driver_id").notNull().references(() => users.id),
-  orderId: varchar("order_id").references(() => orders.id),
-  latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
-  longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
-  heading: decimal("heading", { precision: 5, scale: 2 }),
-  speed: decimal("speed", { precision: 5, scale: 2 }),
-  accuracy: decimal("accuracy", { precision: 6, scale: 2 }),
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
-});
+/**
+ * Calculate distance between two coordinates (Haversine formula)
+ */
+export function calculateDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
-export const vouchers = pgTable("vouchers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  code: text("code").notNull().unique(),
-  discount: integer("discount").notNull(),
-  discountType: text("discount_type").notNull(),
-  minOrder: integer("min_order").default(0).notNull(),
-  validUntil: timestamp("valid_until").notNull(),
-  description: text("description"),
-});
+function toRad(degrees: number): number {
+  return degrees * (Math.PI / 180);
+}
 
-// --- Relations ---
-
-export const messagesRelations = relations(messages, ({ one }) => ({
-  order: one(orders, {
-    fields: [messages.orderId],
-    references: [orders.id],
-  }),
-  sender: one(users, {
-    fields: [messages.senderId],
-    references: [users.id],
-  }),
-}));
-
-export const usersRelations = relations(users, ({ many }) => ({
-  addresses: many(addresses),
-  cartItems: many(cartItems),
-  orders: many(orders, { relationName: "customer_orders" }),
-  assignmentsAsPicker: many(orders, { relationName: "picker_orders" }),
-  assignmentsAsDriver: many(orders, { relationName: "driver_orders" }),
-  storeStaff: many(storeStaff),
-  ownedStores: many(stores),
-  driverLocations: many(driverLocations),
-}));
-
-export const ordersRelations = relations(orders, ({ one, many }) => ({
-  user: one(users, {
-    fields: [orders.userId],
-    references: [users.id],
-    relationName: "customer_orders",
-  }),
-  address: one(addresses, {
-    fields: [orders.addressId],
-    references: [addresses.id],
-  }),
-  store: one(stores, {
-    fields: [orders.storeId],
-    references: [stores.id],
-  }),
-  picker: one(users, {
-    fields: [orders.pickerId],
-    references: [users.id],
-    relationName: "picker_orders",
-  }),
-  driver: one(users, {
-    fields: [orders.driverId],
-    references: [users.id],
-    relationName: "driver_orders",
-  }),
-  driverLocations: many(driverLocations),
-}));
-
-export const driverLocationsRelations = relations(driverLocations, ({ one }) => ({
-  driver: one(users, {
-    fields: [driverLocations.driverId],
-    references: [users.id],
-  }),
-  order: one(orders, {
-    fields: [driverLocations.orderId],
-    references: [orders.id],
-  }),
-}));
-
-export const storesRelations = relations(stores, ({ one, many }) => ({
-  owner: one(users, {
-    fields: [stores.ownerId],
-    references: [users.id],
-  }),
-  staff: many(storeStaff),
-  inventory: many(storeInventory),
-  orders: many(orders),
-}));
-
-export const storeStaffRelations = relations(storeStaff, ({ one }) => ({
-  user: one(users, {
-    fields: [storeStaff.userId],
-    references: [users.id],
-  }),
-  store: one(stores, {
-    fields: [storeStaff.storeId],
-    references: [stores.id],
-  }),
-}));
-
-export const storeInventoryRelations = relations(storeInventory, ({ one }) => ({
-  store: one(stores, {
-    fields: [storeInventory.storeId],
-    references: [stores.id],
-  }),
-  product: one(products, {
-    fields: [storeInventory.productId],
-    references: [products.id],
-  }),
-}));
-
-export const categoriesRelations = relations(categories, ({ many }) => ({
-  products: many(products),
-}));
-
-export const productsRelations = relations(products, ({ one, many }) => ({
-  category: one(categories, {
-    fields: [products.categoryId],
-    references: [categories.id],
-  }),
-  inventory: many(storeInventory),
-}));
-
-export const addressesRelations = relations(addresses, ({ one }) => ({
-  user: one(users, {
-    fields: [addresses.userId],
-    references: [users.id],
-  }),
-}));
-
-export const cartItemsRelations = relations(cartItems, ({ one }) => ({
-  user: one(users, {
-    fields: [cartItems.userId],
-    references: [users.id],
-  }),
-  product: one(products, {
-    fields: [cartItems.productId],
-    references: [products.id],
-  }),
-}));
-
-// --- Insert Schemas ---
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true, 
-  password: true, 
-  phone: true, 
-  role: true, 
-  name: true, 
-  areaId: true, 
-  storeId: true,
-  email: true,
-  googleId: true,
-  appleId: true,
-  accountStatus: true,
-  firstLogin: true,
-});
-
-export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
-export const insertStoreSchema = createInsertSchema(stores).omit({ id: true, createdAt: true });
-export const insertStoreStaffSchema = createInsertSchema(storeStaff).omit({ id: true, createdAt: true, lastStatusChange: true });
-export const insertStoreInventorySchema = createInsertSchema(storeInventory).omit({ id: true });
-export const insertCategorySchema = createInsertSchema(categories).pick({ name: true, icon: true, color: true, image: true });
-export const insertProductSchema = createInsertSchema(products).omit({ id: true });
-export const insertAddressSchema = createInsertSchema(addresses).omit({ id: true });
-export const insertCartItemSchema = createInsertSchema(cartItems).omit({ id: true });
-export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true });
-export const insertVoucherSchema = createInsertSchema(vouchers).omit({ id: true });
-export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
-export const insertDriverLocationSchema = createInsertSchema(driverLocations).omit({ id: true, timestamp: true });
-
-// --- Type Exports ---
-export type User = typeof users.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
-
-export type Store = typeof stores.$inferSelect;
-export type InsertStore = z.infer<typeof insertStoreSchema>;
-
-export type StoreStaff = typeof storeStaff.$inferSelect;
-export type InsertStoreStaff = z.infer<typeof insertStoreStaffSchema>;
-
-export type StoreInventory = typeof storeInventory.$inferSelect;
-export type InsertStoreInventory = z.infer<typeof insertStoreInventorySchema>;
-
-export type Category = typeof categories.$inferSelect;
-export type InsertCategory = z.infer<typeof insertCategorySchema>;
-
-export type Product = typeof products.$inferSelect;
-export type InsertProduct = z.infer<typeof insertProductSchema>;
-
-export type Address = typeof addresses.$inferSelect;
-export type InsertAddress = z.infer<typeof insertAddressSchema>;
-
-export type CartItem = typeof cartItems.$inferSelect;
-export type InsertCartItem = z.infer<typeof insertCartItemSchema>;
-
-export type Order = typeof orders.$inferSelect;
-export type InsertOrder = z.infer<typeof insertOrderSchema>;
-
-export type OrderItem = typeof orderItems.$inferSelect;
-export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
-
-export type Voucher = typeof vouchers.$inferSelect;
-export type InsertVoucher = z.infer<typeof insertVoucherSchema>;
-
-export type Message = typeof messages.$inferSelect;
-export type InsertMessage = z.infer<typeof insertMessageSchema>;
-
-export type DriverLocation = typeof driverLocations.$inferSelect;
-export type InsertDriverLocation = z.infer<typeof insertDriverLocationSchema>;
+/**
+ * Calculate bearing between two coordinates
+ */
+export function calculateBearing(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+  
+  const bearing = Math.atan2(y, x);
+  return (bearing * 180 / Math.PI + 360) % 360;
+}

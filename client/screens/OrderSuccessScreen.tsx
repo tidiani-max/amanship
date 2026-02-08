@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, StyleSheet, ScrollView, ActivityIndicator, Pressable, Alert, Image } from "react-native";
+import { View, StyleSheet, ScrollView, ActivityIndicator, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -28,7 +28,7 @@ export default function OrderSuccessScreen() {
 
   const { data: orders = [], isLoading, refetch } = useQuery({
     queryKey: ["order-success", orderIds],
-    refetchInterval: 3000,
+    refetchInterval: 3000, // ✅ Poll every 3 seconds
     queryFn: async () => {
       const orderPromises = orderIds.map(async (id) => {
         const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${id.trim()}`);
@@ -50,17 +50,19 @@ export default function OrderSuccessScreen() {
           qrisConfirmed: orderData.qrisConfirmed,
           qrisUrl: orderData.qrisUrl,
           qrisExpiresAt: orderData.qrisExpiresAt,
+          xenditInvoiceId: orderData.xenditInvoiceId,
         };
       });
       return Promise.all(orderPromises);
     },
   });
 
-  // Generate QRIS for unpaid orders
+  // ✅ Generate QRIS for unpaid orders
   useEffect(() => {
     orders.forEach(async (order) => {
       if (order.paymentMethod === "qris" && !order.qrisConfirmed && !qrisData[order.id]) {
         try {
+          console.log(`🔄 Creating QRIS for order ${order.id}`);
           const res = await fetch(
             `${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${order.id}/create-qris`,
             {
@@ -72,7 +74,11 @@ export default function OrderSuccessScreen() {
 
           if (res.ok) {
             const data = await res.json();
+            console.log(`✅ QRIS created:`, data);
             setQrisData(prev => ({ ...prev, [order.id]: data }));
+          } else {
+            const error = await res.text();
+            console.error(`❌ QRIS creation failed:`, error);
           }
         } catch (error) {
           console.error("Failed to create QRIS:", error);
@@ -80,6 +86,43 @@ export default function OrderSuccessScreen() {
       }
     });
   }, [orders, user?.id]);
+
+  // ✅ Poll QRIS payment status
+  useEffect(() => {
+    const qrisOrders = orders.filter(o => 
+      o.paymentMethod === "qris" && !o.qrisConfirmed
+    );
+    
+    if (qrisOrders.length === 0) return;
+    
+    const interval = setInterval(async () => {
+      for (const order of qrisOrders) {
+        try {
+          const res = await fetch(
+            `${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${order.id}/qris-status?userId=${user?.id}`
+          );
+          
+          if (res.ok) {
+            const data = await res.json();
+            console.log(`📊 QRIS status for ${order.orderNumber}:`, data.status);
+            
+            if (data.paid) {
+              refetch(); // Refresh orders to show updated status
+              Alert.alert(
+                '✅ Payment Confirmed!', 
+                `Your order #${order.orderNumber} is being prepared`,
+                [{ text: 'OK' }]
+              );
+            }
+          }
+        } catch (error) {
+          console.error('Failed to check QRIS status:', error);
+        }
+      }
+    }, 3000); // Check every 3 seconds
+    
+    return () => clearInterval(interval);
+  }, [orders, user?.id, refetch]);
 
   const formatPrice = (price: number) => `Rp ${price.toLocaleString("id-ID")}`;
 
@@ -145,7 +188,12 @@ export default function OrderSuccessScreen() {
                       </ThemedText>
                     </View>
                   ) : (
-                    <ActivityIndicator size="large" color="#4f46e5" style={{ marginVertical: 20 }} />
+                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                      <ActivityIndicator size="large" color="#4f46e5" />
+                      <ThemedText style={{ marginTop: 12, color: '#64748b', fontSize: 13 }}>
+                        Generating QR code...
+                      </ThemedText>
+                    </View>
                   )}
 
                   <View style={styles.qrisSteps}>
@@ -197,7 +245,10 @@ export default function OrderSuccessScreen() {
       </ScrollView>
       
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
-        <Pressable onPress={() => navigation.reset({ index: 0, routes: [{ name: "Main" }] })} style={styles.homeBtn}>
+        <Pressable 
+          onPress={() => navigation.reset({ index: 0, routes: [{ name: "Main" }] })} 
+          style={styles.homeBtn}
+        >
           <ThemedText style={styles.homeBtnText}>Back to Home</ThemedText>
         </Pressable>
       </View>
