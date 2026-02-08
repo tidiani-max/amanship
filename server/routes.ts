@@ -40,6 +40,14 @@ import {
   notifyCustomerOrderStatus,
   notifyChatMessage 
 } from './notifications';
+import { 
+  scanProduct, 
+  scanStoreProducts, 
+  scanAllProducts,
+  generateStoreAlerts,
+  getDeliveryPriorityProducts,
+} from '../server/services/productTracking';
+import { startAllJobs,triggerManualScan  } from '../server/services/scheduledJobs';
 
 import cron from 'node-cron';
 
@@ -7735,6 +7743,325 @@ app.get("/api/picker/fresh-products-priority", async (req, res) => {
 
 console.log("✅ Fresh product routes registered");
 
+
+// ===== AUTOMATED PRODUCT SCANNING =====
+
+// Manual trigger: Scan single product
+
+app.post("/api/automation/scan-product", async (req, res) => {
+  try {
+    const { userId, productId, storeId } = req.body;
+
+    if (!userId || !productId || !storeId) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Verify user has access
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Verify permission (store owner, picker, or admin)
+    const isAuthorized = user.role === "admin" || 
+                        user.role === "store_owner" || 
+                        user.role === "picker";
+
+    if (!isAuthorized) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    console.log(`🔍 Manual scan requested for product ${productId}`);
+
+    const result = await scanProduct(productId, storeId);
+
+    if (!result) {
+      return res.status(404).json({ error: "Product not found or scan failed" });
+    }
+
+    res.json({
+      success: true,
+      message: "Product scanned successfully",
+      data: result,
+    });
+
+  } catch (error) {
+    console.error("❌ Scan product error:", error);
+    res.status(500).json({ error: "Failed to scan product" });
+  }
+});
+
+// Manual trigger: Scan all products in a store
+app.post("/api/automation/scan-store", async (req, res) => {
+  try {
+    const { userId, storeId } = req.body;
+
+    if (!userId || !storeId) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Verify user access
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const isAuthorized = user.role === "admin" || user.role === "store_owner";
+
+    if (!isAuthorized) {
+      // Check if user is staff at this store
+      const [staff] = await db
+        .select()
+        .from(storeStaff)
+        .where(
+          and(
+            eq(storeStaff.userId, userId),
+            eq(storeStaff.storeId, storeId)
+          )
+        );
+
+      if (!staff) {
+        return res.status(403).json({ error: "Not authorized for this store" });
+      }
+    }
+
+    console.log(`🔍 Manual store scan requested for ${storeId}`);
+
+    const results = await scanStoreProducts(storeId);
+
+    res.json({
+      success: true,
+      message: "Store scan completed",
+      productsScanned: results.length,
+      data: results,
+    });
+
+  } catch (error) {
+    console.error("❌ Scan store error:", error);
+    res.status(500).json({ error: "Failed to scan store" });
+  }
+});
+
+// Admin only: Scan all products in all stores
+app.post("/api/automation/scan-all", async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user || (user.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    console.log(`🌍 Full system scan requested by admin ${userId}`);
+
+    const results = await scanAllProducts();
+
+    const totalProducts = results.reduce((sum, store) => sum + store.productsScanned, 0);
+    const freshProducts = results.reduce((sum, store) => {
+      const fresh = store.products.filter((p: any) => p.isFresh).length;
+      return sum + fresh;
+    }, 0);
+
+    res.json({
+      success: true,
+      message: "Full system scan completed",
+      storesScanned: results.length,
+      totalProducts,
+      freshProducts,
+      data: results,
+    });
+
+  } catch (error) {
+    console.error("❌ Scan all error:", error);
+    res.status(500).json({ error: "Failed to scan all products" });
+  }
+});
+
+// ===== ALERTS & NOTIFICATIONS =====
+
+// Get alerts for a specific store
+app.get("/api/automation/alerts/:storeId", async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Verify user access
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Check authorization
+    if (user.role === "admin" || userId === "demo-user") {
+      // Admin can see all stores
+    } else if (user.role === "store_owner") {
+      // Store owner can only see their store
+      const [storeOwner] = await db
+        .select()
+        .from(storeOwners)
+        .where(eq(storeOwners.userId, userId as string));
+
+      if (!storeOwner || storeOwner.storeId !== storeId) {
+        return res.status(403).json({ error: "Not your store" });
+      }
+    } else {
+      // Staff can only see their assigned store
+      const [staff] = await db
+        .select()
+        .from(storeStaff)
+        .where(
+          and(
+            eq(storeStaff.userId, userId as string),
+            eq(storeStaff.storeId, storeId)
+          )
+        );
+
+      if (!staff) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+    }
+
+    const alerts = await generateStoreAlerts(storeId);
+
+    // Group alerts by type
+    const grouped = alerts.reduce((acc: any, alert) => {
+      if (!acc[alert.type]) {
+        acc[alert.type] = [];
+      }
+      acc[alert.type].push(alert);
+      return acc;
+    }, {});
+
+    res.json({
+      storeId,
+      totalAlerts: alerts.length,
+      highPriority: alerts.filter(a => a.priority === 'HIGH').length,
+      mediumPriority: alerts.filter(a => a.priority === 'MEDIUM').length,
+      lowPriority: alerts.filter(a => a.priority === 'LOW').length,
+      byType: {
+        expiringSoon: grouped['EXPIRING_SOON']?.length || 0,
+        criticalFresh: grouped['CRITICAL_FRESH']?.length || 0,
+        outOfStock: grouped['OUT_OF_STOCK']?.length || 0,
+        lowStock: grouped['LOW_STOCK']?.length || 0,
+      },
+      alerts,
+    });
+
+  } catch (error) {
+    console.error("❌ Get alerts error:", error);
+    res.status(500).json({ error: "Failed to fetch alerts" });
+  }
+});
+
+// ===== DELIVERY PRIORITY =====
+
+// Get products ordered by delivery priority for pickers
+app.get("/api/automation/delivery-priority/:storeId", async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Verify user is picker or store owner
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.role !== "picker" && user.role !== "store_owner" && user.role !== "admin") {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const products = await getDeliveryPriorityProducts(storeId);
+
+    // Categorize by urgency
+    const critical = products.filter(p => p.freshnessPriority >= 90);
+    const urgent = products.filter(p => p.freshnessPriority >= 70 && p.freshnessPriority < 90);
+    const medium = products.filter(p => p.freshnessPriority >= 40 && p.freshnessPriority < 70);
+    const normal = products.filter(p => p.freshnessPriority < 40);
+
+    res.json({
+      storeId,
+      total: products.length,
+      categories: {
+        critical: {
+          count: critical.length,
+          label: "🚨 CRITICAL - Handle First",
+          products: critical,
+        },
+        urgent: {
+          count: urgent.length,
+          label: "⚠️ URGENT - Priority Delivery",
+          products: urgent,
+        },
+        medium: {
+          count: medium.length,
+          label: "🟡 MEDIUM - Handle Soon",
+          products: medium,
+        },
+        normal: {
+          count: normal.length,
+          label: "🟢 NORMAL - Standard Priority",
+          products: normal,
+        },
+      },
+      allProducts: products,
+    });
+
+  } catch (error) {
+    console.error("❌ Get delivery priority error:", error);
+    res.status(500).json({ error: "Failed to fetch delivery priority" });
+  }
+});
+
+// ===== MANUAL TRIGGERS =====
+
+// Trigger manual scan (admin only - for testing)
+app.post("/api/automation/trigger-scan", async (req, res) => {
+  try {
+    const { userId, storeId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user || (user.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    console.log(`🔧 Manual scan triggered by admin ${userId}`);
+
+    const result = await triggerManualScan(storeId);
+
+    res.json({
+      success: true,
+      message: "Manual scan completed",
+      result,
+    });
+
+  } catch (error) {
+    console.error("❌ Trigger scan error:", error);
+    res.status(500).json({ error: "Failed to trigger scan" });
+  }
+});
+
+console.log("✅ Smart Grocery Automation routes registered");
+
+
+
+
 // Run daily at 9 AM
 cron.schedule('0 9 * * *', async () => {
   console.log('🎁 Running daily voucher check...');
@@ -7757,6 +8084,8 @@ app.use(express.static(path.join(process.cwd(), 'public')));
 app.get('*', (req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
 });
+startAllJobs(); // Start automation
+console.log('✅ Smart Grocery Automation started');
   
   const httpServer = createServer(app);
   return httpServer;
