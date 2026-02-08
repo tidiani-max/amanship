@@ -2357,6 +2357,9 @@ console.log("📦 Registering order routes...");
 // ==================== FIXED ORDER CREATION ROUTE ====================
 // Replace your app.post("/api/orders", ...) route in routes.ts with this:
 
+// ==================== FINAL FIXED ORDER ROUTE ====================
+// Replace your app.post("/api/orders") in routes.ts with this version:
+
 app.post("/api/orders", async (req, res) => {
   try {
     const { 
@@ -2376,7 +2379,6 @@ app.post("/api/orders", async (req, res) => {
       userId, 
       paymentMethod, 
       itemCount: items?.length,
-      hasAddress: !!addressId,
       customerLat,
       customerLng,
       promotionId,
@@ -2385,13 +2387,11 @@ app.post("/api/orders", async (req, res) => {
 
     // Validation
     if (!userId || !items?.length) {
-      console.log("❌ Missing required fields: userId or items");
-      return res.status(400).json({ error: "Missing required fields: userId and items" });
+      return res.status(400).json({ error: "Missing userId or items" });
     }
 
     if (!customerLat || !customerLng) {
-      console.log("❌ Missing location coordinates");
-      return res.status(400).json({ error: "Location coordinates are required" });
+      return res.status(400).json({ error: "Location required" });
     }
 
     // Get store for each item
@@ -2404,15 +2404,12 @@ app.post("/api/orders", async (req, res) => {
           .limit(1);
 
         if (!inv) {
-          console.log(`❌ Product not found: ${item.productId}`);
           throw new Error(`Product not available`);
         }
         
         return { ...item, storeId: inv.storeId };
       })
     );
-
-    console.log(`✅ Found stores for ${itemsWithStore.length} items`);
 
     // Group by store
     const itemsByStore: Record<string, any[]> = {};
@@ -2433,102 +2430,96 @@ app.post("/api/orders", async (req, res) => {
         0
       );
       
-      // Calculate final total
-      const baseTotal = itemsTotal + DELIVERY_FEE;
-      const finalTotal = baseTotal - (promotionDiscount || 0) - (voucherDiscount || 0);
+      // Calculate totals
+      const actualDeliveryFee = freeDelivery ? 0 : DELIVERY_FEE;
+      const totalDiscount = (promotionDiscount || 0) + (voucherDiscount || 0);
+      const finalTotal = itemsTotal + actualDeliveryFee - totalDiscount;
       
       const deliveryPin = Math.floor(1000 + Math.random() * 9000).toString();
       const orderNumber = `ORD-${Math.random().toString(36).toUpperCase().substring(2, 9)}`;
 
-      console.log(`💾 Creating order for store ${storeId}:`, {
+      console.log(`💾 Creating order:`, {
         orderNumber,
         itemsTotal,
-        deliveryFee: DELIVERY_FEE,
-        promotionDiscount,
-        voucherDiscount,
+        actualDeliveryFee,
+        totalDiscount,
         finalTotal,
-        paymentMethod,
       });
 
-      // ✅ CRITICAL FIX: Provide ALL required order fields
-      const orderData: any = {
-        userId,
-        storeId,
-        addressId: addressId || null,
-        orderNumber,
-        items: storeItems,
-        status: "pending",
-        
-        // ✅ Financial fields
-        subtotal: itemsTotal,
-        total: finalTotal,
-        deliveryFee: DELIVERY_FEE,
-        discount: (promotionDiscount || 0) + (voucherDiscount || 0),
-        
-        // ✅ Promotion fields
-        appliedPromotionId: promotionId || null,
-        promotionDiscount: promotionDiscount || 0,
-        voucherDiscount: voucherDiscount || 0,
-        freeDelivery: freeDelivery || false,
-        
-        // ✅ Location - Convert to string for DECIMAL columns
-        customerLat: customerLat.toString(),
-        customerLng: customerLng.toString(),
-        
-        // ✅ Payment fields
-        paymentMethod: paymentMethod || "midtrans",
-        paymentStatus: paymentMethod === "qris" ? "pending" : "paid",
-        deliveryPin,
-        qrisConfirmed: false,
-      };
+      // ✅ CRITICAL: Create order with exact field matching
+      try {
+        const [order] = await db
+          .insert(orders)
+          .values({
+            userId,
+            storeId,
+            orderNumber,
+            items: storeItems,
+            status: "pending",
+            
+            // Financial
+            subtotal: itemsTotal,
+            total: finalTotal,
+            deliveryFee: actualDeliveryFee,
+            discount: totalDiscount,
+            
+            // Promotions/Vouchers
+            appliedPromotionId: promotionId || null,
+            promotionDiscount: promotionDiscount || 0,
+            voucherDiscount: voucherDiscount || 0,
+            freeDelivery: freeDelivery,
+            
+            // Address
+            addressId: addressId || null,
+            
+            // Location (as strings for DECIMAL)
+            customerLat: String(customerLat),
+            customerLng: String(customerLng),
+            
+            // Payment
+            paymentMethod: paymentMethod || "midtrans",
+            paymentStatus: paymentMethod === "qris" ? "pending" : "paid",
+            deliveryPin,
+            qrisConfirmed: false,
+          })
+          .returning();
 
-      console.log("📝 Order data to insert:", JSON.stringify(orderData, null, 2));
+        console.log(`✅ Order created: ${order.id}`);
 
-      const [order] = await db
-        .insert(orders)
-        .values(orderData)
-        .returning();
+        // Create order items
+        await db.insert(orderItems).values(
+          storeItems.map(i => ({
+            orderId: order.id,
+            productId: i.productId,
+            quantity: i.quantity,
+            priceAtEntry: String(i.price),
+          }))
+        );
 
-      console.log(`✅ Order created: ${order.id}`);
+        // Notify pickers (not for QRIS until paid)
+        if (paymentMethod !== "qris") {
+          await notifyPickersNewOrder(storeId, order.id);
+        }
 
-      // Create order items
-      await db.insert(orderItems).values(
-        storeItems.map(i => ({
-          orderId: order.id,
-          productId: i.productId,
-          quantity: i.quantity,
-          priceAtEntry: String(i.price),
-        }))
-      );
-
-      console.log(`✅ Order items created for order ${order.id}`);
-
-      // Notify pickers (skip for QRIS until payment confirmed)
-      if (paymentMethod !== "qris") {
-        await notifyPickersNewOrder(storeId, order.id);
-        console.log(`🔔 Pickers notified for order ${order.id}`);
+        createdOrders.push(order);
+      } catch (dbError) {
+        console.error("❌ Database insert error:", dbError);
+        throw dbError;
       }
-
-      createdOrders.push(order);
     }
 
     // Clear cart
     try {
       await db.delete(cartItems).where(eq(cartItems.userId, userId));
-      console.log(`✅ Cart cleared for user ${userId}`);
     } catch (cartError) {
-      console.error("⚠️ Failed to clear cart:", cartError);
-      // Don't fail the order if cart clear fails
+      console.error("⚠️ Cart clear failed:", cartError);
     }
 
-    console.log(`🎉 SUCCESS: Created ${createdOrders.length} orders`);
+    console.log(`🎉 Created ${createdOrders.length} orders`);
     res.status(201).json(createdOrders);
 
   } catch (error) {
-    console.error("❌ CREATE ORDER ERROR:", error);
-    console.error("Error details:", error instanceof Error ? error.message : "Unknown");
-    console.error("Stack:", error instanceof Error ? error.stack : "No stack");
-    
+    console.error("❌ ORDER ERROR:", error);
     res.status(500).json({ 
       error: "Failed to create order",
       details: error instanceof Error ? error.message : "Unknown error"
