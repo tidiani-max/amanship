@@ -289,31 +289,21 @@ const orderMutation = useMutation({
 
       // ✅ Build order payload with ALL required fields
       const orderPayload = {
-        userId: user.id,
-        items: itemsPayload,
-        
-        // ✅ Location (REQUIRED)
-        customerLat: location.latitude,
-        customerLng: location.longitude,
-        
-        // ✅ Address (use existing or the one we just created)
-        addressId: addressId || selectedAddress?.id || null,
-        
-        // ✅ Payment
-        paymentMethod,
-        
-        // ✅ Pricing
-        subtotal,
-        total: finalTotal,
-        deliveryFee: totalDeliveryFee,
-        
-        // ✅ Discounts
-        voucherCode: appliedVoucher?.code || null,
-        voucherDiscount: voucherDiscount || 0,
-        promotionId: autoAppliedPromotion?.id || null,
-        promotionDiscount: promotionDiscount || 0,
-        freeDelivery,
-      };
+  userId: user.id,
+  items: itemsPayload,
+  customerLat: String(location.latitude),    // ✅ CONVERT TO STRING
+  customerLng: String(location.longitude),   // ✅ CONVERT TO STRING
+  addressId: addressId || selectedAddress?.id || null,
+  paymentMethod,
+  subtotal,
+  total: finalTotal,
+  deliveryFee: totalDeliveryFee,
+  voucherCode: appliedVoucher?.code || null,
+  voucherDiscount: voucherDiscount || 0,
+  promotionId: autoAppliedPromotion?.id || null,
+  promotionDiscount: promotionDiscount || 0,
+  freeDelivery,
+};
 
       console.log("📤 Sending order payload:", orderPayload);
 
