@@ -27,9 +27,19 @@
       }
     },
     "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
         "EAS_NO_ARTIFACTORY": "1",
         "GRADLE_OPTS": "-Dorg.gradle.caching=false -Dorg.gradle.daemon=false"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "track": "internal"
       }
     }
   }
