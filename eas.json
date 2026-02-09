@@ -8,7 +8,7 @@
       "distribution": "internal",
       "env": {
         "EAS_NO_ARTIFACTORY": "1",
-        "GRADLE_OPTS": "-Dorg.gradle.caching=false -Dorg.gradle.daemon=false"
+        "GRADLE_OPTS": "-Dorg.gradle.jvmargs=-Xmx4096m"
       },
       "ios": {
         "simulator": false
@@ -20,19 +20,20 @@
     "preview": {
       "android": {
         "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease",
         "env": {
           "EAS_NO_ARTIFACTORY": "1",
-          "GRADLE_OPTS": "-Dorg.gradle.caching=false -Dorg.gradle.daemon=false"
+          "GRADLE_OPTS": "-Dorg.gradle.jvmargs=-Xmx4096m"
         }
       }
     },
     "production": {
       "android": {
-        "buildType": "app-bundle"
-      },
-      "env": {
-        "EAS_NO_ARTIFACTORY": "1",
-        "GRADLE_OPTS": "-Dorg.gradle.caching=false -Dorg.gradle.daemon=false"
+        "buildType": "apk",
+        "env": {
+          "EAS_NO_ARTIFACTORY": "1",
+          "GRADLE_OPTS": "-Dorg.gradle.jvmargs=-Xmx4096m"
+        }
       }
     }
   },
