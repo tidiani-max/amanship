@@ -29,6 +29,21 @@ import multer from "multer";
 import { driverLocations } from "../shared/schema";
 import { userClaimedPromotions } from "../shared/schema";
 import chatbotRouter from "../server/routes/chatbot"; 
+// ADD THESE IMPORTS AT THE TOP
+import { hashPassword, comparePassword } from './utils/password';
+import { generateToken, authenticate, requireAdmin, requireStaff } from './middleware/auth';
+import { 
+  authLimiter, 
+  apiLimiter, 
+  strictLimiter,
+  validateLogin,
+  validateSignup,
+  validateOTP,
+  validateFileUpload,
+  sanitizeBody
+} from './middleware/security';
+import { cacheMiddleware, invalidateCache } from './middleware/cache';
+import { logError } from './utils/logger';
 
 
 
@@ -378,10 +393,13 @@ app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async
       }
     }
 
-    res.json({ 
-      success: true, 
-      message: "Product updated with automatic pricing"
-    });
+  await invalidateCache('/api/home/products');
+  await invalidateCache('/api/category/products');
+  
+  res.json({ 
+    success: true, 
+    message: "Product updated with automatic pricing"
+  });
   } catch (error) {
     console.error("❌ Update error:", error);
     res.status(500).json({ 
@@ -392,70 +410,125 @@ app.post("/api/picker/inventory/update", uploadMiddleware.single("image"), async
 
 
 
-  // ==================== 3. AUTHENTICATION ROUTES ====================
-  console.log("🔐 Registering auth routes...");
-  
-  app.post("/api/auth/register", async (req, res) => {
-    try {
-      const { username, password, phone } = req.body;
-      if (!username || !password) return res.status(400).json({ error: "Username and password required" });
-      if (username.length < 3) return res.status(400).json({ error: "Username must be 3+ characters" });
-      if (password.length < 4) return res.status(400).json({ error: "Password must be 4+ characters" });
-      
-      const existingUser = await storage.getUserByUsername(username);
-      if (existingUser) return res.status(400).json({ error: "Username taken" });
-      
-      const newUser = await storage.createUser({ username, password, phone: phone || null, role: "customer" });
-      res.json({ user: { id: newUser.id, username: newUser.username, phone: newUser.phone, role: newUser.role } });
-    } catch (error) {
-      console.error("❌ Register error:", error);
-      res.status(500).json({ error: "Registration failed" });
-    }
-  });
 
-app.post("/api/auth/login", async (req, res) => {
+ // ==================== 3.AUTHENTICATION ROUTES (SECURED) ====================
+console.log("🔐 Registering secured auth routes...");
+
+// ✅ APPLY RATE LIMITING TO ALL AUTH ROUTES
+app.use('/api/auth/*', authLimiter);
+
+// ===== REGISTER (SIGNUP) =====
+app.post("/api/auth/register", validateSignup, async (req, res) => {
+  try {
+    const { username, password, phone } = req.body;
+
+    console.log("📝 Registration attempt:", { username, phone });
+
+    // Check if user exists
+    const existingUser = await storage.getUserByUsername(username);
+    if (existingUser) {
+      return res.status(400).json({ error: "Username already taken" });
+    }
+
+    if (phone) {
+      const existingPhone = await storage.getUserByPhone(phone);
+      if (existingPhone) {
+        return res.status(400).json({ error: "Phone already registered" });
+      }
+    }
+
+    // Hash password
+    const hashedPassword = await hashPassword(password);
+
+    // Create user
+    const newUser = await storage.createUser({ 
+      username, 
+      password: hashedPassword,
+      phone: phone || null, 
+      role: "customer" 
+    });
+
+    // Generate JWT token
+    const token = generateToken(newUser.id, newUser.role);
+
+    console.log("✅ User registered:", newUser.id);
+
+    res.json({ 
+      user: { 
+        id: newUser.id, 
+        username: newUser.username, 
+        phone: newUser.phone, 
+        role: newUser.role 
+      },
+      token 
+    });
+  } catch (error) {
+    logError(error as Error, 'REGISTRATION');
+    res.status(500).json({ error: "Registration failed" });
+  }
+});
+
+// ===== LOGIN =====
+app.post("/api/auth/login", validateLogin, async (req, res) => {
   const { phone, password } = req.body;
   
   console.log("🔐 Login attempt for phone:", phone);
   
-  const result = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
-  const user = result[0];
+  try {
+    const user = await storage.getUserByPhone(phone);
 
-  if (!user || user.password !== password) {
-    console.log("❌ Login failed - invalid credentials");
-    return res.status(401).json({ error: "Invalid phone or password" });
-  }
-  
-  // ✅ Check if store owner or staff needs to reset password on first login
-  const requiresPasswordReset = ["picker", "driver", "store_owner"].includes(user.role) && user.firstLogin;
-  
-  if (requiresPasswordReset) {
-    console.log("⚠️ First login detected - redirecting to password reset");
-    return res.json({ 
-      error: "first_login_required",
+    if (!user) {
+      console.log("❌ User not found");
+      return res.status(401).json({ error: "Invalid phone or password" });
+    }
+
+    // Compare password with hash
+    const isValidPassword = await comparePassword(password, user.password);
+    
+    if (!isValidPassword) {
+      console.log("❌ Invalid password");
+      return res.status(401).json({ error: "Invalid phone or password" });
+    }
+    
+    // Check if first login (staff/store_owner)
+    const requiresPasswordReset = ["picker", "driver", "store_owner"].includes(user.role) && user.firstLogin;
+    
+    if (requiresPasswordReset) {
+      console.log("⚠️ First login detected - redirecting to password reset");
+      return res.json({ 
+        error: "first_login_required",
+        user: { 
+          id: user.id, 
+          phone: user.phone, 
+          role: user.role,
+          firstLogin: true
+        }
+      });
+    }
+
+    // Generate JWT token
+    const token = generateToken(user.id, user.role);
+    
+    console.log("✅ Login successful for user:", user.id, "Role:", user.role);
+    
+    res.json({ 
       user: { 
         id: user.id, 
+        username: user.username, 
         phone: user.phone, 
         role: user.role,
-        firstLogin: true
-      }
+        firstLogin: user.firstLogin || false
+      },
+      token 
     });
+  } catch (error) {
+    logError(error as Error, 'LOGIN');
+    res.status(500).json({ error: "Login failed" });
   }
-  
-  console.log("✅ Login successful for user:", user.id, "Role:", user.role);
-  
-  res.json({ 
-    user: { 
-      id: user.id, 
-      username: user.username, 
-      phone: user.phone, 
-      role: user.role,
-      firstLogin: user.firstLogin || false
-    }
-  });
 });
 
-app.post("/api/auth/check-phone", async (req, res) => {
+// ===== CHECK PHONE =====
+app.post("/api/auth/check-phone", sanitizeBody, async (req, res) => {
   try {
     const { phone } = req.body;
     
@@ -465,11 +538,7 @@ app.post("/api/auth/check-phone", async (req, res) => {
 
     console.log("🔍 Checking phone:", phone);
 
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.phone, phone))
-      .limit(1);
+    const user = await storage.getUserByPhone(phone);
 
     if (!user) {
       console.log("❌ User not found");
@@ -481,7 +550,6 @@ app.post("/api/auth/check-phone", async (req, res) => {
 
     console.log("✅ User found:", user.id, "Role:", user.role, "FirstLogin:", user.firstLogin);
 
-    // ✅ Check if it's staff OR store owner who needs to reset password
     const isStaffOrOwner = ["picker", "driver", "store_owner"].includes(user.role);
     const requiresPasswordReset = isStaffOrOwner && user.firstLogin === true;
 
@@ -489,7 +557,7 @@ app.post("/api/auth/check-phone", async (req, res) => {
       exists: true,
       firstLogin: user.firstLogin || false,
       isStaff: isStaffOrOwner,
-      role: user.role, // ✅ Include role so app knows it's a store owner
+      role: user.role,
       requiresPasswordReset,
       message: requiresPasswordReset 
         ? "Please set your new password" 
@@ -497,12 +565,13 @@ app.post("/api/auth/check-phone", async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Check phone error:", error);
+    logError(error as Error, 'CHECK_PHONE');
     res.status(500).json({ error: "Server error" });
   }
 });
 
-app.post("/api/auth/reset-first-login", async (req, res) => {
+// ===== RESET FIRST LOGIN PASSWORD =====
+app.post("/api/auth/reset-first-login", sanitizeBody, async (req, res) => {
   try {
     const { phone, newPassword } = req.body;
     
@@ -516,11 +585,14 @@ app.post("/api/auth/reset-first-login", async (req, res) => {
 
     console.log("🔄 Resetting first login password for:", phone);
 
+    // Hash the new password
+    const hashedPassword = await hashPassword(newPassword);
+
     // Update password and mark firstLogin as false
     const [updated] = await db
       .update(users)
       .set({ 
-        password: newPassword,
+        password: hashedPassword,
         firstLogin: false 
       })
       .where(eq(users.phone, phone))
@@ -543,22 +615,19 @@ app.post("/api/auth/reset-first-login", async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("❌ Reset first login password error:", error);
+    logError(error as Error, 'RESET_PASSWORD');
     res.status(500).json({ error: "Failed to reset password" });
   }
 });
 
-
-
-  // 1. Updated OTP Send: Check if user exists based on mode
-app.post("/api/auth/otp/send", async (req, res) => {
+// ===== OTP SEND =====
+app.post("/api/auth/otp/send", strictLimiter, sanitizeBody, async (req, res) => {
   try {
-    const { phone, mode } = req.body; // mode: 'signup' | 'forgot' | 'login'
+    const { phone, mode } = req.body;
     if (!phone) return res.status(400).json({ error: "Phone required" });
 
     const existingUser = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
 
-    // Alert logic: If signup and user exists, or if forgot and user doesn't exist
     if (mode === "signup" && existingUser.length > 0) {
       return res.status(400).json({ error: "This phone number is already registered. Please login instead." });
     }
@@ -571,21 +640,19 @@ app.post("/api/auth/otp/send", async (req, res) => {
     
     await db.insert(otpCodes).values({ phone, code, expiresAt });
 
+    console.log("📨 OTP sent:", code);
+
     res.json({ success: true, code, message: "OTP sent" });
   } catch (error) {
-    console.error("❌ OTP send error:", error);
+    logError(error as Error, 'OTP_SEND');
     res.status(500).json({ error: "Failed to send OTP" });
   }
 });
 
-// 2. Updated OTP Verify: Handle Password Reset and Registration
-// ===== CORRECTED OTP VERIFY ROUTE =====
-// Place this in your routes.ts file replacing the existing one
-
-app.post("/api/auth/otp/verify", async (req, res) => {
+// ===== OTP VERIFY =====
+app.post("/api/auth/otp/verify", validateOTP, async (req, res) => {
   try {
     const { phone, code, name, email, password, mode } = req.body;
-    if (!phone || !code) return res.status(400).json({ error: "Phone and code required" });
 
     const validOtp = await db.select().from(otpCodes)
       .where(and(
@@ -596,7 +663,9 @@ app.post("/api/auth/otp/verify", async (req, res) => {
       ))
       .limit(1);
 
-    if (!validOtp.length) return res.status(400).json({ error: "Invalid or expired OTP" });
+    if (!validOtp.length) {
+      return res.status(400).json({ error: "Invalid or expired OTP" });
+    }
 
     await db.update(otpCodes).set({ verified: true }).where(eq(otpCodes.id, validOtp[0].id));
 
@@ -606,12 +675,14 @@ app.post("/api/auth/otp/verify", async (req, res) => {
 
     if (existingUsers.length > 0) {
       // UPDATE EXISTING USER
+      const hashedPassword = password ? await hashPassword(password) : existingUsers[0].password;
+      
       const updatedUsers = await db.update(users)
         .set({ 
-          password: password || existingUsers[0].password,
+          password: hashedPassword,
           email: email || existingUsers[0].email,
           username: name || existingUsers[0].username,
-          firstLogin: false // ✅ Password reset via OTP = not first login anymore
+          firstLogin: false
         })
         .where(eq(users.phone, phone))
         .returning();
@@ -621,14 +692,15 @@ app.post("/api/auth/otp/verify", async (req, res) => {
       const isSuperAdmin = phone === '+6288289943397';
       const timestamp = Date.now().toString().slice(-4);
       const safeUsername = name ? `${name}_${timestamp}` : `user_${phone.slice(-4)}_${timestamp}`;
+      const hashedPassword = await hashPassword(password || 'temp123');
 
       const newUser = await db.insert(users).values({
         username: safeUsername,
-        password: password,
+        password: hashedPassword,
         phone,
         email: email || null,
         role: isSuperAdmin ? "admin" : "customer",
-        firstLogin: false, // ✅ New users don't need password reset
+        firstLogin: false,
         isNewUser: true,
         totalOrders: 0,
         totalSpent: 0,
@@ -637,6 +709,10 @@ app.post("/api/auth/otp/verify", async (req, res) => {
       userJustCreated = true;
     }
 
+    // Generate JWT token
+    const token = generateToken(user.id, user.role);
+
+    // Check staff info
     const staffRecord = await storage.getStoreStaffByUserId(user.id);
     let staffInfo = null;
     if (staffRecord) {
@@ -649,7 +725,7 @@ app.post("/api/auth/otp/verify", async (req, res) => {
       };
     }
 
-    // 🎁 AUTO-ASSIGN WELCOME VOUCHER if new user
+    // Auto-assign welcome voucher
     if (userJustCreated) {
       setTimeout(() => {
         checkAndAssignVouchers(user!.id, "first_signup");
@@ -665,11 +741,12 @@ app.post("/api/auth/otp/verify", async (req, res) => {
         role: user.role,
         firstLogin: user.firstLogin || false
       }, 
+      token,
       staffInfo 
     });
 
   } catch (error: any) {
-    console.error("❌ OTP verify error details:", error);
+    logError(error, 'OTP_VERIFY');
     
     if (error.code === '23505') {
       return res.status(400).json({ error: "Username or Phone already exists in system." });
@@ -943,18 +1020,21 @@ app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, 
       isAvailable: true
     });
 
-    res.json({ 
-      success: true, 
-      message: "Product created with automatic pricing",
-      product: {
-        id: newProduct.id,
-        name: newProduct.name,
-        costPrice: newProduct.costPrice,
-        sellingPrice: newProduct.price,
-        margin: `${newProduct.margin}%`,
-        profit: newProduct.price - newProduct.costPrice,
-      }
-    });
+ await invalidateCache('/api/home/products');
+  await invalidateCache('/api/category/products');
+  
+  res.json({ 
+    success: true, 
+    message: "Product created with automatic pricing",
+    product: {
+      id: newProduct.id,
+      name: newProduct.name,
+      costPrice: newProduct.costPrice,
+      sellingPrice: newProduct.price,
+      margin: `${newProduct.margin}%`,
+      profit: newProduct.price - newProduct.costPrice,
+    }
+  });
   } catch (error) {
     console.error("❌ Creation error:", error);
     res.status(500).json({ 
@@ -962,6 +1042,7 @@ app.post("/api/picker/inventory", uploadMiddleware.single("image"), async (req, 
       details: error instanceof Error ? error.message : "Unknown error"
     });
   }
+  
 });
 
 
@@ -1655,7 +1736,7 @@ app.get("/api/staff/salary/history", async (req, res) => {
 // ==================== 6. CATEGORIES ====================
   console.log("📂 Registering category routes...");
   
- app.get("/api/categories", async (req, res) => {
+app.get("/api/categories", cacheMiddleware(600), async (req, res) => {
   try {
     console.log("🟢 HIT /api/categories");
 
@@ -1669,8 +1750,7 @@ app.get("/api/staff/salary/history", async (req, res) => {
       data: categories,
     });
   } catch (err) {
-    console.error("❌ Failed to fetch categories:", err);
-
+    logError(err as Error, 'GET_CATEGORIES');
     return res.status(500).json({
       success: false,
       message: "Failed to fetch categories",
@@ -1744,13 +1824,13 @@ app.get("/api/banners", async (req, res) => {
 // ✅ Just change the URLs above to your own images when ready
 
 // Enhanced /api/home/products - Include store info per product
-app.get("/api/home/products", async (req: Request, res: Response) => {
+app.get("/api/home/products", cacheMiddleware(300), async (req: Request, res: Response) => {
   try {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
     const storeId = req.query.storeId as string | undefined;
 
-    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    if (isNaN(lat) || isNaN(lng)) {
       return res.status(400).json({ error: "Valid lat & lng required" });
     }
 
@@ -1818,7 +1898,7 @@ app.get("/api/home/products", async (req: Request, res: Response) => {
 
     res.json(result.rows);
   } catch (error) {
-    console.error("❌ /api/home/products error:", error);
+    logError(error as Error, 'GET_HOME_PRODUCTS');
     res.status(500).json({ error: "Failed to fetch products" });
   }
 });
@@ -2605,13 +2685,18 @@ app.patch("/api/orders/:id/pack", async (req, res) => {
   }
 });
 
-app.get("/api/orders", async (req, res) => {
+app.get("/api/orders", apiLimiter, async (req, res) => {
   try {
-    const { userId, role } = req.query;
+    const { userId, role, page = '1', limit = '20' } = req.query;
 
     if (!userId || !role) {
       return res.status(400).json({ error: "userId and role required" });
     }
+
+    // Parse pagination params
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const offset = (pageNum - 1) * limitNum;
 
     let whereCondition;
 
@@ -2634,11 +2719,22 @@ app.get("/api/orders", async (req, res) => {
       return res.status(403).json({ error: "Invalid role" });
     }
 
+    // Get total count
+    const totalResult = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(orders)
+      .where(whereCondition);
+    
+    const total = totalResult[0]?.count || 0;
+
+    // Get paginated orders
     const userOrders = await db
       .select()
       .from(orders)
       .where(whereCondition)
-      .orderBy(sql`${orders.createdAt} DESC`);
+      .orderBy(sql`${orders.createdAt} DESC`)
+      .limit(limitNum)
+      .offset(offset);
 
     const ordersWithItems = await Promise.all(
       userOrders.map(async (o) => {
@@ -2659,12 +2755,23 @@ app.get("/api/orders", async (req, res) => {
       })
     );
 
-    res.json(ordersWithItems);
+    res.json({
+      orders: ordersWithItems,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum),
+        hasMore: offset + limitNum < total
+      }
+    });
   } catch (error) {
-    console.error("❌ Fetch orders error:", error);
+    logError(error as Error, 'GET_ORDERS');
     res.status(500).json({ error: "Failed to fetch orders" });
   }
 });
+
+
 app.get("/api/orders/:id", async (req, res) => {
   try {
     const [orderData] = await db.select().from(orders).where(eq(orders.id, req.params.id)).limit(1);

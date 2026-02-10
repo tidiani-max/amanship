@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
-import StoreOwnerDashboardScreen from '@/screens/StoreOwnerDashboardScreen';
+import { apiRequest, getApiUrl, queryClient } from "@/lib/query-client"; // ✅ FIXED
 
 interface User {
   id: string;
@@ -22,8 +21,8 @@ interface AuthContextType {
     requiresPasswordReset?: boolean;
     error?: string;
     message?: string;
-  }>; // ✅ ADD THIS
-  login: (phone: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  }>;
+  login: (phone: string, password: string) => Promise<{ success: boolean; error?: string; requiresPasswordReset?: boolean }>;
   signup: (username: string, password: string, phone?: string) => Promise<{ success: boolean; error?: string }>;
   sendOtp: (
     phone: string,
@@ -72,70 +71,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-const checkPhone = async (phone: string) => {
-  try {
-    console.log("📞 Checking phone:", phone);
-    
-    const response = await apiRequest("POST", "/api/auth/check-phone", { phone });
-    const data = await response.json();
-    
-    console.log("📱 Check phone response:", data);
-    
-    if (response.ok) {
-      return { 
-        exists: data.exists,
-        firstLogin: data.firstLogin,
-        isStaff: data.isStaff,
-        requiresPasswordReset: data.requiresPasswordReset,
-        message: data.message
-      };
-    } else {
-      return { exists: false, error: data.error || "Failed to check phone" };
-    }
-  } catch (error) {
-    console.error("❌ Check phone network error:", error);
-    return { exists: false, error: "Network error. Please try again." };
-  }
-};
-
-const login = async (phone: string, password: string) => {
-  try {
-    console.log("🔐 Attempting login for:", phone);
-    
-    const response = await apiRequest("POST", "/api/auth/login", { phone, password });
-    const data = await response.json();
-    
-    console.log("📥 Login response:", data);
-    
-    if (response.ok) {
-      // ✅ Check if it's a first login staff member
-      if (data.error === "first_login_required") {
-        console.log("⚠️ First login required - should redirect to password reset");
-        return { 
-          success: false, 
-          error: "first_login_required",
-          requiresPasswordReset: true 
-        };
-      }
+  const checkPhone = async (phone: string) => {
+    try {
+      console.log("📞 Checking phone:", phone);
       
-      // ✅ Normal successful login
-      setUser(data.user);
-      await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
-      return { success: true };
-    } else {
-      return { success: false, error: data.error || "Login failed" };
+      const response = await apiRequest("POST", "/api/auth/check-phone", { phone });
+      const data = await response.json();
+      
+      console.log("📱 Check phone response:", data);
+      
+      if (response.ok) {
+        return { 
+          exists: data.exists,
+          firstLogin: data.firstLogin,
+          isStaff: data.isStaff,
+          requiresPasswordReset: data.requiresPasswordReset,
+          message: data.message
+        };
+      } else {
+        return { exists: false, error: data.error || "Failed to check phone" };
+      }
+    } catch (error) {
+      console.error("❌ Check phone network error:", error);
+      return { exists: false, error: "Network error. Please try again." };
     }
-  } catch (error) {
-    console.error("❌ Login network error:", error);
-    return { success: false, error: "Network error. Please try again." };
-  }
-};
+  };
+
+  const login = async (phone: string, password: string) => {
+    try {
+      console.log("🔐 Attempting login for:", phone);
+      
+      const response = await apiRequest("POST", "/api/auth/login", { phone, password });
+      const data = await response.json();
+      
+      console.log("📥 Login response:", data);
+      
+      if (response.ok) {
+        if (data.error === "first_login_required") {
+          console.log("⚠️ First login required - should redirect to password reset");
+          return { 
+            success: false, 
+            error: "first_login_required",
+            requiresPasswordReset: true 
+          };
+        }
+        
+        // ✅ Store JWT token
+        if (data.token) {
+          await AsyncStorage.setItem("@ZendO_token", data.token);
+        }
+        
+        setUser(data.user);
+        await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || "Login failed" };
+      }
+    } catch (error) {
+      console.error("❌ Login network error:", error);
+      return { success: false, error: "Network error. Please try again." };
+    }
+  };
 
   const signup = async (username: string, password: string, phone?: string) => {
     try {
       const response = await apiRequest("POST", "/api/auth/register", { username, password, phone });
       const data = await response.json();
+      
       if (response.ok) {
+        // ✅ Store JWT token
+        if (data.token) {
+          await AsyncStorage.setItem("@ZendO_token", data.token);
+        }
+        
         setUser(data.user);
         await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
         return { success: true };
@@ -149,7 +157,13 @@ const login = async (phone: string, password: string) => {
 
   const logout = async () => {
     try {
+      // Clear token
+      await AsyncStorage.removeItem("@ZendO_token");
       await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+      
+      // Clear all queries
+      queryClient.clear(); // ✅ This will now work!
+      
       setUser(null);
       console.log("✅ User logged out successfully");
     } catch (error) {
@@ -201,7 +215,13 @@ const login = async (phone: string, password: string) => {
         ...metadata
       });
       const data = await response.json();
+      
       if (response.ok) {
+        // ✅ Store JWT token
+        if (data.token) {
+          await AsyncStorage.setItem("@ZendO_token", data.token);
+        }
+        
         setUser(data.user);
         await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
         return { success: true };
@@ -217,7 +237,13 @@ const login = async (phone: string, password: string) => {
     try {
       const response = await apiRequest("POST", "/api/auth/apple", { appleId, email, fullName });
       const data = await response.json();
+      
       if (response.ok) {
+        // ✅ Store JWT token
+        if (data.token) {
+          await AsyncStorage.setItem("@ZendO_token", data.token);
+        }
+        
         setUser(data.user);
         await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
         return { success: true };
@@ -233,7 +259,13 @@ const login = async (phone: string, password: string) => {
     try {
       const response = await apiRequest("POST", "/api/auth/google", { googleId, email, name });
       const data = await response.json();
+      
       if (response.ok) {
+        // ✅ Store JWT token
+        if (data.token) {
+          await AsyncStorage.setItem("@ZendO_token", data.token);
+        }
+        
         setUser(data.user);
         await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
         return { success: true };
@@ -245,32 +277,29 @@ const login = async (phone: string, password: string) => {
     }
   };
 
-  // ✅ FUNCTION DEFINITION (already exists in your code)
-const resetFirstLoginPassword = async (phone: string, newPassword: string) => {
-  try {
-    console.log("🔄 Resetting password for:", phone);
-    
-    const response = await apiRequest("POST", "/api/auth/reset-first-login", {
-      phone,
-      newPassword
-    });
+  const resetFirstLoginPassword = async (phone: string, newPassword: string) => {
+    try {
+      console.log("🔄 Resetting password for:", phone);
+      
+      const response = await apiRequest("POST", "/api/auth/reset-first-login", {
+        phone,
+        newPassword
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    console.log("📝 Reset password response:", data);
+      console.log("📝 Reset password response:", data);
 
-    if (response.ok && data.success) {
-      // ✅ DO NOT auto-login after password reset
-      // User should login manually with their new password
-      return { success: true };
+      if (response.ok && data.success) {
+        return { success: true };
+      }
+
+      return { success: false, error: data.error || "Failed to reset password" };
+    } catch (error) {
+      console.error("❌ Reset password network error:", error);
+      return { success: false, error: "Network error. Please try again." };
     }
-
-    return { success: false, error: data.error || "Failed to reset password" };
-  } catch (error) {
-    console.error("❌ Reset password network error:", error);
-    return { success: false, error: "Network error. Please try again." };
-  }
-};
+  };
 
   return (
     <AuthContext.Provider
@@ -287,7 +316,7 @@ const resetFirstLoginPassword = async (phone: string, newPassword: string) => {
         loginWithGoogle,
         logout,
         updateProfile,
-        resetFirstLoginPassword, // ✅ Already in provider value
+        resetFirstLoginPassword,
       }}
     >
       {children}

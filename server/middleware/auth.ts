@@ -1,8 +1,16 @@
 import jwt from 'jsonwebtoken';
 import type { Request, Response, NextFunction } from 'express';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-const JWT_EXPIRES_IN = '7d';
+// ✅ IMPROVED: Fail early if JWT_SECRET is missing
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+
+if (!JWT_SECRET) {
+  throw new Error("❌ FATAL: JWT_SECRET is not set in environment variables!");
+}
+
+console.log("🔐 JWT_SECRET loaded:", JWT_SECRET ? "✅ YES" : "❌ NO");
+console.log("🔐 JWT_SECRET length:", JWT_SECRET.length);
 
 export interface JWTPayload {
   userId: string;

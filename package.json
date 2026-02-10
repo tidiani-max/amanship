@@ -11,6 +11,11 @@
     "db:push": "drizzle-kit push",
     "lint": "npx expo lint",
     "format": "prettier --write \"**/*.{js,ts,tsx,css,json}\"",
+    "dev": "tsx watch server/index.ts",
+    "migrate": "drizzle-kit push:pg",
+    "db:studio": "drizzle-kit studio",
+    "logs:access": "tail -f logs/access.log",
+    "logs:error": "tail -f logs/error.log",
     "android": "expo run:android",
     "ios": "expo run:ios"
   },
@@ -25,6 +30,7 @@
     "@react-navigation/native-stack": "^7.3.16",
     "@tanstack/react-query": "^5.90.7",
     "bcrypt": "^6.0.0",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "drizzle-kit": "^0.31.8",
@@ -93,11 +99,12 @@
     "react-native-worklets": "0.5.1",
     "tsx": "^4.20.6",
     "ws": "^8.18.0",
-    "zod": "^3.24.2",
+    "zod": "^3.25.76",
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
+    "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.25",
     "@types/jsonwebtoken": "^9.0.10",

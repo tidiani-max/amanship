@@ -4,10 +4,13 @@ import { registerRoutes } from "./routes";
 import * as fs from "fs";
 import * as path from "path";
 import cors from 'cors';
+import { helmetConfig } from './middleware/security';
+import { accessLogger, consoleLogger } from './utils/logger';
+import compression from 'compression';
+
 const app = express();
 const log = console.log;
 
-// Detect if we are running on Railway or locally
 const isProd = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT;
 
 function setupCors(app: express.Application) {
@@ -39,21 +42,34 @@ function configureStaticFiles(app: express.Application) {
 }
 
 (async () => {
-  // ✅ 1. CORS MUST BE FIRST
+  // ✅ 1. Security headers (Helmet)
+  app.use(helmetConfig);
+  
+  // ✅ 2. Compression
+  app.use(compression());
+  
+  // ✅ 3. Logging
+  if (isProd) {
+    app.use(accessLogger);
+  } else {
+    app.use(consoleLogger);
+  }
+  
+  // ✅ 4. CORS
   setupCors(app);
   
-  // ✅ 2. Body parsing BEFORE routes
+  // ✅ 5. Body parsing
   setupBodyParsing(app);
   
-  // ✅ 3. Static files
+  // ✅ 6. Static files
   configureStaticFiles(app);
   
-  // ✅ 4. Register routes LAST
+  // ✅ 7. Register routes
   const server = await registerRoutes(app);
 
   const port = parseInt(process.env.PORT || "5000", 10);
 
-  // Ensure upload directories exist
+  // Ensure directories exist
   const chatDir = path.join(process.cwd(), "uploads", "chat");
   if (!fs.existsSync(chatDir)) {
     fs.mkdirSync(chatDir, { recursive: true });

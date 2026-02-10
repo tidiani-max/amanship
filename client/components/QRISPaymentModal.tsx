@@ -77,12 +77,6 @@ export default function QRISPaymentModal({
 
           {/* QR Code */}
           <View style={styles.qrContainer}>
-            <Image
-              
-source={require('../../assets/qris-code.png')} 
-              style={styles.qrCode}
-              resizeMode="contain"
-            />
             <ThemedText style={styles.qrInstruction}>
               Customer can scan with any payment app:
             </ThemedText>
