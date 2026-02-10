@@ -25,7 +25,7 @@ interface CartItemWithId extends CartItem {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_HORIZONTAL_MARGIN = 20;
 const CARD_PADDING = 16;
-const IMAGE_SIZE = SCREEN_WIDTH < 375 ? 70 : 80; // Smaller on small screens
+const IMAGE_SIZE = SCREEN_WIDTH < 375 ? 75 : 85; // Slightly larger for better visibility
 
 export default function CartScreen() {
   const insets = useSafeAreaInsets();
@@ -107,8 +107,8 @@ export default function CartScreen() {
         contentContainerStyle={[
           styles.listContent,
           {
-            paddingTop: headerHeight + 10,
-            paddingBottom: items.length > 0 ? 200 : 100,
+            paddingTop: Platform.OS === 'ios' ? 16 : headerHeight + 16,
+            paddingBottom: items.length > 0 ? 220 : 100,
           }
         ]}
         showsVerticalScrollIndicator={false}
@@ -165,13 +165,14 @@ const styles = StyleSheet.create({
   },
   cartCard: {
     borderRadius: SCREEN_WIDTH < 375 ? 20 : 24,
-    padding: CARD_PADDING,
-    marginBottom: 16,
+    padding: SCREEN_WIDTH < 375 ? 14 : 16,
+    marginBottom: 14,
+    marginTop: 2,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   cartItemContent: {
     flexDirection: "row",
@@ -193,26 +194,28 @@ const styles = StyleSheet.create({
   },
   productDetails: {
     flex: 1,
-    marginLeft: 12,
-    marginRight: 8,
+    marginLeft: 14,
+    marginRight: 10,
     justifyContent: 'center',
+    minWidth: 0, // Important for text truncation
   },
   productName: {
-    fontSize: SCREEN_WIDTH < 375 ? 14 : 16,
+    fontSize: SCREEN_WIDTH < 375 ? 15 : 16,
     fontWeight: "800",
     color: '#1e293b',
-    marginBottom: 4,
+    marginBottom: 5,
+    lineHeight: SCREEN_WIDTH < 375 ? 18 : 20,
   },
   brandText: {
     color: '#64748b',
-    fontSize: SCREEN_WIDTH < 375 ? 11 : 12,
+    fontSize: SCREEN_WIDTH < 375 ? 12 : 13,
     fontWeight: '600',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   priceText: {
     fontWeight: '900',
     color: '#4f46e5',
-    fontSize: SCREEN_WIDTH < 375 ? 14 : 16,
+    fontSize: SCREEN_WIDTH < 375 ? 15 : 17,
   },
   quantityContainer: {
     alignItems: "center",
@@ -250,11 +253,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: SCREEN_WIDTH < 375 ? 28 : 32,
     borderTopRightRadius: SCREEN_WIDTH < 375 ? 28 : 32,
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingHorizontal: 24,
+    paddingTop: 24,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.08,
     shadowRadius: 20,
     elevation: 20,
   },
