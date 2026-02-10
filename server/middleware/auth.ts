@@ -28,8 +28,12 @@ declare global {
 
 // ==================== JWT FUNCTIONS ====================
 export const generateToken = (userId: string, role: string): string => {
+  if (!JWT_SECRET) {
+    throw new Error("JWT_SECRET is not defined");
+  }
+  
   return jwt.sign(
-    { userId, role } as JWTPayload,
+    { userId, role },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
   );
@@ -37,6 +41,9 @@ export const generateToken = (userId: string, role: string): string => {
 
 export const verifyToken = (token: string): JWTPayload | null => {
   try {
+    if (!JWT_SECRET) {
+      throw new Error("JWT_SECRET is not defined");
+    }
     return jwt.verify(token, JWT_SECRET) as JWTPayload;
   } catch (error) {
     return null;
