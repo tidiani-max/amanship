@@ -4,26 +4,30 @@ import { z } from 'zod';
 import type { Request, Response, NextFunction } from 'express';
 
 // ==================== RATE LIMITING ====================
+// ✅ PRODUCTION-READY: Different limits for dev vs production
+const isDevelopment = process.env.NODE_ENV === 'development';
+
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per window
-  message: 'Too many login attempts. Please try again in 15 minutes.',
+  max: isDevelopment ? 100 : 5, // ✅ 100 in dev, 5 in production
+  message: { error: 'Too many login attempts. Please try again in 15 minutes.' }, // ✅ Return JSON
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: true, // ✅ Don't count successful logins
 });
 
 export const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute
-  message: 'Too many requests. Please slow down.',
+  max: isDevelopment ? 1000 : 100, // ✅ Higher limit in dev
+  message: { error: 'Too many requests. Please slow down.' }, // ✅ Return JSON
   standardHeaders: true,
   legacyHeaders: false,
 });
 
 export const strictLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
-  max: 10,
-  message: 'Too many requests. Please try again later.',
+  max: isDevelopment ? 100 : 10, // ✅ Higher limit in dev
+  message: { error: 'Too many requests. Please try again later.' }, // ✅ Return JSON
 });
 
 // ==================== HELMET SECURITY ====================
