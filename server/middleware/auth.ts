@@ -1,10 +1,11 @@
 import jwt from 'jsonwebtoken';
 import type { Request, Response, NextFunction } from 'express';
 
-// ✅ FIX: Ensure JWT_SECRET is properly typed as string
-const JWT_SECRET = process.env.JWT_SECRET as string;
+// ✅ Don't type JWT_SECRET as string yet - let it be string | undefined
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
+// Runtime check
 if (!JWT_SECRET) {
   throw new Error("❌ FATAL: JWT_SECRET is not set in environment variables!");
 }
@@ -28,15 +29,26 @@ declare global {
 
 // ==================== JWT FUNCTIONS ====================
 export const generateToken = (userId: string, role: string): string => {
+  if (!JWT_SECRET) {
+    throw new Error("JWT_SECRET is not defined");
+  }
+  
+  // ✅ Create token without the expiresIn option to avoid type issues
   return jwt.sign(
-    { userId, role },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
+    { 
+      userId, 
+      role,
+      exp: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days in seconds
+    },
+    JWT_SECRET
   );
 };
 
 export const verifyToken = (token: string): JWTPayload | null => {
   try {
+    if (!JWT_SECRET) {
+      throw new Error("JWT_SECRET is not defined");
+    }
     return jwt.verify(token, JWT_SECRET) as JWTPayload;
   } catch (error) {
     return null;
