@@ -1,8 +1,8 @@
 import jwt from 'jsonwebtoken';
 import type { Request, Response, NextFunction } from 'express';
 
-// ✅ IMPROVED: Fail early if JWT_SECRET is missing
-const JWT_SECRET = process.env.JWT_SECRET;
+// ✅ FIX: Ensure JWT_SECRET is properly typed as string
+const JWT_SECRET = process.env.JWT_SECRET as string;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 if (!JWT_SECRET) {
@@ -28,10 +28,6 @@ declare global {
 
 // ==================== JWT FUNCTIONS ====================
 export const generateToken = (userId: string, role: string): string => {
-  if (!JWT_SECRET) {
-    throw new Error("JWT_SECRET is not defined");
-  }
-  
   return jwt.sign(
     { userId, role },
     JWT_SECRET,
@@ -41,9 +37,6 @@ export const generateToken = (userId: string, role: string): string => {
 
 export const verifyToken = (token: string): JWTPayload | null => {
   try {
-    if (!JWT_SECRET) {
-      throw new Error("JWT_SECRET is not defined");
-    }
     return jwt.verify(token, JWT_SECRET) as JWTPayload;
   } catch (error) {
     return null;
