@@ -532,7 +532,7 @@ const handlePlaceOrder = () => {
                 {/* ✅ QRIS Badge */}
                 {method.type === "qris" && (
                   <View style={styles.qrisBadge}>
-                    <ThemedText style={styles.qrisBadgeText}>Cheapest</ThemedText>
+                    <ThemedText style={styles.qrisBadgeText}></ThemedText>
                   </View>
                 )}
                 

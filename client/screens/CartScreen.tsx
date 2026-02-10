@@ -104,13 +104,13 @@ export default function CartScreen() {
         data={items as CartItemWithId[]}
         renderItem={renderCartItem}
         keyExtractor={(item) => item.product.id}
-        contentContainerStyle={[
-          styles.listContent,
-          {
-            paddingTop: Platform.OS === 'ios' ? 16 : headerHeight + 16,
-            paddingBottom: items.length > 0 ? 220 : 100,
-          }
-        ]}
+      contentContainerStyle={[
+  styles.listContent,
+  {
+    paddingTop: headerHeight + 16, // Remove the Platform.OS check
+    paddingBottom: items.length > 0 ? 220 : 100,
+  }
+]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyState}>
