@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, StyleSheet, ScrollView, ActivityIndicator, Linking, Pressable, Image, Animated, Platform } from "react-native";
+import { View, StyleSheet, ScrollView, ActivityIndicator, Linking, Pressable, Image, Animated, Platform, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -8,10 +8,11 @@ import { useQuery } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
+import QRCode from "react-native-qrcode-svg";
 
 const BRAND_PURPLE = "#6338f2";
-const MAP_UPDATE_INTERVAL = 2000; // 2 seconds
-const DRIVER_ANIMATION_DURATION = 2000; // Smooth 2-second transitions
+const MAP_UPDATE_INTERVAL = 2000;
+const DRIVER_ANIMATION_DURATION = 2000;
 
 type OrderTrackingRouteProp = RouteProp<RootStackParamList, "OrderTracking">;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -22,8 +23,9 @@ export default function OrderTrackingScreen() {
   const route = useRoute<OrderTrackingRouteProp>();
   const { orderId } = route.params;
   const mapRef = useRef<any>(null);
+  const [showQRISModal, setShowQRISModal] = useState(false);
 
-  // Fetch order data every 3 seconds
+  // Fetch order data
   const { data: order, isLoading } = useQuery({
     queryKey: ["order-tracking", orderId],
     queryFn: async () => {
@@ -31,6 +33,17 @@ export default function OrderTrackingScreen() {
       return res.json();
     },
     refetchInterval: 3000,
+  });
+
+  // ✅ NEW: Fetch payment status
+  const { data: paymentStatus } = useQuery({
+    queryKey: ["payment-status", orderId],
+    queryFn: async () => {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}/payment-status`);
+      return res.json();
+    },
+    refetchInterval: order?.paymentMethod === "qris" && !order?.qrisConfirmed ? 3000 : false,
+    enabled: !!order,
   });
 
   const getSimpleStatus = () => {
@@ -44,7 +57,7 @@ export default function OrderTrackingScreen() {
 
   const simpleStatus = getSimpleStatus();
 
-  // Fetch driver location with faster updates
+  // Fetch driver location
   const { data: driverData } = useQuery({
     queryKey: ["driver-location", orderId],
     queryFn: async () => {
@@ -67,11 +80,13 @@ export default function OrderTrackingScreen() {
   const driverHeading = driverData?.location?.heading || 0;
   const driverSpeed = driverData?.location?.speed || 0;
   const distance = driverData?.distance || null;
-  const eta = driverData?.estimatedArrival || null;
 
   const showMap = (simpleStatus === 'packed' || simpleStatus === 'delivering') && customerLat && customerLng;
   const showDriver = simpleStatus === 'delivering' && driverLat && driverLng;
   const searchingDriver = simpleStatus === 'packed' && !order?.driverId;
+
+  // ✅ Check if payment is pending
+  const isQRISPending = order?.paymentMethod === "qris" && !paymentStatus?.isPaid;
 
   if (isLoading && !order) {
     return (
@@ -83,6 +98,65 @@ export default function OrderTrackingScreen() {
 
   return (
     <View style={styles.container}>
+      {/* ✅ QRIS Payment Modal */}
+      <Modal
+        visible={showQRISModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowQRISModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Complete Payment</ThemedText>
+              <Pressable onPress={() => setShowQRISModal(false)}>
+                <Feather name="x" size={24} color="#64748b" />
+              </Pressable>
+            </View>
+
+            <View style={styles.qrisContainer}>
+              {paymentStatus?.qrisUrl ? (
+                <QRCode value={paymentStatus.qrisUrl} size={240} />
+              ) : (
+                <ActivityIndicator size="large" color={BRAND_PURPLE} />
+              )}
+            </View>
+
+            <ThemedText style={styles.qrisInstruction}>
+              Scan this QR code with your mobile banking app
+            </ThemedText>
+
+            <View style={styles.qrisDetails}>
+              <View style={styles.qrisDetailRow}>
+                <ThemedText style={styles.qrisLabel}>Order Number</ThemedText>
+                <ThemedText style={styles.qrisValue}>{orderNumber}</ThemedText>
+              </View>
+              <View style={styles.qrisDetailRow}>
+                <ThemedText style={styles.qrisLabel}>Total Amount</ThemedText>
+                <ThemedText style={styles.qrisValue}>
+                  Rp {total.toLocaleString('id-ID')}
+                </ThemedText>
+              </View>
+              <View style={styles.qrisDetailRow}>
+                <ThemedText style={styles.qrisLabel}>Time Remaining</ThemedText>
+                <ThemedText style={[styles.qrisValue, { color: BRAND_PURPLE }]}>
+                  {paymentStatus?.minutesRemaining || 0} minutes
+                </ThemedText>
+              </View>
+            </View>
+
+            {paymentStatus?.status === "expired" && (
+              <View style={styles.expiredBanner}>
+                <Feather name="alert-circle" size={16} color="#dc2626" />
+                <ThemedText style={styles.expiredText}>
+                  QR code expired. Please create a new order.
+                </ThemedText>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* TOP: Map or Illustration */}
       <View style={{ height: '52%' }}>
         {showMap ? (
@@ -117,7 +191,7 @@ export default function OrderTrackingScreen() {
               resizeMode="contain"
             />
             <ThemedText style={styles.illustrationText}>
-              {simpleStatus === 'pending' ? 'Order Confirmed!' : 'Preparing your order...'}
+              {isQRISPending ? 'Waiting for Payment' : simpleStatus === 'pending' ? 'Order Confirmed!' : 'Preparing your order...'}
             </ThemedText>
           </View>
         )}
@@ -147,91 +221,124 @@ export default function OrderTrackingScreen() {
       >
         <View style={styles.handle} />
 
+        {/* ✅ Payment Status Banner */}
+        {isQRISPending && (
+          <Pressable 
+            style={styles.paymentBanner}
+            onPress={() => setShowQRISModal(true)}
+          >
+            <View style={styles.paymentBannerContent}>
+              <View style={styles.paymentBannerIcon}>
+                <MaterialCommunityIcons name="qrcode-scan" size={24} color={BRAND_PURPLE} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.paymentBannerTitle}>
+                  Payment Required
+                </ThemedText>
+                <ThemedText style={styles.paymentBannerText}>
+                  Tap to complete QRIS payment • {paymentStatus?.minutesRemaining || 0} min left
+                </ThemedText>
+              </View>
+              <Feather name="chevron-right" size={20} color={BRAND_PURPLE} />
+            </View>
+          </Pressable>
+        )}
+
         {/* Order number + Status */}
         <View style={styles.statusHeader}>
           <View style={{ flex: 1 }}>
             <ThemedText style={styles.orderNumber}>Order {orderNumber}</ThemedText>
             <ThemedText style={styles.statusText}>
-              {simpleStatus === 'pending' && 'Order Placed'}
+              {isQRISPending ? '⏳ Awaiting Payment' : 
+               simpleStatus === 'pending' && 'Order Placed'}
               {simpleStatus === 'picking' && 'Picking Items'}
               {simpleStatus === 'packed' && 'Ready for Pickup'}
               {simpleStatus === 'delivering' && 'On the Way'}
             </ThemedText>
-            <ThemedText style={styles.pinText}>
-              PIN: <ThemedText style={styles.pinBold}>{order?.deliveryPin || 'N/A'}</ThemedText>
-            </ThemedText>
+            {!isQRISPending && (
+              <ThemedText style={styles.pinText}>
+                PIN: <ThemedText style={styles.pinBold}>{order?.deliveryPin || 'N/A'}</ThemedText>
+              </ThemedText>
+            )}
           </View>
-          <View style={styles.statusBadge}>
-            <ThemedText style={styles.statusLabel}>{simpleStatus.toUpperCase()}</ThemedText>
-          </View>
-        </View>
-
-        {/* 4-Step Progress Bar */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressStep}>
-            <View style={[styles.progressDot, styles.progressDotActive]}>
-              <Feather name="check" size={12} color="white" />
-            </View>
-            <ThemedText style={styles.progressLabelActive}>Placed</ThemedText>
-          </View>
-          
-          <View style={[styles.progressLine, simpleStatus !== 'pending' && styles.progressLineActive]} />
-          
-          <View style={styles.progressStep}>
-            <View style={[
-              styles.progressDot, 
-              simpleStatus !== 'pending' && styles.progressDotActive,
-              simpleStatus === 'picking' && styles.progressDotCurrent
-            ]}>
-              {simpleStatus !== 'pending' && <Feather name="check" size={12} color="white" />}
-            </View>
-            <ThemedText style={simpleStatus !== 'pending' ? styles.progressLabelActive : styles.progressLabel}>
-              Picking
-            </ThemedText>
-          </View>
-          
           <View style={[
-            styles.progressLine, 
-            (simpleStatus === 'packed' || simpleStatus === 'delivering') && styles.progressLineActive
-          ]} />
-          
-          <View style={styles.progressStep}>
-            <View style={[
-              styles.progressDot, 
-              (simpleStatus === 'packed' || simpleStatus === 'delivering') && styles.progressDotActive,
-              simpleStatus === 'packed' && styles.progressDotCurrent
-            ]}>
-              {(simpleStatus === 'packed' || simpleStatus === 'delivering') && (
-                <Feather name="check" size={12} color="white" />
-              )}
-            </View>
-            <ThemedText style={
-              (simpleStatus === 'packed' || simpleStatus === 'delivering') 
-                ? styles.progressLabelActive 
-                : styles.progressLabel
-            }>
-              Ready
-            </ThemedText>
-          </View>
-          
-          <View style={[styles.progressLine, simpleStatus === 'delivering' && styles.progressLineActive]} />
-          
-          <View style={styles.progressStep}>
-            <View style={[
-              styles.progressDot, 
-              simpleStatus === 'delivering' && styles.progressDotActive,
-              simpleStatus === 'delivering' && styles.progressDotCurrent
-            ]}>
-              {order?.status === 'delivered' && <Feather name="check" size={12} color="white" />}
-            </View>
-            <ThemedText style={simpleStatus === 'delivering' ? styles.progressLabelActive : styles.progressLabel}>
-              On Way
+            styles.statusBadge,
+            isQRISPending && styles.statusBadgePending
+          ]}>
+            <ThemedText style={styles.statusLabel}>
+              {isQRISPending ? 'UNPAID' : simpleStatus.toUpperCase()}
             </ThemedText>
           </View>
         </View>
 
-        {/* Driver card */}
-        {order?.driverName && (
+        {/* Progress Bar - Only show if paid */}
+        {!isQRISPending && (
+          <View style={styles.progressContainer}>
+            <View style={styles.progressStep}>
+              <View style={[styles.progressDot, styles.progressDotActive]}>
+                <Feather name="check" size={12} color="white" />
+              </View>
+              <ThemedText style={styles.progressLabelActive}>Placed</ThemedText>
+            </View>
+            
+            <View style={[styles.progressLine, simpleStatus !== 'pending' && styles.progressLineActive]} />
+            
+            <View style={styles.progressStep}>
+              <View style={[
+                styles.progressDot, 
+                simpleStatus !== 'pending' && styles.progressDotActive,
+                simpleStatus === 'picking' && styles.progressDotCurrent
+              ]}>
+                {simpleStatus !== 'pending' && <Feather name="check" size={12} color="white" />}
+              </View>
+              <ThemedText style={simpleStatus !== 'pending' ? styles.progressLabelActive : styles.progressLabel}>
+                Picking
+              </ThemedText>
+            </View>
+            
+            <View style={[
+              styles.progressLine, 
+              (simpleStatus === 'packed' || simpleStatus === 'delivering') && styles.progressLineActive
+            ]} />
+            
+            <View style={styles.progressStep}>
+              <View style={[
+                styles.progressDot, 
+                (simpleStatus === 'packed' || simpleStatus === 'delivering') && styles.progressDotActive,
+                simpleStatus === 'packed' && styles.progressDotCurrent
+              ]}>
+                {(simpleStatus === 'packed' || simpleStatus === 'delivering') && (
+                  <Feather name="check" size={12} color="white" />
+                )}
+              </View>
+              <ThemedText style={
+                (simpleStatus === 'packed' || simpleStatus === 'delivering') 
+                  ? styles.progressLabelActive 
+                  : styles.progressLabel
+              }>
+                Ready
+              </ThemedText>
+            </View>
+            
+            <View style={[styles.progressLine, simpleStatus === 'delivering' && styles.progressLineActive]} />
+            
+            <View style={styles.progressStep}>
+              <View style={[
+                styles.progressDot, 
+                simpleStatus === 'delivering' && styles.progressDotActive,
+                simpleStatus === 'delivering' && styles.progressDotCurrent
+              ]}>
+                {order?.status === 'delivered' && <Feather name="check" size={12} color="white" />}
+              </View>
+              <ThemedText style={simpleStatus === 'delivering' ? styles.progressLabelActive : styles.progressLabel}>
+                On Way
+              </ThemedText>
+            </View>
+          </View>
+        )}
+
+        {/* Driver card - Only show if paid */}
+        {!isQRISPending && order?.driverName && (
           <Card style={styles.driverCard}>
             <View style={styles.driverRow}>
               <View style={styles.driverAvatar}>
@@ -1019,5 +1126,130 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: BRAND_PURPLE,
     fontWeight: '700',
+  },
+   paymentBanner: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 16,
+    marginTop: 16,
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: '#fbbf24',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+  },
+  paymentBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+  },
+  paymentBannerIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paymentBannerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#92400e',
+    marginBottom: 4,
+  },
+  paymentBannerText: {
+    fontSize: 13,
+    color: '#78350f',
+    fontWeight: '600',
+  },
+  statusBadgePending: {
+    backgroundColor: '#fee2e2',
+  },
+  
+  // ✅ NEW: QRIS Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    padding: 24,
+    minHeight: '75%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#1e293b',
+  },
+  qrisContainer: {
+    backgroundColor: 'white',
+    padding: 24,
+    borderRadius: 20,
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#f1f5f9',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+  },
+  qrisInstruction: {
+    textAlign: 'center',
+    fontSize: 15,
+    color: '#64748b',
+    marginBottom: 24,
+    fontWeight: '600',
+  },
+  qrisDetails: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+  },
+  qrisDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  qrisLabel: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  qrisValue: {
+    fontSize: 15,
+    color: '#1e293b',
+    fontWeight: '700',
+  },
+  expiredBanner: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fee2e2',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+  },
+  expiredText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#dc2626',
+    fontWeight: '600',
   },
 });

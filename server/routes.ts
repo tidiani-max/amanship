@@ -3045,6 +3045,50 @@ app.get("/api/orders/:orderId/qris-status", async (req, res) => {
   }
 });
 
+// ===== GET QRIS PAYMENT STATUS FOR ORDER TRACKING =====
+app.get("/api/orders/:orderId/payment-status", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // If not QRIS, payment is considered complete
+    if (order.paymentMethod !== "qris") {
+      return res.json({
+        paymentMethod: order.paymentMethod,
+        isPaid: true,
+        status: "paid",
+      });
+    }
+
+    // For QRIS orders
+    const now = new Date();
+    const isExpired = order.qrisExpiresAt && new Date(order.qrisExpiresAt) < now;
+
+    res.json({
+      paymentMethod: "qris",
+      isPaid: order.qrisConfirmed || false,
+      status: order.qrisConfirmed ? "paid" : isExpired ? "expired" : "pending",
+      qrisUrl: order.qrisUrl,
+      qrisExpiresAt: order.qrisExpiresAt,
+      minutesRemaining: order.qrisExpiresAt 
+        ? Math.max(0, Math.floor((new Date(order.qrisExpiresAt).getTime() - now.getTime()) / (1000 * 60)))
+        : 0,
+    });
+  } catch (error) {
+    console.error("❌ Get payment status error:", error);
+    res.status(500).json({ error: "Failed to get payment status" });
+  }
+});
+
 // ===== XENDIT WEBHOOK - PAYMENT CONFIRMATION =====
 app.post("/api/webhooks/xendit/qris", async (req, res) => {
   try {
