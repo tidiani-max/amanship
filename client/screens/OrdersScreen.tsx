@@ -55,17 +55,20 @@ export default function OrdersScreen() {
 
   const userId = user?.id;
 
-  const { data: allOrders = [], isLoading, refetch } = useQuery({
-    queryKey: ["orders", userId], 
-    queryFn: async () => {
-      if (!userId) return [];
-      const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders?userId=${userId}&role=customer`);
-      if (!response.ok) throw new Error("Network response was not ok");
-      return response.json();
-    },
-    enabled: !!userId,
-    refetchInterval: 5000,
-  });
+ const { data: ordersResponse, isLoading, refetch } = useQuery({
+  queryKey: ["orders", userId], 
+  queryFn: async () => {
+    if (!userId) return { orders: [], pagination: {} };
+    const response = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders?userId=${userId}&role=customer`);
+    if (!response.ok) throw new Error("Network response was not ok");
+    return response.json();
+  },
+  enabled: !!userId,
+  refetchInterval: 5000,
+});
+
+// ✅ Extract orders array from response
+const allOrders = ordersResponse?.orders || []; 
 
   const activeOrders = allOrders.filter((o: any) => 
     ["pending", "picking", "packing", "packed", "delivering", "created", "confirmed"].includes(o.status?.toLowerCase())
