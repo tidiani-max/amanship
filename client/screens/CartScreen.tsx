@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Image, Platform } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Image, Platform, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
@@ -22,6 +22,11 @@ interface CartItemWithId extends CartItem {
   cartItemId?: string;
 }
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CARD_HORIZONTAL_MARGIN = 20;
+const CARD_PADDING = 16;
+const IMAGE_SIZE = SCREEN_WIDTH < 375 ? 70 : 80; // Smaller on small screens
+
 export default function CartScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -37,30 +42,30 @@ export default function CartScreen() {
   const renderCartItem = ({ item }: { item: CartItemWithId }) => (
     <View style={[styles.cartCard, { backgroundColor: '#fff' }]}>
       <View style={styles.cartItemContent}>
-        {/* NEW SQUIRCLE IMAGE DESIGN */}
+        {/* RESPONSIVE SQUIRCLE IMAGE */}
         <View style={[styles.imageWrapper, { backgroundColor: '#f8fafc' }]}>
           {item.product.image ? (
             <Image source={{ uri: getImageUrl(item.product.image) }} style={styles.productImageContent} />
           ) : (
-            <Feather name="package" size={24} color="#cbd5e1" />
+            <Feather name="package" size={IMAGE_SIZE * 0.3} color="#cbd5e1" />
           )}
         </View>
 
         <View style={styles.productDetails}>
-          <ThemedText style={{ fontSize: 16, fontWeight: "800", color: '#1e293b' }} numberOfLines={1}>
+          <ThemedText style={styles.productName} numberOfLines={2}>
             {item.product.name}
           </ThemedText>
-          <ThemedText style={{ color: '#64748b', fontSize: 12, fontWeight: '600', marginBottom: 6 }}>
+          <ThemedText style={styles.brandText} numberOfLines={1}>
             {item.product.brand}
           </ThemedText>
           
-          {/* ONE-LINE PRICE DESIGN */}
-          <ThemedText numberOfLines={1} adjustsFontSizeToFit style={{ fontWeight: '900', color: '#4f46e5', fontSize: 16 }}>
+          {/* RESPONSIVE PRICE */}
+          <ThemedText numberOfLines={1} adjustsFontSizeToFit style={styles.priceText}>
              {formatPrice(item.product.price)}
           </ThemedText>
         </View>
 
-        {/* MODERN QUANTITY SELECTOR */}
+        {/* RESPONSIVE QUANTITY SELECTOR */}
         <View style={styles.quantityContainer}>
           <Pressable
             style={[styles.qtyBtn, { borderColor: '#f1f5f9', borderWidth: 1 }]}
@@ -68,7 +73,7 @@ export default function CartScreen() {
           >
             <Feather
               name={item.quantity === 1 ? "trash-2" : "minus"}
-              size={14}
+              size={SCREEN_WIDTH < 375 ? 12 : 14}
               color={item.quantity === 1 ? "#ef4444" : "#64748b"}
             />
           </Pressable>
@@ -77,7 +82,7 @@ export default function CartScreen() {
             onPress={() => updateQuantity(item.product.id, item.quantity + 1)}
           >
             <LinearGradient colors={['#4f46e5', '#7c3aed']} style={styles.qtyBtnGradient}>
-               <Feather name="plus" size={14} color="white" />
+               <Feather name="plus" size={SCREEN_WIDTH < 375 ? 12 : 14} color="white" />
             </LinearGradient>
           </Pressable>
         </View>
@@ -94,24 +99,27 @@ export default function CartScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+    <View style={styles.container}>
       <FlatList
         data={items as CartItemWithId[]}
         renderItem={renderCartItem}
         keyExtractor={(item) => item.product.id}
-        contentContainerStyle={{
-          paddingHorizontal: 20,
-          paddingTop: headerHeight + 10,
-          paddingBottom: 250,
-        }}
+        contentContainerStyle={[
+          styles.listContent,
+          {
+            paddingTop: headerHeight + 10,
+            paddingBottom: items.length > 0 ? 200 : 100,
+          }
+        ]}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <View style={styles.emptyIconCircle}>
-                <Feather name="shopping-cart" size={40} color="#cbd5e1" />
+                <Feather name="shopping-cart" size={SCREEN_WIDTH < 375 ? 32 : 40} color="#cbd5e1" />
             </View>
-            <ThemedText style={{ fontSize: 20, fontWeight: '900', marginTop: 20 }}>Your cart is empty</ThemedText>
-            <Pressable onPress={() => navigation.goBack()} style={{ marginTop: 15 }}>
-                <ThemedText style={{ color: '#4f46e5', fontWeight: '800' }}>Start Shopping</ThemedText>
+            <ThemedText style={styles.emptyTitle}>Your cart is empty</ThemedText>
+            <Pressable onPress={() => navigation.goBack()} style={styles.startShoppingBtn}>
+                <ThemedText style={styles.startShoppingText}>Start Shopping</ThemedText>
             </Pressable>
           </View>
         }
@@ -124,16 +132,21 @@ export default function CartScreen() {
               <ThemedText style={styles.priceLabel}>Subtotal</ThemedText>
               <ThemedText style={styles.priceValue}>{formatPrice(subtotal)}</ThemedText>
             </View>
-            <View style={[styles.priceRow, { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' }]}>
-              <ThemedText style={[styles.priceLabel, { color: '#1e293b', fontSize: 18 }]}>Total</ThemedText>
-              <ThemedText style={{ fontSize: 22, fontWeight: '900', color: '#4f46e5' }}>{formatPrice(subtotal)}</ThemedText>
+            <View style={styles.totalRow}>
+              <ThemedText style={styles.totalLabel}>Total</ThemedText>
+              <ThemedText style={styles.totalValue}>{formatPrice(subtotal)}</ThemedText>
             </View>
           </View>
 
           <Pressable onPress={() => navigation.navigate("Checkout")}>
-            <LinearGradient colors={['#4f46e5', '#7c3aed']} start={{x:0, y:0}} end={{x:1, y:0}} style={styles.checkoutBtn}>
+            <LinearGradient 
+              colors={['#4f46e5', '#7c3aed']} 
+              start={{x:0, y:0}} 
+              end={{x:1, y:0}} 
+              style={styles.checkoutBtn}
+            >
               <ThemedText style={styles.checkoutBtnText}>Proceed to Checkout</ThemedText>
-              <Feather name="arrow-right" size={20} color="white" />
+              <Feather name="arrow-right" size={SCREEN_WIDTH < 375 ? 18 : 20} color="white" />
             </LinearGradient>
           </Pressable>
         </View>
@@ -143,9 +156,16 @@ export default function CartScreen() {
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1, 
+    backgroundColor: '#f8fafc'
+  },
+  listContent: {
+    paddingHorizontal: CARD_HORIZONTAL_MARGIN,
+  },
   cartCard: {
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: SCREEN_WIDTH < 375 ? 20 : 24,
+    padding: CARD_PADDING,
     marginBottom: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
@@ -158,12 +178,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   imageWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
+    width: IMAGE_SIZE,
+    height: IMAGE_SIZE,
+    borderRadius: SCREEN_WIDTH < 375 ? 16 : 20,
     overflow: "hidden",
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    flexShrink: 0,
   },
   productImageContent: {
     width: "100%",
@@ -172,32 +193,54 @@ const styles = StyleSheet.create({
   },
   productDetails: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: 12,
+    marginRight: 8,
+    justifyContent: 'center',
+  },
+  productName: {
+    fontSize: SCREEN_WIDTH < 375 ? 14 : 16,
+    fontWeight: "800",
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  brandText: {
+    color: '#64748b',
+    fontSize: SCREEN_WIDTH < 375 ? 11 : 12,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  priceText: {
+    fontWeight: '900',
+    color: '#4f46e5',
+    fontSize: SCREEN_WIDTH < 375 ? 14 : 16,
   },
   quantityContainer: {
     alignItems: "center",
     justifyContent: 'space-between',
-    height: 80,
+    height: IMAGE_SIZE,
+    flexShrink: 0,
   },
   qtyBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
+    width: SCREEN_WIDTH < 375 ? 26 : 28,
+    height: SCREEN_WIDTH < 375 ? 26 : 28,
+    borderRadius: SCREEN_WIDTH < 375 ? 8 : 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: '#fff'
+    backgroundColor: '#fff',
   },
   qtyBtnGradient: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
+    width: SCREEN_WIDTH < 375 ? 26 : 28,
+    height: SCREEN_WIDTH < 375 ? 26 : 28,
+    borderRadius: SCREEN_WIDTH < 375 ? 8 : 10,
     alignItems: "center",
     justifyContent: "center",
   },
   qtyText: {
-    fontSize: 14,
+    fontSize: SCREEN_WIDTH < 375 ? 13 : 14,
     fontWeight: "900",
-    color: '#1e293b'
+    color: '#1e293b',
+    minWidth: 20,
+    textAlign: 'center',
   },
   footer: {
     position: "absolute",
@@ -205,9 +248,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#fff',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 24,
+    borderTopLeftRadius: SCREEN_WIDTH < 375 ? 28 : 32,
+    borderTopRightRadius: SCREEN_WIDTH < 375 ? 28 : 32,
+    paddingHorizontal: 20,
+    paddingTop: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -10 },
     shadowOpacity: 0.05,
@@ -215,52 +259,86 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
   priceContainer: {
-    marginBottom: 20,
+    marginBottom: SCREEN_WIDTH < 375 ? 16 : 20,
   },
   priceRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: 'center'
+    alignItems: 'center',
+    marginBottom: 10,
   },
   priceLabel: {
     color: '#64748b',
     fontWeight: '700',
-    fontSize: 14
+    fontSize: SCREEN_WIDTH < 375 ? 13 : 14,
   },
   priceValue: {
     color: '#1e293b',
     fontWeight: '800',
-    fontSize: 14
+    fontSize: SCREEN_WIDTH < 375 ? 13 : 14,
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: 'center',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  totalLabel: {
+    color: '#1e293b',
+    fontSize: SCREEN_WIDTH < 375 ? 16 : 18,
+    fontWeight: '700',
+  },
+  totalValue: {
+    fontSize: SCREEN_WIDTH < 375 ? 20 : 22,
+    fontWeight: '900',
+    color: '#4f46e5',
   },
   checkoutBtn: {
     flexDirection: 'row',
-    height: 60,
-    borderRadius: 20,
+    height: SCREEN_WIDTH < 375 ? 54 : 60,
+    borderRadius: SCREEN_WIDTH < 375 ? 16 : 20,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 10
+    gap: 10,
   },
   checkoutBtnText: {
     color: 'white',
-    fontSize: 18,
-    fontWeight: '900'
+    fontSize: SCREEN_WIDTH < 375 ? 16 : 18,
+    fontWeight: '900',
   },
   emptyState: {
     alignItems: "center",
     paddingTop: 100,
   },
   emptyIconCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 40,
+    width: SCREEN_WIDTH < 375 ? 90 : 100,
+    height: SCREEN_WIDTH < 375 ? 90 : 100,
+    borderRadius: SCREEN_WIDTH < 375 ? 36 : 40,
     backgroundColor: '#f1f5f9',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: SCREEN_WIDTH < 375 ? 18 : 20,
+    fontWeight: '900',
+    marginTop: 20,
+    color: '#1e293b',
+  },
+  startShoppingBtn: {
+    marginTop: 15,
+    paddingVertical: 8,
+  },
+  startShoppingText: {
+    color: '#4f46e5',
+    fontWeight: '800',
+    fontSize: SCREEN_WIDTH < 375 ? 15 : 16,
   },
   centerContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: '#f8fafc'
+    backgroundColor: '#f8fafc',
   },
 });
