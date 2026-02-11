@@ -3661,9 +3661,8 @@ app.get("/api/admin/metrics", async (req, res) => {
         // STORE ORDERS (SAFE)
         // =========================
         const storeOrders = allOrders.filter(
-  o => o.storeId && String(o.storeId) === String(store.id)
-);
-
+          o => o.storeId && String(o.storeId) === String(store.id)
+        );
 
         // =========================
         // STORE STAFF
@@ -3672,6 +3671,27 @@ app.get("/api/admin/metrics", async (req, res) => {
           .select()
           .from(storeStaff)
           .where(eq(storeStaff.storeId, store.id));
+
+        // =========================
+        // STORE OWNER
+        // =========================
+        const [storeOwner] = await db
+          .select({
+            id: storeOwners.id,
+            userId: storeOwners.userId,
+            storeId: storeOwners.storeId,
+            user: {
+              id: users.id,
+              name: users.name,
+              phone: users.phone,
+              email: users.email,
+              username: users.username,
+            },
+          })
+          .from(storeOwners)
+          .leftJoin(users, eq(storeOwners.userId, users.id))
+          .where(eq(storeOwners.storeId, store.id))
+          .limit(1);
 
         // =========================
         // HELPERS
@@ -3707,31 +3727,31 @@ app.get("/api/admin/metrics", async (req, res) => {
         });
 
         if (!storeOrders.length) {
-  metrics.push({
-    ...store,
-    totalStaff: staff.length,
-    onlineStaff: staff.filter(s => s.status === "online").length,
-    staff: [],
-    pickers: [],
-    drivers: [],
-    orderCount: 0,
-    pendingOrders: 0,
-    activeOrders: 0,
-    deliveredOrders: 0,
-    cancelledOrders: 0,
-    totalRevenue: 0,
-    todayRevenue: 0,
-    todayOrders: 0,
-    monthRevenue: 0,
-    monthOrders: 0,
-    avgOrderValue: 0,
-    completionRate: 0,
-    codCollected: 0,
-    codPending: 0,
-  });
-  continue;
-}
-
+          metrics.push({
+            ...store,
+            owner: storeOwner || null,
+            totalStaff: staff.length,
+            onlineStaff: staff.filter(s => s.status === "online").length,
+            staff: [],
+            pickers: [],
+            drivers: [],
+            orderCount: 0,
+            pendingOrders: 0,
+            activeOrders: 0,
+            deliveredOrders: 0,
+            cancelledOrders: 0,
+            totalRevenue: 0,
+            todayRevenue: 0,
+            todayOrders: 0,
+            monthRevenue: 0,
+            monthOrders: 0,
+            avgOrderValue: 0,
+            completionRate: 0,
+            codCollected: 0,
+            codPending: 0,
+          });
+          continue;
+        }
 
         // =========================
         // FINANCIALS
@@ -3833,6 +3853,7 @@ app.get("/api/admin/metrics", async (req, res) => {
         // =========================
         metrics.push({
           ...store,
+          owner: storeOwner || null,
           totalStaff: staff.length,
           onlineStaff: staff.filter(s => s.status === "online").length,
           staff: enrichedStaff,
@@ -4232,6 +4253,124 @@ app.post("/api/admin/stores/:storeId/staff", async (req, res) => {
     res.status(500).json({ error: "Failed to add staff" });
   }
 });
+
+// ==================== STORE OWNER MANAGEMENT ====================
+console.log("👨‍💼 Registering store owner routes...");
+
+// CREATE/UPDATE STORE OWNER
+app.post("/api/admin/stores/:storeId/owner", async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const { userId, phone, email, name } = req.body;
+
+    console.log(`👨‍💼 Setting owner for store ${storeId}`);
+
+    // Verify admin access
+    const [admin] = await db.select().from(users).where(eq(users.id, userId));
+    if (!admin || (admin.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    // Verify store exists
+    const [store] = await db.select().from(stores).where(eq(stores.id, storeId));
+    if (!store) {
+      return res.status(404).json({ error: "Store not found" });
+    }
+
+    // Find or create owner user
+    let ownerUser = phone 
+      ? await db.select().from(users).where(eq(users.phone, phone)).limit(1).then(r => r[0])
+      : email
+      ? await db.select().from(users).where(eq(users.email, email)).limit(1).then(r => r[0])
+      : null;
+
+    if (!ownerUser) {
+      // Create new owner user
+      const tempPassword = await hashPassword(`owner${Math.random().toString(36).slice(-6)}`);
+      const username = phone || email?.split("@")[0] || `owner_${Date.now()}`;
+      
+      const [newUser] = await db.insert(users).values({
+        username,
+        password: tempPassword,
+        phone: phone || null,
+        email: email || null,
+        name: name || null,
+        role: "store_owner",
+        firstLogin: true,
+      }).returning();
+      
+      ownerUser = newUser;
+      console.log(`✅ Created new owner user: ${ownerUser.id}`);
+    } else {
+      // Update existing user to store_owner role
+      await db.update(users)
+        .set({ role: "store_owner", name: name || ownerUser.name })
+        .where(eq(users.id, ownerUser.id));
+      
+      console.log(`✅ Updated user ${ownerUser.id} to store_owner`);
+    }
+
+    // Check if owner already exists for this store
+    const [existingOwner] = await db
+      .select()
+      .from(storeOwners)
+      .where(eq(storeOwners.storeId, storeId));
+
+    if (existingOwner) {
+      // Update existing owner
+      const [updated] = await db
+        .update(storeOwners)
+        .set({ userId: ownerUser.id })
+        .where(eq(storeOwners.id, existingOwner.id))
+        .returning();
+      
+      return res.json({ ...updated, user: ownerUser });
+    } else {
+      // Create new owner
+      const [newOwner] = await db
+        .insert(storeOwners)
+        .values({
+          userId: ownerUser.id,
+          storeId,
+        })
+        .returning();
+      
+      return res.json({ ...newOwner, user: ownerUser });
+    }
+  } catch (error) {
+    console.error("❌ Set store owner error:", error);
+    res.status(500).json({ error: "Failed to set store owner" });
+  }
+});
+
+// DELETE STORE OWNER
+app.delete("/api/admin/stores/:storeId/owner", async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    // Verify admin access
+    const [admin] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!admin || (admin.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    // Delete owner
+    await db.delete(storeOwners).where(eq(storeOwners.storeId, storeId));
+
+    console.log(`✅ Removed owner from store ${storeId}`);
+    res.json({ success: true, message: "Store owner removed" });
+  } catch (error) {
+    console.error("❌ Delete store owner error:", error);
+    res.status(500).json({ error: "Failed to delete store owner" });
+  }
+});
+
+console.log("✅ Store owner routes registered");
 
 // UPDATE STAFF (role or remove from store)
 app.patch("/api/admin/stores/:storeId/staff/:staffId", async (req, res) => {

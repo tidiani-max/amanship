@@ -41,6 +41,19 @@ interface StaffMember {
   };
 }
 
+interface StoreOwner {
+  id: string;
+  userId: string;
+  storeId: string;
+  user: {
+    id: string;
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    username: string;
+  } | null;
+}
+
 interface StoreData {
   id: string;
   name: string;
