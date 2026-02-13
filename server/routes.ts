@@ -3657,45 +3657,46 @@ app.get("/api/admin/metrics", async (req, res) => {
 
     for (const store of allStores) {
       try {
-        // =========================
-        // STORE ORDERS (SAFE)
-        // =========================
         const storeOrders = allOrders.filter(
           o => o.storeId && String(o.storeId) === String(store.id)
         );
 
-        // =========================
-        // STORE STAFF
-        // =========================
+        // ✅ GET STORE STAFF (pickers & drivers)
         const staff = await db
           .select()
           .from(storeStaff)
           .where(eq(storeStaff.storeId, store.id));
 
-        // =========================
-        // STORE OWNER
-        // =========================
-        const [storeOwner] = await db
-          .select({
-            id: storeOwners.id,
-            userId: storeOwners.userId,
-            storeId: storeOwners.storeId,
-            user: {
-              id: users.id,
-              name: users.name,
-              phone: users.phone,
-              email: users.email,
-              username: users.username,
-            },
-          })
+        // ✅ GET STORE OWNER
+        const [storeOwnerRecord] = await db
+          .select()
           .from(storeOwners)
-          .leftJoin(users, eq(storeOwners.userId, users.id))
           .where(eq(storeOwners.storeId, store.id))
           .limit(1);
 
-        // =========================
-        // HELPERS
-        // =========================
+        let owner = null;
+        if (storeOwnerRecord) {
+          const [ownerUser] = await db
+            .select()
+            .from(users)
+            .where(eq(users.id, storeOwnerRecord.userId))
+            .limit(1);
+
+          owner = {
+            id: storeOwnerRecord.id,
+            userId: storeOwnerRecord.userId,
+            storeId: storeOwnerRecord.storeId,
+            user: ownerUser ? {
+              id: ownerUser.id,
+              username: ownerUser.username,
+              phone: ownerUser.phone,
+              email: ownerUser.email,
+              name: ownerUser.name,
+            } : null,
+          };
+        }
+
+        // Calculate financials...
         const safeDate = (d: any) => {
           if (!d) return null;
           const date = new Date(d);
@@ -3709,9 +3710,6 @@ app.get("/api/admin/metrics", async (req, res) => {
         monthStart.setDate(1);
         monthStart.setHours(0, 0, 0, 0);
 
-        // =========================
-        // FILTERS
-        // =========================
         const deliveredOrders = storeOrders.filter(
           o => o.status === "delivered" && o.total != null
         );
@@ -3726,36 +3724,6 @@ app.get("/api/admin/metrics", async (req, res) => {
           return d && d >= monthStart;
         });
 
-        if (!storeOrders.length) {
-          metrics.push({
-            ...store,
-            owner: storeOwner || null,
-            totalStaff: staff.length,
-            onlineStaff: staff.filter(s => s.status === "online").length,
-            staff: [],
-            pickers: [],
-            drivers: [],
-            orderCount: 0,
-            pendingOrders: 0,
-            activeOrders: 0,
-            deliveredOrders: 0,
-            cancelledOrders: 0,
-            totalRevenue: 0,
-            todayRevenue: 0,
-            todayOrders: 0,
-            monthRevenue: 0,
-            monthOrders: 0,
-            avgOrderValue: 0,
-            completionRate: 0,
-            codCollected: 0,
-            codPending: 0,
-          });
-          continue;
-        }
-
-        // =========================
-        // FINANCIALS
-        // =========================
         const sumTotal = (orders: any[]) =>
           orders.reduce((sum, o) => {
             const t = Number(o.total);
@@ -3766,40 +3734,22 @@ app.get("/api/admin/metrics", async (req, res) => {
         const todayRevenue = sumTotal(todayOrders.filter(o => o.status === "delivered"));
         const monthRevenue = sumTotal(monthOrders.filter(o => o.status === "delivered"));
 
-        const avgOrderValue =
-          deliveredOrders.length > 0
-            ? totalRevenue / deliveredOrders.length
-            : 0;
+        const avgOrderValue = deliveredOrders.length > 0 ? totalRevenue / deliveredOrders.length : 0;
 
         const completedOrders = storeOrders.filter(o =>
           ["delivered", "cancelled"].includes(o.status || "")
         );
 
-        const completionRate =
-          completedOrders.length > 0
-            ? (deliveredOrders.length / completedOrders.length) * 100
-            : 0;
+        const completionRate = completedOrders.length > 0
+          ? (deliveredOrders.length / completedOrders.length) * 100
+          : 0;
 
-        // =========================
-        // COD
-        // =========================
         const codOrders = storeOrders.filter(o => o.paymentMethod === "cod");
+        const codCollected = sumTotal(codOrders.filter(o => o.codCollected === true));
+        const codPending = sumTotal(codOrders.filter(o => o.status === "delivered" && !o.codCollected));
 
-        const codCollected = sumTotal(
-          codOrders.filter(o => o.codCollected === true)
-        );
-
-        const codPending = sumTotal(
-          codOrders.filter(
-            o => o.status === "delivered" && !o.codCollected
-          )
-        );
-
-        // =========================
-        // STAFF ENRICHMENT (SAFE)
-        // =========================
+        // ✅ Enrich staff with user data
         const enrichedStaff = [];
-
         for (const s of staff) {
           try {
             if (!s.userId) {
@@ -3817,30 +3767,25 @@ app.get("/api/admin/metrics", async (req, res) => {
               .where(eq(users.id, s.userId))
               .limit(1);
 
-            const staffOrders =
-              s.role === "picker"
-                ? allOrders.filter(o => o.pickerId === s.userId)
-                : s.role === "driver"
-                ? allOrders.filter(o => o.driverId === s.userId)
-                : [];
+            const staffOrders = s.role === "picker"
+              ? allOrders.filter(o => o.pickerId === s.userId)
+              : s.role === "driver"
+              ? allOrders.filter(o => o.driverId === s.userId)
+              : [];
 
             enrichedStaff.push({
               ...s,
-              user: user
-                ? {
-                    id: user.id,
-                    username: user.username,
-                    phone: user.phone,
-                    email: user.email,
-                    name: user.name,
-                  }
-                : null,
+              user: user ? {
+                id: user.id,
+                username: user.username,
+                phone: user.phone,
+                email: user.email,
+                name: user.name,
+              } : null,
               stats: {
                 totalOrders: staffOrders.length,
                 delivered: staffOrders.filter(o => o.status === "delivered").length,
-                active: staffOrders.filter(
-                  o => !["delivered", "cancelled"].includes(o.status || "")
-                ).length,
+                active: staffOrders.filter(o => !["delivered", "cancelled"].includes(o.status || "")).length,
               },
             });
           } catch (e) {
@@ -3848,12 +3793,10 @@ app.get("/api/admin/metrics", async (req, res) => {
           }
         }
 
-        // =========================
-        // PUSH STORE METRICS
-        // =========================
+        // ✅ PUSH STORE WITH OWNER
         metrics.push({
           ...store,
-          owner: storeOwner || null,
+          owner, // ✅ ADD OWNER HERE
           totalStaff: staff.length,
           onlineStaff: staff.filter(s => s.status === "online").length,
           staff: enrichedStaff,
@@ -3881,17 +3824,14 @@ app.get("/api/admin/metrics", async (req, res) => {
       }
     }
 
-    // =========================
-    // GLOBAL TOTALS
-    // =========================
+    // Global totals calculation...
     const globalTotals = {
       totalRevenue: metrics.reduce((s, m) => s + (m.totalRevenue || 0), 0),
       todayRevenue: metrics.reduce((s, m) => s + (m.todayRevenue || 0), 0),
       monthRevenue: metrics.reduce((s, m) => s + (m.monthRevenue || 0), 0),
-      avgOrderValue:
-        metrics.length > 0
-          ? metrics.reduce((s, m) => s + (m.avgOrderValue || 0), 0) / metrics.length
-          : 0,
+      avgOrderValue: metrics.length > 0
+        ? metrics.reduce((s, m) => s + (m.avgOrderValue || 0), 0) / metrics.length
+        : 0,
       codCollected: metrics.reduce((s, m) => s + (m.codCollected || 0), 0),
       codPending: metrics.reduce((s, m) => s + (m.codPending || 0), 0),
     };
