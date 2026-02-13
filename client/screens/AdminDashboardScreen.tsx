@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -26,6 +26,20 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 import * as ImagePicker from 'expo-image-picker';
 import { getImageUrl } from "@/lib/image-url";
 import { StaffEarningsDashboard } from "@/components/StaffEarningsDashboard";
+
+// ===================== HELPER FUNCTIONS =====================
+// Debounce helper function
+function debounce(func: Function, wait: number) {
+  let timeout: NodeJS.Timeout;
+  return function executedFunction(...args: any[]) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
 
 // ===================== TYPES =====================
 interface StaffMember {
@@ -191,7 +205,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   headerTitle: {
     fontSize: 32,
@@ -638,17 +652,26 @@ const StoreWithOwnerModal: React.FC<StoreWithOwnerModalProps> = ({ visible, onCl
             `Latitude: ${lat}\n` +
             `Longitude: ${lng}\n\n` +
             `${data.displayName}\n\n` +
-            `You can see these values in the latitude/longitude fields below and adjust them manually if needed.`,
+            `💡 TIP: Try being more specific:\n` +
+            `• Include street name and number\n` +
+            `• Add district/kelurahan\n` +
+            `• Add city name\n\n` +
+            `Example: "Jl. Sudirman No. 1, Senayan, Jakarta Pusat"\n\n` +
+            `Or manually enter coordinates in the fields below.`,
             [{ text: "OK" }]
           );
         } else {
+          const confidence = data.confidence || 0.5;
+          const isHighConfidence = confidence > 0.7;
+          
           Alert.alert(
-            "✅ Location Found!", 
+            isHighConfidence ? "✅ Location Found!" : "⚠️ Location Found (Low Confidence)",
             `📍 Coordinates Retrieved:\n\n` +
             `Latitude: ${lat}\n` +
             `Longitude: ${lng}\n\n` +
             `Address: ${data.displayName}\n\n` +
-            `These values are now shown in the latitude/longitude input fields below.`,
+            `${!isHighConfidence ? '💡 The result may not be very accurate. You can:\n• Try a more specific address\n• Manually adjust coordinates below\n\n' : ''}` +
+            `These values are now shown in the input fields below.`,
             [{ text: "Perfect!" }]
           );
         }
@@ -672,7 +695,16 @@ const StoreWithOwnerModal: React.FC<StoreWithOwnerModalProps> = ({ visible, onCl
         `📍 Using Jakarta Default:\n` +
         `Latitude: ${defaultLat}\n` +
         `Longitude: ${defaultLng}\n\n` +
-        `These values are now in the input fields and can be adjusted manually.`,
+        `💡 TIPS for better results:\n` +
+        `1. Use specific addresses with street names\n` +
+        `2. Include district and city\n` +
+        `3. Wait a few seconds between attempts (rate limiting)\n` +
+        `4. Or manually enter exact coordinates below\n\n` +
+        `To find exact coordinates:\n` +
+        `• Open Google Maps\n` +
+        `• Right-click on the location\n` +
+        `• Copy the latitude and longitude\n` +
+        `• Paste into the fields below`,
         [{ text: "OK" }]
       );
     } finally {
@@ -742,6 +774,24 @@ const StoreWithOwnerModal: React.FC<StoreWithOwnerModalProps> = ({ visible, onCl
               onChangeText={setStoreAddress}
               multiline
             />
+          </View>
+
+          {/* Helper Instructions */}
+          <View style={[styles.infoBox, { backgroundColor: theme.primary + '10', borderColor: theme.primary + '30', marginBottom: Spacing.md }]}>
+            <Feather name="info" size={16} color={theme.primary} />
+            <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+              <ThemedText style={{ fontSize: 13, fontWeight: '600', color: theme.primary, marginBottom: 4 }}>
+                💡 How to get accurate coordinates:
+              </ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.text }}>
+                1. Open Google Maps on your phone/computer{'\n'}
+                2. Long-press or right-click the exact store location{'\n'}
+                3. Copy the coordinates (e.g., -6.2088, 106.8456){'\n'}
+                4. Paste them into the latitude/longitude fields below{'\n'}
+                {'\n'}
+                Or use the Auto-Find button with a specific address.
+              </ThemedText>
+            </View>
           </View>
 
           <Pressable 
@@ -953,12 +1003,16 @@ const StoreModal: React.FC<StoreModalProps> = ({ visible, store, onClose, onSubm
             [{ text: "OK" }]
           );
         } else {
+          const confidence = data.confidence || 0.5;
+          const isHighConfidence = confidence > 0.7;
+          
           Alert.alert(
-            "✅ Location Found!", 
+            isHighConfidence ? "✅ Location Found!" : "⚠️ Location Found (Low Confidence)",
             `📍 Coordinates Retrieved:\n\n` +
             `Latitude: ${lat}\n` +
             `Longitude: ${lng}\n\n` +
             `Address: ${data.displayName}\n\n` +
+            `${!isHighConfidence ? '💡 The result may not be very accurate. You can:\n• Try a more specific address\n• Manually adjust coordinates below\n\n' : ''}` +
             `These values are now shown in the latitude/longitude input fields below.`,
             [{ text: "Perfect!" }]
           );
@@ -1038,6 +1092,24 @@ const StoreModal: React.FC<StoreModalProps> = ({ visible, store, onClose, onSubm
               onChangeText={setAddress}
               multiline
             />
+          </View>
+
+          {/* Helper Instructions */}
+          <View style={[styles.infoBox, { backgroundColor: theme.primary + '10', borderColor: theme.primary + '30', marginBottom: Spacing.md }]}>
+            <Feather name="info" size={16} color={theme.primary} />
+            <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+              <ThemedText style={{ fontSize: 13, fontWeight: '600', color: theme.primary, marginBottom: 4 }}>
+                💡 How to get accurate coordinates:
+              </ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.text }}>
+                1. Open Google Maps on your phone/computer{'\n'}
+                2. Long-press or right-click the exact store location{'\n'}
+                3. Copy the coordinates (e.g., -6.2088, 106.8456){'\n'}
+                4. Paste them into the latitude/longitude fields below{'\n'}
+                {'\n'}
+                Or use the Auto-Find button with a specific address.
+              </ThemedText>
+            </View>
           </View>
 
           <Pressable 
@@ -1654,6 +1726,11 @@ export default function AdminDashboardScreen() {
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
   const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(null);
   const [currentStoreId, setCurrentStoreId] = useState("");
+  
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   const { data: metrics, isLoading, refetch, isRefetching } = useQuery<AdminMetrics>({
     queryKey: ["/api/admin/metrics"],
@@ -1698,6 +1775,35 @@ export default function AdminDashboardScreen() {
     enabled: activeTab === 'financials',
     refetchInterval: activeTab === 'financials' ? 60000 : false,
   });
+
+  // Search handler
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    
+    if (query.trim().length < 2) {
+      setSearchResults(null);
+      return;
+    }
+    
+    setIsSearching(true);
+    try {
+      const response = await apiRequest("GET", 
+        `/api/admin/search?userId=demo-user&query=${encodeURIComponent(query)}`
+      );
+      const data = await response.json();
+      setSearchResults(data);
+    } catch (error) {
+      console.error("Search error:", error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Debounced search
+  const debouncedSearch = useCallback(
+    debounce((query: string) => handleSearch(query), 500),
+    []
+  );
 
   // ===================== MUTATIONS =====================
   const createStoreMutation = useMutation({
@@ -2071,12 +2177,132 @@ export default function AdminDashboardScreen() {
         <View style={styles.mainContent}>
           {/* HEADER */}
           <View style={[styles.header, { backgroundColor: theme.backgroundDefault, borderBottomColor: theme.border }]}>
-            <ThemedText style={styles.headerTitle}>
-              {activeTab === 'overview' && 'Dashboard Overview'}
-              {activeTab === 'stores' && 'Stores & Staff'}
-              {activeTab === 'promotions' && 'Promotions'}
-              {activeTab === 'financials' && 'Financial Dashboard'} 
-            </ThemedText>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={styles.headerTitle}>
+                {activeTab === 'overview' && 'Dashboard Overview'}
+                {activeTab === 'stores' && 'Stores & Staff'}
+                {activeTab === 'promotions' && 'Promotions'}
+                {activeTab === 'financials' && 'Financial Dashboard'}
+              </ThemedText>
+              
+              {/* Search Bar */}
+              <View style={{ 
+                flexDirection: 'row', 
+                alignItems: 'center',
+                marginTop: Spacing.md,
+                backgroundColor: theme.backgroundTertiary,
+                borderRadius: BorderRadius.sm,
+                paddingHorizontal: Spacing.md,
+                borderWidth: 1,
+                borderColor: theme.border,
+                maxWidth: 500,
+              }}>
+                <Feather name="search" size={18} color={theme.textSecondary} />
+                <TextInput
+                  style={{
+                    flex: 1,
+                    paddingVertical: Spacing.md,
+                    paddingHorizontal: Spacing.sm,
+                    fontSize: 15,
+                    color: theme.text,
+                  }}
+                  placeholder="Search stores, staff, products, orders..."
+                  placeholderTextColor={theme.textSecondary}
+                  value={searchQuery}
+                  onChangeText={(text) => {
+                    setSearchQuery(text);
+                    debouncedSearch(text);
+                  }}
+                />
+                {isSearching && <ActivityIndicator size="small" color={theme.primary} />}
+                {searchQuery && (
+                  <Pressable onPress={() => {
+                    setSearchQuery("");
+                    setSearchResults(null);
+                  }}>
+                    <Feather name="x" size={18} color={theme.textSecondary} />
+                  </Pressable>
+                )}
+              </View>
+              
+              {/* Search Results Dropdown */}
+              {searchResults && searchQuery && (
+                <Card style={{
+                  marginTop: Spacing.sm,
+                  maxHeight: 400,
+                  maxWidth: 500,
+                  position: 'absolute',
+                  top: 90,
+                  left: 0,
+                  right: 0,
+                  zIndex: 1000,
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                }}>
+                  <ScrollView>
+                    {searchResults.stores?.length > 0 && (
+                      <View style={{ padding: Spacing.md }}>
+                        <ThemedText style={{ fontWeight: '600', marginBottom: Spacing.sm }}>
+                          Stores ({searchResults.stores.length})
+                        </ThemedText>
+                        {searchResults.stores.map((store: any) => (
+                          <Pressable 
+                            key={store.id}
+                            style={{ paddingVertical: Spacing.sm }}
+                            onPress={() => {
+                              setActiveTab('stores');
+                              setSearchQuery("");
+                              setSearchResults(null);
+                            }}
+                          >
+                            <ThemedText>{store.name}</ThemedText>
+                            <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
+                              {store.address}
+                            </ThemedText>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                    
+                    {searchResults.staff?.length > 0 && (
+                      <View style={{ padding: Spacing.md, borderTopWidth: 1, borderTopColor: theme.border }}>
+                        <ThemedText style={{ fontWeight: '600', marginBottom: Spacing.sm }}>
+                          Staff ({searchResults.staff.length})
+                        </ThemedText>
+                        {searchResults.staff.map((staff: any) => (
+                          <Pressable 
+                            key={staff.id}
+                            style={{ paddingVertical: Spacing.sm }}
+                            onPress={() => {
+                              setActiveTab('stores');
+                              setSearchQuery("");
+                              setSearchResults(null);
+                            }}
+                          >
+                            <ThemedText>{staff.user?.name || staff.user?.username}</ThemedText>
+                            <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
+                              {staff.role} • {staff.storeName}
+                            </ThemedText>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                    
+                    {!searchResults.stores?.length && 
+                     !searchResults.staff?.length && 
+                     !searchResults.products?.length && 
+                     !searchResults.orders?.length && (
+                      <View style={{ padding: Spacing.xl, alignItems: 'center' }}>
+                        <ThemedText style={{ color: theme.textSecondary }}>
+                          No results found
+                        </ThemedText>
+                      </View>
+                    )}
+                  </ScrollView>
+                </Card>
+              )}
+            </View>
+            
             <View style={styles.headerActions}>
               {activeTab === 'stores' && (
                 <>
@@ -2622,6 +2848,18 @@ export default function AdminDashboardScreen() {
                 )}
               </View>
             )}
+
+            {/* FINANCIALS TAB */}
+{activeTab === 'financials' && (
+  <View style={styles.contentSection}>
+    <ThemedText style={{ fontSize: 20, fontWeight: '700', marginBottom: Spacing.lg }}>
+      Financial Dashboard
+    </ThemedText>
+    <ThemedText style={{ color: theme.textSecondary }}>
+      Comprehensive financial reporting coming soon...
+    </ThemedText>
+  </View>
+)}
           </ScrollView>
         </View>
       </View>

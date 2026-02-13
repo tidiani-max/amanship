@@ -1,11 +1,6 @@
 // context/ThemeContext.tsx
-// ============================================
-// GLOBAL THEME PROVIDER
-// This is the ONE file that fixes dark mode everywhere
-// ============================================
-
-import React, { createContext, useContext, ReactNode } from 'react';
-import { useColorScheme } from 'react-native';
+import React, { createContext, useContext, ReactNode, useEffect } from 'react';
+import { useColorScheme, StyleSheet, Platform } from 'react-native';
 
 interface AppTheme {
   backgroundRoot: string;
@@ -57,9 +52,9 @@ const darkTheme: AppTheme = {
   backgroundRoot: '#0f172a',
   backgroundDefault: '#1e293b',
   cardBackground: '#1e293b',
-  text: '#f1f5f9',              // ✅ THIS IS THE FIX
-  textSecondary: '#cbd5e1',      // ✅ THIS IS THE FIX
-  textTertiary: '#94a3b8',       // ✅ THIS IS THE FIX
+  text: '#f1f5f9',
+  textSecondary: '#cbd5e1',
+  textTertiary: '#94a3b8',
   primary: '#818cf8',
   primaryLight: '#312e81',
   success: '#10b981',
@@ -91,8 +86,15 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const isDark = colorScheme === 'dark';
   const theme = isDark ? darkTheme : lightTheme;
   
+  // Force app to light mode always - this disables dark mode entirely
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      document.documentElement.style.colorScheme = 'light';
+    }
+  }, []);
+  
   return (
-    <ThemeContext.Provider value={{ theme, isDark }}>
+    <ThemeContext.Provider value={{ theme, isDark: false }}>
       {children}
     </ThemeContext.Provider>
   );

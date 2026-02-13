@@ -4416,19 +4416,17 @@ app.patch("/api/staff/status", async (req, res) => {
 // ============================================
 // GEOCODING HELPER ENDPOINT
 // ============================================
-
-
 app.post("/api/admin/geocode", async (req, res) => {
   try {
     const { address } = req.body;
 
-    console.log(`🗺️ Geocoding request for address: "${address}"`);
+    console.log(`🗺️ Geocoding request for: "${address}"`);
 
     if (!address || !address.trim()) {
       return res.status(400).json({ error: "Address is required" });
     }
 
-    // Default Jakarta coordinates (fallback)
+    // Default Jakarta coordinates
     const defaultLocation = {
       latitude: -6.2088,
       longitude: 106.8456,
@@ -4437,66 +4435,123 @@ app.post("/api/admin/geocode", async (req, res) => {
     };
 
     try {
-      // Clean and encode the address
       const cleanAddress = address.trim();
-      // Add ", Indonesia" to improve results
-      const searchAddress = cleanAddress.includes("Indonesia") 
-        ? cleanAddress 
-        : `${cleanAddress}, Indonesia`;
       
-      const encodedAddress = encodeURIComponent(searchAddress);
+      // ✅ IMPROVEMENT 1: Better address formatting for Indonesia
+      let searchAddress = cleanAddress;
       
-      // Use Nominatim API with better parameters
-      const geocodeUrl = `https://nominatim.openstreetmap.org/search?` +
-        `format=json&` +
-        `q=${encodedAddress}&` +
-        `limit=1&` +
-        `countrycodes=id&` + // Restrict to Indonesia
-        `addressdetails=1`;
-      
-      console.log(`📍 Fetching: ${geocodeUrl}`);
-      
-      const response = await fetch(geocodeUrl, {
-        headers: {
-          'User-Agent': 'ZendO-AdminPanel/1.0',
-          'Accept': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        console.warn(`⚠️ Nominatim API returned ${response.status}`);
-        return res.json(defaultLocation);
+      // Add Indonesia if not present
+      if (!cleanAddress.toLowerCase().includes('indonesia') && 
+          !cleanAddress.toLowerCase().includes('jakarta') &&
+          !cleanAddress.toLowerCase().includes('bandung') &&
+          !cleanAddress.toLowerCase().includes('surabaya')) {
+        searchAddress = `${cleanAddress}, Indonesia`;
       }
-
-      const data = await response.json();
-      console.log(`📦 Nominatim response:`, JSON.stringify(data, null, 2));
-
-      if (data && data.length > 0) {
-        const location = data[0];
-        const result = {
-          latitude: parseFloat(location.lat),
-          longitude: parseFloat(location.lon),
-          displayName: location.display_name,
-          isDefault: false,
-          // Include more details for debugging
-          address: location.address || null,
-          boundingBox: location.boundingbox || null
-        };
+      
+      // ✅ IMPROVEMENT 2: Multiple geocoding attempts with different strategies
+      const strategies = [
+        // Strategy 1: Full address with structured format
+        `${searchAddress}&countrycodes=id&addressdetails=1&limit=1`,
+        // Strategy 2: Just the main part without extra details
+        `${cleanAddress.split(',')[0]}, Indonesia&countrycodes=id&limit=1`,
+        // Strategy 3: City/area only
+        `${cleanAddress.split(',').slice(-2).join(',')}, Indonesia&countrycodes=id&limit=1`,
+      ];
+      
+      let bestResult = null;
+      
+      for (let i = 0; i < strategies.length; i++) {
+        const encodedAddress = encodeURIComponent(strategies[i].split('&')[0]);
+        const params = strategies[i].split('&').slice(1).join('&');
         
-        console.log(`✅ Geocoding successful:`, result);
-        return res.json(result);
+        const geocodeUrl = `https://nominatim.openstreetmap.org/search?` +
+          `format=json&` +
+          `q=${encodedAddress}&` +
+          `${params}`;
+        
+        console.log(`📍 Attempt ${i + 1}:`, strategies[i].split('&')[0]);
+        
+        const response = await fetch(geocodeUrl, {
+          headers: {
+            'User-Agent': 'ZendO-QuickCommerce/1.0 (Contact: admin@zendo.app)',
+            'Accept': 'application/json',
+            'Accept-Language': 'id,en'
+          }
+        });
+
+        // ✅ IMPROVEMENT 3: Respect rate limits
+        if (response.status === 429) {
+          console.warn(`⚠️ Rate limited, waiting 2 seconds...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+
+        if (!response.ok) {
+          console.warn(`⚠️ Nominatim returned ${response.status} for attempt ${i + 1}`);
+          continue;
+        }
+
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+          const result = data[0];
+          
+          // ✅ IMPROVEMENT 4: Quality check - prefer results in Indonesia
+          const isInIndonesia = result.display_name.toLowerCase().includes('indonesia') ||
+                               result.display_name.toLowerCase().includes('jakarta') ||
+                               result.display_name.toLowerCase().includes('jawa');
+          
+          if (isInIndonesia) {
+            bestResult = {
+              latitude: parseFloat(result.lat),
+              longitude: parseFloat(result.lon),
+              displayName: result.display_name,
+              isDefault: false,
+              address: result.address || null,
+              boundingBox: result.boundingbox || null,
+              confidence: result.importance || 0.5,
+            };
+            
+            console.log(`✅ Found valid result on attempt ${i + 1}`);
+            break;
+          } else if (!bestResult) {
+            // Keep as fallback if no Indonesia-specific result found
+            bestResult = {
+              latitude: parseFloat(result.lat),
+              longitude: parseFloat(result.lon),
+              displayName: result.display_name,
+              isDefault: false,
+              address: result.address || null,
+              boundingBox: result.boundingbox || null,
+              confidence: result.importance || 0.3,
+            };
+          }
+        }
+        
+        // ✅ IMPROVEMENT 5: Rate limiting - wait between requests
+        if (i < strategies.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      if (bestResult) {
+        console.log(`✅ Geocoding successful:`, bestResult);
+        return res.json(bestResult);
       } else {
-        console.log(`⚠️ No results found for "${searchAddress}", using default`);
+        console.log(`⚠️ No results found, using default`);
         return res.json(defaultLocation);
       }
+
     } catch (geocodeError) {
       console.error('❌ Geocoding request failed:', geocodeError);
-      return res.json(defaultLocation);
+      return res.json({
+        ...defaultLocation,
+        error: geocodeError instanceof Error ? geocodeError.message : "Geocoding failed"
+      });
     }
 
   } catch (error) {
     console.error("❌ Geocoding endpoint error:", error);
-    // Always return a valid response, never crash
     res.json({
       latitude: -6.2088,
       longitude: 106.8456,
@@ -7217,6 +7272,422 @@ app.get("/api/admin/financials/comprehensive", async (req, res) => {
   } catch (error) {
     console.error("❌ Get comprehensive financials error:", error);
     res.status(500).json({ error: "Failed to fetch financial metrics" });
+  }
+});
+
+// ==================== ENHANCED FINANCIAL METRICS WITH PREDICTIONS ====================
+app.get("/api/admin/financials/enhanced", async (req, res) => {
+  try {
+    const { userId, period = 'month' } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!user || (user.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    // Calculate date range
+    let startDate: Date;
+    const endDate = new Date();
+
+    if (period === 'today') {
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+    } else if (period === 'week') {
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - 7);
+    } else if (period === 'month') {
+      startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - 1);
+    } else {
+      startDate = new Date();
+      startDate.setFullYear(startDate.getFullYear() - 1);
+    }
+
+    console.log(`📊 Calculating enhanced financials from ${startDate.toISOString()}`);
+
+    // Get all delivered orders
+    const deliveredOrders = await db
+      .select()
+      .from(orders)
+      .where(
+        and(
+          eq(orders.status, "delivered"),
+          gte(orders.deliveredAt, startDate),
+          lte(orders.deliveredAt, endDate)
+        )
+      );
+
+    // Initialize metrics
+    let totalRevenue = 0;
+    let productRevenue = 0;
+    let deliveryRevenue = 0;
+    let productCosts = 0;
+    let staffBonuses = 0;
+    
+    // ✅ CRITICAL: Separate admin vs store promotion costs
+    let adminPromoCosts = 0;
+    let storePromoCosts = 0;
+    let voucherCosts = 0;
+    
+    // Store-specific tracking
+    const storeMetrics: Record<string, any> = {};
+    
+    // Daily breakdown for charts
+    const dailyData: Record<string, any> = {};
+
+    // Process each order
+    for (const order of deliveredOrders) {
+      const orderDate = new Date(order.deliveredAt!).toISOString().split('T')[0];
+      
+      // Initialize daily data
+      if (!dailyData[orderDate]) {
+        dailyData[orderDate] = {
+          date: orderDate,
+          revenue: 0,
+          costs: 0,
+          profit: 0,
+          orders: 0,
+          adminPromoCost: 0,
+          storePromoCost: 0,
+        };
+      }
+
+      const orderSubtotal = order.subtotal || 0;
+      const orderDeliveryFee = order.deliveryFee || 12000;
+      const orderTotal = order.total || 0;
+
+      totalRevenue += orderTotal;
+      productRevenue += orderSubtotal;
+      deliveryRevenue += orderDeliveryFee;
+      
+      dailyData[orderDate].revenue += orderTotal;
+      dailyData[orderDate].orders += 1;
+
+      // Calculate product costs
+      const orderItemsData = await db
+        .select({
+          quantity: orderItems.quantity,
+          productId: orderItems.productId,
+        })
+        .from(orderItems)
+        .where(eq(orderItems.orderId, order.id));
+
+      let orderProductCost = 0;
+      for (const item of orderItemsData) {
+        const [product] = await db
+          .select({ costPrice: products.costPrice })
+          .from(products)
+          .where(eq(products.id, item.productId))
+          .limit(1);
+
+        if (product && product.costPrice) {
+          orderProductCost += product.costPrice * item.quantity;
+        }
+      }
+
+      productCosts += orderProductCost;
+      dailyData[orderDate].costs += orderProductCost;
+
+      // Staff bonuses
+      const orderStaffBonus = 6000;
+      staffBonuses += orderStaffBonus;
+      dailyData[orderDate].costs += orderStaffBonus;
+
+      // Vouchers
+      const voucherDiscount = order.voucherDiscount || 0;
+      voucherCosts += voucherDiscount;
+      dailyData[orderDate].costs += voucherDiscount;
+
+      // ✅ CRITICAL: Determine promotion cost bearer
+      const promotionDiscount = order.promotionDiscount || 0;
+      
+      if (order.appliedPromotionId && promotionDiscount > 0) {
+        const [promotion] = await db
+          .select()
+          .from(promotions)
+          .where(eq(promotions.id, order.appliedPromotionId))
+          .limit(1);
+
+        if (promotion) {
+          // ✅ Check who created the promotion
+          const isAdminPromotion = promotion.scope === 'app' || !promotion.storeId;
+          
+          if (isAdminPromotion) {
+            // Admin bears the cost
+            adminPromoCosts += promotionDiscount;
+            dailyData[orderDate].adminPromoCost += promotionDiscount;
+            dailyData[orderDate].costs += promotionDiscount;
+          } else {
+            // Store bears the cost
+            storePromoCosts += promotionDiscount;
+            dailyData[orderDate].storePromoCost += promotionDiscount;
+            
+            // Track per store
+            if (!storeMetrics[order.storeId!]) {
+              storeMetrics[order.storeId!] = {
+                storeId: order.storeId,
+                revenue: 0,
+                promoCosts: 0,
+                orders: 0,
+              };
+            }
+            storeMetrics[order.storeId!].promoCosts += promotionDiscount;
+          }
+        }
+      }
+
+      // Calculate daily profit
+      dailyData[orderDate].profit = dailyData[orderDate].revenue - dailyData[orderDate].costs;
+
+      // Track store revenue
+      if (order.storeId) {
+        if (!storeMetrics[order.storeId]) {
+          storeMetrics[order.storeId] = {
+            storeId: order.storeId,
+            revenue: 0,
+            promoCosts: 0,
+            orders: 0,
+          };
+        }
+        storeMetrics[order.storeId].revenue += orderTotal;
+        storeMetrics[order.storeId].orders += 1;
+      }
+    }
+
+    // ✅ Calculate admin vs store split
+    const adminCosts = productCosts + staffBonuses + adminPromoCosts + voucherCosts;
+    const adminNetProfit = totalRevenue - adminCosts - storePromoCosts;
+    
+    // Store keeps their gross margin minus their own promo costs
+    const storeGrossProfit = productRevenue - productCosts;
+    const storeNetAfterPromos = storeGrossProfit - storePromoCosts;
+
+    // ✅ PREDICTIONS
+    const daysInPeriod = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    const avgDailyRevenue = totalRevenue / daysInPeriod;
+    const avgDailyProfit = adminNetProfit / daysInPeriod;
+    
+    const projectedMonthlyRevenue = avgDailyRevenue * 30;
+    const projectedMonthlyProfit = avgDailyProfit * 30;
+    const projectedYearlyProfit = avgDailyProfit * 365;
+
+    // Prepare daily data array for charts
+    const chartData = Object.values(dailyData).sort((a: any, b: any) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    // Store breakdown
+    const storeBreakdown = await Promise.all(
+      Object.values(storeMetrics).map(async (store: any) => {
+        const [storeInfo] = await db
+          .select({ name: stores.name })
+          .from(stores)
+          .where(eq(stores.id, store.storeId))
+          .limit(1);
+
+        return {
+          ...store,
+          storeName: storeInfo?.name || "Unknown Store",
+        };
+      })
+    );
+
+    res.json({
+      period: {
+        start: startDate,
+        end: endDate,
+        type: period,
+        days: daysInPeriod,
+      },
+      
+      // Revenue breakdown
+      revenue: {
+        total: totalRevenue,
+        product: productRevenue,
+        delivery: deliveryRevenue,
+      },
+      
+      // Cost breakdown
+      costs: {
+        total: adminCosts + storePromoCosts,
+        productCosts,
+        staffBonuses,
+        adminPromotions: adminPromoCosts,
+        storePromotions: storePromoCosts,
+        vouchers: voucherCosts,
+      },
+      
+      // ✅ Admin vs Store split
+      profitSplit: {
+        admin: {
+          revenue: totalRevenue,
+          costs: adminCosts,
+          netProfit: adminNetProfit,
+          share: (adminNetProfit / totalRevenue) * 100,
+        },
+        stores: {
+          grossProfit: storeGrossProfit,
+          promoCosts: storePromoCosts,
+          netProfit: storeNetAfterPromos,
+          share: (storeNetAfterPromos / totalRevenue) * 100,
+        },
+      },
+      
+      // ✅ Predictions
+      predictions: {
+        monthly: {
+          revenue: projectedMonthlyRevenue,
+          profit: projectedMonthlyProfit,
+          margin: (projectedMonthlyProfit / projectedMonthlyRevenue) * 100,
+        },
+        yearly: {
+          revenue: avgDailyRevenue * 365,
+          profit: projectedYearlyProfit,
+          margin: (projectedYearlyProfit / (avgDailyRevenue * 365)) * 100,
+        },
+        trend: chartData.length >= 7 ? calculateTrend(chartData) : 'stable',
+      },
+      
+      // Chart data
+      chartData,
+      
+      // Store breakdown
+      storeBreakdown,
+      
+      // Summary
+      summary: {
+        totalOrders: deliveredOrders.length,
+        avgOrderValue: totalRevenue / deliveredOrders.length,
+        profitMargin: (adminNetProfit / totalRevenue) * 100,
+      },
+    });
+
+  } catch (error) {
+    console.error("❌ Enhanced financials error:", error);
+    res.status(500).json({ error: "Failed to fetch financial metrics" });
+  }
+});
+
+// Helper function to calculate trend
+function calculateTrend(data: any[]): 'growing' | 'declining' | 'stable' {
+  if (data.length < 2) return 'stable';
+  
+  const firstHalf = data.slice(0, Math.floor(data.length / 2));
+  const secondHalf = data.slice(Math.floor(data.length / 2));
+  
+  const firstAvg = firstHalf.reduce((sum: number, d: any) => sum + d.profit, 0) / firstHalf.length;
+  const secondAvg = secondHalf.reduce((sum: number, d: any) => sum + d.profit, 0) / secondHalf.length;
+  
+  const change = ((secondAvg - firstAvg) / firstAvg) * 100;
+  
+  if (change > 10) return 'growing';
+  if (change < -10) return 'declining';
+  return 'stable';
+}
+
+// ==================== ADMIN SEARCH ====================
+app.get("/api/admin/search", async (req, res) => {
+  try {
+    const { userId, query, type = 'all' } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId as string));
+    if (!user || (user.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    if (!query || (query as string).trim().length < 2) {
+      return res.status(400).json({ error: "Search query must be at least 2 characters" });
+    }
+
+    const searchTerm = `%${(query as string).toLowerCase()}%`;
+    const results: any = {
+      stores: [],
+      staff: [],
+      products: [],
+      orders: [],
+    };
+
+    // Search stores
+    if (type === 'all' || type === 'stores') {
+      results.stores = await db
+        .select()
+        .from(stores)
+        .where(
+          or(
+            sql`LOWER(${stores.name}) LIKE ${searchTerm}`,
+            sql`LOWER(${stores.address}) LIKE ${searchTerm}`
+          )
+        )
+        .limit(10);
+    }
+
+    // Search staff
+    if (type === 'all' || type === 'staff') {
+      const staffResults = await db
+        .select({
+          staff: storeStaff,
+          user: users,
+          store: stores,
+        })
+        .from(storeStaff)
+        .leftJoin(users, eq(storeStaff.userId, users.id))
+        .leftJoin(stores, eq(storeStaff.storeId, stores.id))
+        .where(
+          or(
+            sql`LOWER(${users.username}) LIKE ${searchTerm}`,
+            sql`LOWER(${users.name}) LIKE ${searchTerm}`,
+            sql`LOWER(${users.phone}) LIKE ${searchTerm}`,
+            sql`LOWER(${users.email}) LIKE ${searchTerm}`
+          )
+        )
+        .limit(10);
+
+      results.staff = staffResults.map(r => ({
+        ...r.staff,
+        user: r.user,
+        storeName: r.store?.name,
+      }));
+    }
+
+    // Search products
+    if (type === 'all' || type === 'products') {
+      results.products = await db
+        .select()
+        .from(products)
+        .where(
+          or(
+            sql`LOWER(${products.name}) LIKE ${searchTerm}`,
+            sql`LOWER(${products.brand}) LIKE ${searchTerm}`,
+            sql`LOWER(${products.description}) LIKE ${searchTerm}`
+          )
+        )
+        .limit(10);
+    }
+
+    // Search orders
+    if (type === 'all' || type === 'orders') {
+      results.orders = await db
+        .select()
+        .from(orders)
+        .where(
+          sql`LOWER(${orders.orderNumber}) LIKE ${searchTerm}`
+        )
+        .limit(10);
+    }
+
+    res.json(results);
+
+  } catch (error) {
+    console.error("❌ Search error:", error);
+    res.status(500).json({ error: "Search failed" });
   }
 });
 
