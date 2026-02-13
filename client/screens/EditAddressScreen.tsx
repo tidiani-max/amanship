@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { useAuth } from "@/context/AuthContext"; 
@@ -39,11 +40,7 @@ export default function EditAddressScreen() {
   const [predictions, setPredictions] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{
-    address: string; 
-    lat: string; 
-    lng: string;
-    storeName?: string;
-    storeDistance?: number;
+    address: string; lat: string; lng: string;
   } | null>(null);
 
   const searchTimer = useRef<NodeJS.Timeout | null>(null);
@@ -61,117 +58,46 @@ export default function EditAddressScreen() {
       setIsSearching(true);
       try {
         const response = await fetch(
-          `https://nominatim.openstreetmap.org/search?` +
-          `format=json&` +
-          `q=${encodeURIComponent(text)}&` +
-          `countrycodes=id&` +
-          `limit=10&` +
-          `addressdetails=1`,
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&countrycodes=id&limit=5&addressdetails=1`,
           { headers: { "User-Agent": "ZendOApp" } }
         );
         const data = await response.json();
-        
-        console.log(`📍 Found ${data.length} search results`);
         setPredictions(data);
-        
       } catch (error) {
-        console.error("❌ OSM Error:", error);
-        Alert.alert("Search Error", "Could not search locations. Please try again.");
+        console.error("OSM Error:", error);
       } finally {
         setIsSearching(false);
       }
     }, 500);
   };
 
-  const selectPlace = async (item: any) => {
-    const lat = parseFloat(item.lat);
-    const lng = parseFloat(item.lon);
-    
-    console.log(`📍 Selected location: ${lat}, ${lng}`);
-    
-    try {
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_DOMAIN}/api/stores/available?lat=${lat}&lng=${lng}`
-      );
-      
-      const data = await response.json();
-      
-      if (!data.available) {
-        Alert.alert(
-          "No Delivery Available 😢",
-          "Sorry, we don't deliver to this area yet. Please try a different location or check back soon!",
-          [{ text: "Try Another Location" }]
-        );
-        return;
-      }
-      
-      console.log(`✅ Store available: ${data.store.name} (${data.store.distanceKm}km away)`);
-      
-      setSelectedLocation({
-        address: item.display_name,
-        lat: item.lat,
-        lng: item.lon,
-        storeName: data.store.name,
-        storeDistance: data.store.distanceKm,
-      });
-      setSearchQuery(item.display_name);
-      setPredictions([]);
-      
-      Alert.alert(
-        "Delivery Available! 🎉",
-        `Great! We can deliver to this location from:\n\n` +
-        `🏪 ${data.store.name}\n` +
-        `📍 Distance: ${data.store.distanceKm}km\n` +
-        `⏱️ Delivery: ~${data.estimatedDeliveryMinutes} minutes\n\n` +
-        `Please add a label and save your address.`,
-        [{ text: "OK" }]
-      );
-      
-    } catch (error) {
-      console.error("❌ Store check error:", error);
-      Alert.alert("Error", "Could not verify delivery availability. Please try again.");
-    }
+  const selectPlace = (item: any) => {
+    setSelectedLocation({
+      address: item.display_name,
+      lat: item.lat,
+      lng: item.lon,
+    });
+    setSearchQuery(item.display_name);
+    setPredictions([]);
   };
 
   const handleUseCurrentLocation = async () => {
     setLoading(true);
     try {
       await useCurrentLocation();
-      
-      Alert.alert(
-        "Location Set! ✓",
-        "Your current GPS location has been set as delivery address.",
-        [{ text: "OK", onPress: () => navigation.goBack() }]
-      );
+      navigation.goBack();
     } catch (error) {
-      console.error("GPS Error:", error);
-      Alert.alert("Error", "Could not get current location. Please enable GPS and try again.");
+      Alert.alert("Error", "Could not get current location.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleApplyAddress = async () => {
-    if (!selectedLocation) {
-      Alert.alert("Error", "Please select a location first");
-      return;
-    }
-    
-    if (!label.trim()) {
-      Alert.alert("Label Required", "Please give this address a label (e.g., Home, Office)");
-      return;
-    }
+    if (!selectedLocation || !label.trim()) return;
 
     setLoading(true);
     try {
-      console.log("💾 Saving address:", {
-        label: label.trim(),
-        address: selectedLocation.address,
-        lat: selectedLocation.lat,
-        lng: selectedLocation.lng,
-      });
-
-      // ✅ Update LocationContext
       setManualLocation({
         latitude: parseFloat(selectedLocation.lat),
         longitude: parseFloat(selectedLocation.lng),
@@ -180,7 +106,6 @@ export default function EditAddressScreen() {
         isManual: true,
       });
 
-      // ✅ Save to database
       if (user?.id) {
         await apiRequest("POST", "/api/addresses", {
           userId: user.id,
@@ -191,29 +116,10 @@ export default function EditAddressScreen() {
           longitude: selectedLocation.lng,
           isDefault: true
         });
-        
-        console.log("✅ Address saved to database");
       }
-      
-      // ✅ FIX: Navigate back without params
-      Alert.alert(
-        "Address Saved! ✓",
-        `Your delivery address has been set to:\n\n` +
-        `📍 ${label.trim()}\n` +
-        `${selectedLocation.address}\n\n` +
-        `${details.trim() ? `Note: ${details.trim()}\n\n` : ''}` +
-        `Products from ${selectedLocation.storeName} will be shown on your home screen.`,
-        [{ 
-          text: "View Products", 
-          onPress: () => {
-            // ✅ FIX: Just go back, HomeScreen will auto-refresh
-            navigation.goBack();
-          }
-        }]
-      );
+      navigation.goBack();
     } catch (error) {
-      console.error("❌ Save address error:", error);
-      Alert.alert("Error", "Could not save address. Please try again.");
+      Alert.alert("Error", "Could not save address.");
     } finally {
       setLoading(false);
     }
@@ -224,7 +130,7 @@ export default function EditAddressScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* HEADER */}
+      {/* MODERN HEADER */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Feather name="chevron-left" size={28} color="#1e293b" />
@@ -236,10 +142,10 @@ export default function EditAddressScreen() {
       <ScrollView
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
       >
         <View style={styles.content}>
-          {/* GPS OPTION */}
+          {/* GPS QUICK OPTION */}
           <Pressable
             style={[
               styles.gpsCard,
@@ -259,9 +165,7 @@ export default function EditAddressScreen() {
           </Pressable>
 
           <View style={styles.dividerRow}>
-            <View style={styles.line} />
-            <ThemedText style={styles.orText}>OR SEARCH ADDRESS</ThemedText>
-            <View style={styles.line} />
+            <View style={styles.line} /><ThemedText style={styles.orText}>OR SEARCH</ThemedText><View style={styles.line} />
           </View>
 
           {/* SEARCH SECTION */}
@@ -270,7 +174,7 @@ export default function EditAddressScreen() {
               <Feather name="search" size={18} color="#94a3b8" style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search city, district, or street..."
+                placeholder="Search area, street or landmark..."
                 placeholderTextColor="#94a3b8"
                 value={searchQuery}
                 onChangeText={searchOpenStreetMap}
@@ -286,86 +190,58 @@ export default function EditAddressScreen() {
                     style={styles.predictionItem}
                     onPress={() => selectPlace(item)}
                   >
-                    <View style={styles.pinCircle}>
-                      <Feather name="map-pin" size={14} color="#64748b" />
-                    </View>
-                    <ThemedText numberOfLines={2} style={styles.predictionText}>
-                      {item.display_name}
-                    </ThemedText>
+                    <View style={styles.pinCircle}><Feather name="map-pin" size={14} color="#64748b" /></View>
+                    <ThemedText numberOfLines={2} style={styles.predictionText}>{item.display_name}</ThemedText>
                   </TouchableOpacity>
                 ))}
               </View>
             )}
           </View>
 
-          {/* FORM (Shows after location selected) */}
+          {/* FORM SECTION (Only if address selected) */}
           {selectedLocation && (
             <View style={styles.formSection}>
-              {/* Selected Location Display */}
               <View style={styles.selectedIndicator}>
                 <View style={styles.mintDot} />
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.selectedAddressText} numberOfLines={2}>
-                    {selectedLocation.address}
-                  </ThemedText>
-                  {selectedLocation.storeName && (
-                    <ThemedText style={styles.storeInfoText}>
-                      🏪 Nearest Store: {selectedLocation.storeName} ({selectedLocation.storeDistance?.toFixed(1)}km)
-                    </ThemedText>
-                  )}
-                </View>
+                <ThemedText style={styles.selectedAddressText} numberOfLines={2}>
+                  {selectedLocation.address}
+                </ThemedText>
               </View>
 
-              {/* Label Input (REQUIRED) */}
               <View style={styles.inputGroup}>
-                <ThemedText style={styles.fieldLabel}>
-                  Label This Address <ThemedText style={{ color: '#ef4444' }}>*</ThemedText>
-                </ThemedText>
+                <ThemedText style={styles.fieldLabel}>Label This Place</ThemedText>
                 <TextInput
                   style={styles.textInput}
                   value={label}
                   onChangeText={setLabel}
-                  placeholder="e.g. Home, Office, Mom's House"
+                  placeholder="e.g. Home, My Office, Mom's House"
                   placeholderTextColor="#cbd5e1"
-                  autoCapitalize="words"
                 />
               </View>
 
-              {/* Additional Details Input (OPTIONAL) */}
               <View style={styles.inputGroup}>
-                <ThemedText style={styles.fieldLabel}>
-                  Additional Details (Optional)
-                </ThemedText>
+                <ThemedText style={styles.fieldLabel}>Note for Driver (Optional)</ThemedText>
                 <TextInput
                   style={[styles.textInput, styles.areaInput]}
                   value={details}
                   onChangeText={setDetails}
                   multiline
-                  numberOfLines={4}
-                  placeholder="Building name, floor, gate code, landmarks, etc..."
+                  placeholder="Gate code, building color, floor number..."
                   placeholderTextColor="#cbd5e1"
-                  textAlignVertical="top"
                 />
-                <ThemedText style={styles.hintText}>
-                  💡 Help the driver find you easily
-                </ThemedText>
               </View>
             </View>
           )}
 
-          {/* CURRENT SAVED ADDRESS (if exists) */}
+          {/* CURRENT ADDRESS PREVIEW */}
           {isManualLocation && manualAddress && !selectedLocation && (
             <View style={styles.activeCard}>
               <View style={[styles.gpsIconCircle, { backgroundColor: BRAND_MINT + '15' }]}>
                 <Feather name="map-pin" size={20} color={BRAND_MINT} />
               </View>
               <View style={{ flex: 1 }}>
-                <ThemedText style={styles.activeLabel}>
-                  ✓ {currentAddressLabel || "Current Address"}
-                </ThemedText>
-                <ThemedText style={styles.activeAddress} numberOfLines={2}>
-                  {manualAddress}
-                </ThemedText>
+                <ThemedText style={styles.activeLabel}>{currentAddressLabel || "Saved Address"}</ThemedText>
+                <ThemedText style={styles.activeAddress} numberOfLines={2}>{manualAddress}</ThemedText>
               </View>
               <MaterialCommunityIcons name="check-decagram" size={22} color={BRAND_MINT} />
             </View>
@@ -373,27 +249,15 @@ export default function EditAddressScreen() {
         </View>
       </ScrollView>
 
-      {/* SAVE BUTTON (Fixed at bottom) */}
+      {/* FLOATING ACTION BUTTON */}
       {selectedLocation && (
         <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
           <TouchableOpacity 
-            style={[
-              styles.submitBtn, 
-              (!label.trim() || loading) && styles.btnDisabled
-            ]}
+            style={[styles.submitBtn, (!label.trim() || loading) && styles.btnDisabled]}
             onPress={handleApplyAddress}
             disabled={loading || !label.trim()}
           >
-            {loading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <>
-                <Feather name="check" size={20} color="white" style={{ marginRight: 8 }} />
-                <ThemedText style={styles.submitBtnText}>
-                  Save Delivery Address
-                </ThemedText>
-              </>
-            )}
+            {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.submitBtnText}>Confirm Delivery Address</ThemedText>}
           </TouchableOpacity>
         </View>
       )}
@@ -427,28 +291,12 @@ const styles = StyleSheet.create({
     gap: 15,
     marginBottom: 20
   },
-  gpsIconCircle: { 
-    width: 48, 
-    height: 48, 
-    borderRadius: 16, 
-    alignItems: 'center', 
-    justifyContent: 'center' 
-  },
+  gpsIconCircle: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   gpsTitle: { fontSize: 16, fontWeight: '800', color: '#1e293b' },
   gpsSub: { fontSize: 13, color: '#64748b', marginTop: 2 },
-  dividerRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 10, 
-    marginBottom: 20 
-  },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
   line: { flex: 1, height: 1, backgroundColor: '#e2e8f0' },
-  orText: { 
-    fontSize: 10, 
-    fontWeight: '800', 
-    color: '#94a3b8', 
-    letterSpacing: 1 
-  },
+  orText: { fontSize: 10, fontWeight: '800', color: '#94a3b8', letterSpacing: 1 },
   section: { marginBottom: 20 },
   searchWrapper: {
     flexDirection: 'row',
@@ -461,12 +309,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0'
   },
   searchIcon: { marginRight: 12 },
-  searchInput: { 
-    flex: 1, 
-    fontSize: 15, 
-    color: '#1e293b', 
-    fontWeight: '500' 
-  },
+  searchInput: { flex: 1, fontSize: 15, color: '#1e293b', fontWeight: '500' },
   predictionsBox: {
     backgroundColor: 'white',
     borderRadius: 18,
@@ -479,28 +322,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 10
   },
-  predictionItem: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    padding: 15, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#f1f5f9' 
-  },
-  pinCircle: { 
-    width: 30, 
-    height: 30, 
-    borderRadius: 15, 
-    backgroundColor: '#f1f5f9', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    marginRight: 12 
-  },
-  predictionText: { 
-    flex: 1, 
-    fontSize: 14, 
-    color: '#334155', 
-    lineHeight: 20 
-  },
+  predictionItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  pinCircle: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  predictionText: { flex: 1, fontSize: 14, color: '#334155', lineHeight: 20 },
   formSection: { gap: 20 },
   selectedIndicator: {
     flexDirection: 'row',
@@ -512,31 +336,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BRAND_MINT + '20'
   },
-  mintDot: { 
-    width: 8, 
-    height: 8, 
-    borderRadius: 4, 
-    backgroundColor: BRAND_MINT 
-  },
-  selectedAddressText: { 
-    fontSize: 13, 
-    color: '#065f46', 
-    fontWeight: '600',
-    lineHeight: 18,
-  },
-  storeInfoText: {
-    fontSize: 11,
-    color: '#059669',
-    fontWeight: '600',
-    marginTop: 4,
-  },
+  mintDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: BRAND_MINT },
+  selectedAddressText: { flex: 1, fontSize: 13, color: '#065f46', fontWeight: '600' },
   inputGroup: { gap: 8 },
-  fieldLabel: { 
-    fontSize: 12, 
-    fontWeight: '800', 
-    color: '#64748b', 
-    marginLeft: 4 
-  },
+  fieldLabel: { fontSize: 12, fontWeight: '800', color: '#64748b', marginLeft: 4 },
   textInput: {
     backgroundColor: 'white',
     borderRadius: 15,
@@ -546,16 +349,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     color: '#1e293b'
   },
-  areaInput: { 
-    height: 100, 
-    paddingTop: 16,
-  },
-  hintText: {
-    fontSize: 11,
-    color: '#94a3b8',
-    marginLeft: 4,
-    marginTop: 4,
-  },
+  areaInput: { height: 100, textAlignVertical: 'top' },
   activeCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -566,36 +360,20 @@ const styles = StyleSheet.create({
     borderColor: BRAND_MINT + '20',
     gap: 15
   },
-  activeLabel: { 
-    fontSize: 14, 
-    fontWeight: '800', 
-    color: '#1e293b' 
-  },
-  activeAddress: { 
-    fontSize: 12, 
-    color: '#64748b', 
-    marginTop: 2 
-  },
+  activeLabel: { fontSize: 14, fontWeight: '800', color: '#1e293b' },
+  activeAddress: { fontSize: 12, color: '#64748b', marginTop: 2 },
   footer: {
     position: 'absolute',
-    bottom: 0, 
-    left: 0, 
-    right: 0,
+    bottom: 0, left: 0, right: 0,
     backgroundColor: 'white',
     padding: 20,
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    borderTopColor: '#f1f5f9'
   },
   submitBtn: {
     backgroundColor: BRAND_PURPLE,
     height: 56,
     borderRadius: 18,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 4,
@@ -604,14 +382,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 }
   },
-  btnDisabled: { 
-    backgroundColor: '#cbd5e1', 
-    shadowOpacity: 0, 
-    elevation: 0 
-  },
-  submitBtnText: { 
-    color: 'white', 
-    fontSize: 16, 
-    fontWeight: '800' 
-  }
+  btnDisabled: { backgroundColor: '#cbd5e1', shadowOpacity: 0, elevation: 0 },
+  submitBtnText: { color: 'white', fontSize: 16, fontWeight: '800' }
 });
