@@ -3454,6 +3454,7 @@ async function logPromotionCost(
   // ==================== 12. STORES ====================
   console.log("🏪 Registering store routes...");
   
+// ✅ IMPROVED: Return more detailed store info
 app.get("/api/stores/available", async (req, res) => {
   try {
     const lat = parseFloat(req.query.lat as string);
@@ -3463,26 +3464,32 @@ app.get("/api/stores/available", async (req, res) => {
       return res.status(400).json({ error: "Valid lat/lng required" });
     }
 
+    console.log(`📍 Checking store availability for: ${lat}, ${lng}`);
+
     const nearest = await findNearestAvailableStore(lat, lng);
 
-if (!nearest) {
-  return res.json({
-    available: false,
-  });
-}
+    if (!nearest) {
+      console.log("❌ No stores available within 5km");
+      return res.json({
+        available: false,
+        message: "No delivery available in this area"
+      });
+    }
 
-res.json({
-  available: true,
-  store: {
-    id: nearest.id,
-    name: nearest.name,
-    address: nearest.address,
-    distanceKm: nearest.distanceKm,
-    codAllowed: nearest.codAllowed,
-  },
-  estimatedDeliveryMinutes: estimateDeliveryTime(nearest.distanceKm),
-  codAllowed: nearest.codAllowed,
-});
+    console.log(`✅ Found store: ${nearest.name} (${nearest.distanceKm}km away)`);
+
+    res.json({
+      available: true,
+      store: {
+        id: nearest.id,
+        name: nearest.name,
+        address: nearest.address,
+        distanceKm: parseFloat(nearest.distanceKm.toFixed(2)),
+        codAllowed: nearest.codAllowed,
+      },
+      estimatedDeliveryMinutes: estimateDeliveryTime(nearest.distanceKm),
+      codAllowed: nearest.codAllowed,
+    });
 
   } catch (error) {
     console.error("❌ Store availability error:", error);
