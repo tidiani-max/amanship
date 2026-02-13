@@ -63,7 +63,7 @@ interface StoreData {
   isActive: boolean;
   codAllowed: boolean;
   staff: StaffMember[];
-  owner?: StoreOwner | null; // ✅ ADD THIS
+  owner?: StoreOwner | null;
   totalRevenue: number;
   todayRevenue: number;
   todayOrders: number;
@@ -76,18 +76,6 @@ interface StoreData {
   orderCount: number;
   deliveredOrders: number;
   cancelledOrders: number;
-}
-interface StoreOwner {
-  id: string;
-  userId: string;
-  storeId: string;
-  user: {
-    id: string;
-    name: string | null;
-    phone: string | null;
-    email: string | null;
-    username: string;
-  } | null;
 }
 
 interface Promotion {
@@ -581,12 +569,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 400,
   },
-  // Add this to your styles object at the bottom of AdminDashboardScreen.tsx
-infoBox: {
-  padding: Spacing.lg,
-  borderRadius: BorderRadius.md,
-  borderWidth: 1,
-},
+  infoBox: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
 });
 
 // ===================== MODALS =====================
@@ -596,7 +585,6 @@ interface StoreWithOwnerModalProps {
   onSubmit: (data: any) => void;
   isLoading: boolean;
 }
-
 
 const StoreWithOwnerModal: React.FC<StoreWithOwnerModalProps> = ({ visible, onClose, onSubmit, isLoading }) => {
   const { theme } = useTheme();
@@ -619,28 +607,73 @@ const StoreWithOwnerModal: React.FC<StoreWithOwnerModalProps> = ({ visible, onCl
     }
 
     setGeocoding(true);
+    console.log("🗺️ [StoreWithOwner] Starting geocoding for:", storeAddress);
+    
     try {
-      const response = await apiRequest("POST", "/api/admin/geocode", { address: storeAddress });
+      const response = await apiRequest("POST", "/api/admin/geocode", { 
+        address: storeAddress 
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const data = await response.json();
+      console.log("📦 [StoreWithOwner] Geocoding response:", data);
       
       if (data.latitude && data.longitude) {
-        setStoreLatitude(String(data.latitude));
-        setStoreLongitude(String(data.longitude));
+        const lat = String(data.latitude);
+        const lng = String(data.longitude);
+        
+        console.log(`✅ [StoreWithOwner] Setting coordinates: ${lat}, ${lng}`);
+        
+        setStoreLatitude(lat);
+        setStoreLongitude(lng);
         
         if (data.isDefault) {
           Alert.alert(
-            "Using Default Location", 
-            data.displayName + "\n\nYou can manually adjust the coordinates if needed."
+            "⚠️ Using Default Location", 
+            `Could not find: "${storeAddress}"\n\n` +
+            `📍 Default Jakarta Location:\n` +
+            `Latitude: ${lat}\n` +
+            `Longitude: ${lng}\n\n` +
+            `${data.displayName}\n\n` +
+            `You can see these values in the latitude/longitude fields below and adjust them manually if needed.`,
+            [{ text: "OK" }]
           );
         } else {
-          Alert.alert("Success", `Location found:\n${data.displayName || "Address geocoded"}`);
+          Alert.alert(
+            "✅ Location Found!", 
+            `📍 Coordinates Retrieved:\n\n` +
+            `Latitude: ${lat}\n` +
+            `Longitude: ${lng}\n\n` +
+            `Address: ${data.displayName}\n\n` +
+            `These values are now shown in the latitude/longitude input fields below.`,
+            [{ text: "Perfect!" }]
+          );
         }
+        
+      } else {
+        console.error("❌ [StoreWithOwner] Invalid response:", data);
+        Alert.alert("Error", "Geocoding returned invalid data");
       }
     } catch (error) {
-      console.error("Geocode error:", error);
+      console.error("❌ [StoreWithOwner] Geocoding error:", error);
+      
+      const defaultLat = "-6.2088";
+      const defaultLng = "106.8456";
+      
+      setStoreLatitude(defaultLat);
+      setStoreLongitude(defaultLng);
+      
       Alert.alert(
-        "Geocoding Unavailable", 
-        "Using default Jakarta coordinates. You can manually adjust them if needed."
+        "⚠️ Geocoding Failed", 
+        `Error: ${error instanceof Error ? error.message : "Unknown error"}\n\n` +
+        `📍 Using Jakarta Default:\n` +
+        `Latitude: ${defaultLat}\n` +
+        `Longitude: ${defaultLng}\n\n` +
+        `These values are now in the input fields and can be adjusted manually.`,
+        [{ text: "OK" }]
       );
     } finally {
       setGeocoding(false);
@@ -658,7 +691,6 @@ const StoreWithOwnerModal: React.FC<StoreWithOwnerModalProps> = ({ visible, onCl
       return;
     }
 
-    // Generate temporary password
     const tempPassword = `owner${Math.random().toString(36).slice(-6)}`;
 
     onSubmit({
@@ -685,7 +717,6 @@ const StoreWithOwnerModal: React.FC<StoreWithOwnerModalProps> = ({ visible, onCl
             </Pressable>
           </View>
 
-          {/* STORE INFORMATION */}
           <ThemedText style={{ fontSize: 16, fontWeight: '700', marginBottom: Spacing.md }}>
             Store Information
           </ThemedText>
@@ -712,10 +743,6 @@ const StoreWithOwnerModal: React.FC<StoreWithOwnerModalProps> = ({ visible, onCl
               multiline
             />
           </View>
-          {/* Inside store card, after store name/address */}
-{/* ✅ FIXED: Store Owner Display */}
-
-
 
           <Pressable 
             style={[styles.button, styles.buttonSecondary, { borderColor: theme.secondary, marginBottom: Spacing.lg }]}
@@ -732,7 +759,62 @@ const StoreWithOwnerModal: React.FC<StoreWithOwnerModalProps> = ({ visible, onCl
             )}
           </Pressable>
 
-          {/* OWNER INFORMATION */}
+          <View style={{ flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.lg }}>
+            <View style={[styles.formGroup, { flex: 1, marginBottom: 0 }]}>
+              <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Latitude</ThemedText>
+              <TextInput
+                style={[
+                  styles.input, 
+                  { 
+                    borderColor: theme.border, 
+                    color: theme.text, 
+                    backgroundColor: theme.backgroundTertiary,
+                    fontWeight: '600',
+                    fontSize: 16
+                  }
+                ]}
+                placeholder="-6.2088"
+                placeholderTextColor={theme.textSecondary}
+                value={storeLatitude}
+                onChangeText={setStoreLatitude}
+                keyboardType="numeric"
+                editable={true}
+              />
+              {storeLatitude && (
+                <ThemedText style={{ fontSize: 11, color: theme.success, marginTop: 4 }}>
+                  ✓ Current: {storeLatitude}
+                </ThemedText>
+              )}
+            </View>
+            
+            <View style={[styles.formGroup, { flex: 1, marginBottom: 0 }]}>
+              <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Longitude</ThemedText>
+              <TextInput
+                style={[
+                  styles.input, 
+                  { 
+                    borderColor: theme.border, 
+                    color: theme.text, 
+                    backgroundColor: theme.backgroundTertiary,
+                    fontWeight: '600',
+                    fontSize: 16
+                  }
+                ]}
+                placeholder="106.8456"
+                placeholderTextColor={theme.textSecondary}
+                value={storeLongitude}
+                onChangeText={setStoreLongitude}
+                keyboardType="numeric"
+                editable={true}
+              />
+              {storeLongitude && (
+                <ThemedText style={{ fontSize: 11, color: theme.success, marginTop: 4 }}>
+                  ✓ Current: {storeLongitude}
+                </ThemedText>
+              )}
+            </View>
+          </View>
+
           <ThemedText style={{ fontSize: 16, fontWeight: '700', marginBottom: Spacing.md, marginTop: Spacing.lg }}>
             Owner Information
           </ThemedText>
@@ -816,8 +898,6 @@ const StoreModal: React.FC<StoreModalProps> = ({ visible, store, onClose, onSubm
   const [longitude, setLongitude] = useState(store?.longitude || "106.8456");
   const [codAllowed, setCodAllowed] = useState(store?.codAllowed ?? true);
   const [geocoding, setGeocoding] = useState(false);
-  const [showStoreOwnerModal, setShowStoreOwnerModal] = useState(false);
-
 
   React.useEffect(() => {
     if (store) {
@@ -838,30 +918,73 @@ const StoreModal: React.FC<StoreModalProps> = ({ visible, store, onClose, onSubm
     }
 
     setGeocoding(true);
+    console.log("🗺️ [StoreModal] Starting geocoding for:", address);
+    
     try {
-      const response = await apiRequest("POST", "/api/admin/geocode", { address });
+      const response = await apiRequest("POST", "/api/admin/geocode", { 
+        address: address
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const data = await response.json();
+      console.log("📦 [StoreModal] Geocoding response:", data);
       
       if (data.latitude && data.longitude) {
-        setLatitude(String(data.latitude));
-        setLongitude(String(data.longitude));
+        const lat = String(data.latitude);
+        const lng = String(data.longitude);
+        
+        console.log(`✅ [StoreModal] Setting coordinates: ${lat}, ${lng}`);
+        
+        setLatitude(lat);
+        setLongitude(lng);
         
         if (data.isDefault) {
           Alert.alert(
-            "Using Default Location", 
-            data.displayName + "\n\nYou can manually adjust the coordinates if needed."
+            "⚠️ Using Default Location", 
+            `Could not find: "${address}"\n\n` +
+            `📍 Default Jakarta Location:\n` +
+            `Latitude: ${lat}\n` +
+            `Longitude: ${lng}\n\n` +
+            `${data.displayName}\n\n` +
+            `You can see these values in the latitude/longitude fields below and adjust them manually if needed.`,
+            [{ text: "OK" }]
           );
         } else {
-          Alert.alert("Success", `Location found:\n${data.displayName || "Address geocoded"}`);
+          Alert.alert(
+            "✅ Location Found!", 
+            `📍 Coordinates Retrieved:\n\n` +
+            `Latitude: ${lat}\n` +
+            `Longitude: ${lng}\n\n` +
+            `Address: ${data.displayName}\n\n` +
+            `These values are now shown in the latitude/longitude input fields below.`,
+            [{ text: "Perfect!" }]
+          );
         }
+        
+      } else {
+        console.error("❌ [StoreModal] Invalid response:", data);
+        Alert.alert("Error", "Geocoding returned invalid data");
       }
     } catch (error) {
-      console.error("Geocode error:", error);
-      setLatitude("-6.2088");
-      setLongitude("106.8456");
+      console.error("❌ [StoreModal] Geocoding error:", error);
+      
+      const defaultLat = "-6.2088";
+      const defaultLng = "106.8456";
+      
+      setLatitude(defaultLat);
+      setLongitude(defaultLng);
+      
       Alert.alert(
-        "Geocoding Unavailable", 
-        "Using default Jakarta coordinates. You can manually adjust them if needed."
+        "⚠️ Geocoding Failed", 
+        `Error: ${error instanceof Error ? error.message : "Unknown error"}\n\n` +
+        `📍 Using Jakarta Default:\n` +
+        `Latitude: ${defaultLat}\n` +
+        `Longitude: ${defaultLng}\n\n` +
+        `These values are now in the input fields and can be adjusted manually.`,
+        [{ text: "OK" }]
       );
     } finally {
       setGeocoding(false);
@@ -885,7 +1008,7 @@ const StoreModal: React.FC<StoreModalProps> = ({ visible, store, onClose, onSubm
 
   return (
     <View style={[styles.modalOverlay]}>
-         <Card style={StyleSheet.flatten([styles.modalContent, { backgroundColor: theme.backgroundDefault }])}>
+      <Card style={StyleSheet.flatten([styles.modalContent, { backgroundColor: theme.backgroundDefault }])}>
         <KeyboardAwareScrollViewCompat showsVerticalScrollIndicator={false}>
           <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
             <ThemedText style={styles.modalTitle}>{store ? "Edit Store" : "Add New Store"}</ThemedText>
@@ -936,24 +1059,55 @@ const StoreModal: React.FC<StoreModalProps> = ({ visible, store, onClose, onSubm
             <View style={[styles.formGroup, { flex: 1, marginBottom: 0 }]}>
               <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Latitude</ThemedText>
               <TextInput
-                style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundTertiary }]}
-                placeholder="Latitude"
+                style={[
+                  styles.input, 
+                  { 
+                    borderColor: theme.border, 
+                    color: theme.text, 
+                    backgroundColor: theme.backgroundTertiary,
+                    fontWeight: '600',
+                    fontSize: 16
+                  }
+                ]}
+                placeholder="-6.2088"
                 placeholderTextColor={theme.textSecondary}
                 value={latitude}
                 onChangeText={setLatitude}
                 keyboardType="numeric"
+                editable={true}
               />
+              {latitude && (
+                <ThemedText style={{ fontSize: 11, color: theme.success, marginTop: 4 }}>
+                  ✓ Current: {latitude}
+                </ThemedText>
+              )}
             </View>
+            
             <View style={[styles.formGroup, { flex: 1, marginBottom: 0 }]}>
               <ThemedText style={[styles.label, { color: theme.textSecondary }]}>Longitude</ThemedText>
               <TextInput
-                style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.backgroundTertiary }]}
-                placeholder="Longitude"
+                style={[
+                  styles.input, 
+                  { 
+                    borderColor: theme.border, 
+                    color: theme.text, 
+                    backgroundColor: theme.backgroundTertiary,
+                    fontWeight: '600',
+                    fontSize: 16
+                  }
+                ]}
+                placeholder="106.8456"
                 placeholderTextColor={theme.textSecondary}
                 value={longitude}
                 onChangeText={setLongitude}
                 keyboardType="numeric"
+                editable={true}
               />
+              {longitude && (
+                <ThemedText style={{ fontSize: 11, color: theme.success, marginTop: 4 }}>
+                  ✓ Current: {longitude}
+                </ThemedText>
+              )}
             </View>
           </View>
 
@@ -1012,7 +1166,6 @@ const StaffModal: React.FC<StaffModalProps> = ({ visible, storeId, storeName, st
   const [email, setEmail] = useState(staff?.user?.email || "");
   const [name, setName] = useState(staff?.user?.name || "");
   const [role, setRole] = useState<"picker" | "driver">(staff?.role || "picker");
-  const [activeTab, setActiveTab] = useState<'overview' | 'stores' | 'promotions' | 'financials'>('overview');
 
   React.useEffect(() => {
     if (staff) {
@@ -1042,7 +1195,7 @@ const StaffModal: React.FC<StaffModalProps> = ({ visible, storeId, storeName, st
 
   return (
     <View style={styles.modalOverlay}>
-         <Card style={StyleSheet.flatten([styles.modalContent, { backgroundColor: theme.backgroundDefault }])}>
+      <Card style={StyleSheet.flatten([styles.modalContent, { backgroundColor: theme.backgroundDefault }])}>
         <KeyboardAwareScrollViewCompat showsVerticalScrollIndicator={false}>
           <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
             <View>
@@ -1292,8 +1445,7 @@ const PromotionModal: React.FC<PromotionModalProps> = ({
 
   return (
     <View style={styles.modalOverlay}>
-        <Card style={StyleSheet.flatten([styles.modalContent, { backgroundColor: theme.backgroundDefault }])}>
-    
+      <Card style={StyleSheet.flatten([styles.modalContent, { backgroundColor: theme.backgroundDefault }])}>
         <KeyboardAwareScrollViewCompat showsVerticalScrollIndicator={false}>
           <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
             <ThemedText style={styles.modalTitle}>{promotion ? "Edit Promotion" : "Create Promotion"}</ThemedText>
@@ -1532,19 +1684,21 @@ export default function AdminDashboardScreen() {
     retry: 1,
     retryDelay: 1000,
   });
-const { data: financialMetrics } = useQuery({
-  queryKey: ["/api/admin/financials/comprehensive", activeTab === 'financials' ? 'month' : null],
-  queryFn: async () => {
-    if (activeTab !== 'financials') return null;
-    
-    const response = await apiRequest("GET", 
-      `/api/admin/financials/comprehensive?userId=demo-user&period=month`
-    );
-    return response.json();
-  },
-  enabled: activeTab === 'financials',
-  refetchInterval: activeTab === 'financials' ? 60000 : false,
-});
+
+  const { data: financialMetrics } = useQuery({
+    queryKey: ["/api/admin/financials/comprehensive", activeTab === 'financials' ? 'month' : null],
+    queryFn: async () => {
+      if (activeTab !== 'financials') return null;
+      
+      const response = await apiRequest("GET", 
+        `/api/admin/financials/comprehensive?userId=demo-user&period=month`
+      );
+      return response.json();
+    },
+    enabled: activeTab === 'financials',
+    refetchInterval: activeTab === 'financials' ? 60000 : false,
+  });
+
   // ===================== MUTATIONS =====================
   const createStoreMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -1561,25 +1715,26 @@ const { data: financialMetrics } = useQuery({
     onError: (error: Error) => Alert.alert("Error", error.message),
   });
 
-const createStoreWithOwnerMutation = useMutation({
-  mutationFn: async (data: any) => {
-    const response = await apiRequest("POST", "/api/admin/stores-with-owner", {
-      userId: "demo-user",
-      ...data
-    });
-    if (!response.ok) throw new Error((await response.json()).error);
-    return response.json();
-  },
-  onSuccess: (data) => {
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
-    setShowStoreOwnerModal(false);
-    Alert.alert(
-      "Success!", 
-      `Store and owner created!\n\n${data.message}\n\nThe owner can now login with their phone number.`
-    );
-  },
-  onError: (error: Error) => Alert.alert("Error", error.message),
-});
+  const createStoreWithOwnerMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await apiRequest("POST", "/api/admin/stores-with-owner", {
+        userId: "demo-user",
+        ...data
+      });
+      if (!response.ok) throw new Error((await response.json()).error);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
+      setShowStoreOwnerModal(false);
+      Alert.alert(
+        "Success!", 
+        `Store and owner created!\n\n${data.message}\n\nThe owner can now login with their phone number.`
+      );
+    },
+    onError: (error: Error) => Alert.alert("Error", error.message),
+  });
+
   const updateStoreMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
       const response = await apiRequest("PATCH", `/api/admin/stores/${id}`, data);
@@ -1825,9 +1980,9 @@ const createStoreWithOwnerMutation = useMutation({
     );
   };
 
-const handleStoreOwnerSubmit = (data: any) => {
-  createStoreWithOwnerMutation.mutate(data);
-};
+  const handleStoreOwnerSubmit = (data: any) => {
+    createStoreWithOwnerMutation.mutate(data);
+  };
 
   const handleTogglePromotionActive = (id: string, isActive: boolean) => {
     togglePromotionActiveMutation.mutate({ id, isActive });
@@ -1897,17 +2052,18 @@ const handleStoreOwnerSubmit = (data: any) => {
                 Promotions
               </ThemedText>
             </Pressable>
+            
             <Pressable 
-  style={[styles.navItem, activeTab === 'financials' && styles.navItemActive]}
-  onPress={() => setActiveTab('financials')}
->
-  <View style={styles.navIcon}>
-    <Feather name="dollar-sign" size={20} color={activeTab === 'financials' ? '#fff' : theme.text} />
-  </View>
-  <ThemedText style={{ color: activeTab === 'financials' ? '#fff' : theme.text, fontWeight: '600' }}>
-    Financials
-  </ThemedText>
-</Pressable>
+              style={[styles.navItem, activeTab === 'financials' && styles.navItemActive]}
+              onPress={() => setActiveTab('financials')}
+            >
+              <View style={styles.navIcon}>
+                <Feather name="dollar-sign" size={20} color={activeTab === 'financials' ? '#fff' : theme.text} />
+              </View>
+              <ThemedText style={{ color: activeTab === 'financials' ? '#fff' : theme.text, fontWeight: '600' }}>
+                Financials
+              </ThemedText>
+            </Pressable>
           </View>
         </View>
 
@@ -1923,29 +2079,29 @@ const handleStoreOwnerSubmit = (data: any) => {
             </ThemedText>
             <View style={styles.headerActions}>
               {activeTab === 'stores' && (
-  <>
-    <Pressable 
-      style={[styles.button, styles.buttonPrimary]}
-      onPress={() => {
-        setSelectedStore(null);
-        setShowStoreOwnerModal(true);
-      }}
-    >
-      <Feather name="plus" size={16} color="#fff" />
-      <ThemedText style={[styles.buttonText, { color: '#fff' }]}>Add Store + Owner</ThemedText>
-    </Pressable>
-    <Pressable 
-      style={[styles.button, styles.buttonSecondary, { borderColor: theme.border, marginLeft: Spacing.sm }]}
-      onPress={() => {
-        setSelectedStore(null);
-        setShowStoreModal(true);
-      }}
-    >
-      <Feather name="home" size={16} color={theme.text} />
-      <ThemedText style={[styles.buttonText, { color: theme.text }]}>Add Store Only</ThemedText>
-    </Pressable>
-  </>
-)}
+                <>
+                  <Pressable 
+                    style={[styles.button, styles.buttonPrimary]}
+                    onPress={() => {
+                      setSelectedStore(null);
+                      setShowStoreOwnerModal(true);
+                    }}
+                  >
+                    <Feather name="plus" size={16} color="#fff" />
+                    <ThemedText style={[styles.buttonText, { color: '#fff' }]}>Add Store + Owner</ThemedText>
+                  </Pressable>
+                  <Pressable 
+                    style={[styles.button, styles.buttonSecondary, { borderColor: theme.border, marginLeft: Spacing.sm }]}
+                    onPress={() => {
+                      setSelectedStore(null);
+                      setShowStoreModal(true);
+                    }}
+                  >
+                    <Feather name="home" size={16} color={theme.text} />
+                    <ThemedText style={[styles.buttonText, { color: theme.text }]}>Add Store Only</ThemedText>
+                  </Pressable>
+                </>
+              )}
               {activeTab === 'promotions' && (
                 <Pressable 
                   style={[styles.button, styles.buttonPrimary]}
@@ -1958,8 +2114,6 @@ const handleStoreOwnerSubmit = (data: any) => {
                   <ThemedText style={[styles.buttonText, { color: '#fff' }]}>Add Promotion</ThemedText>
                 </Pressable>
               )}
-
-
             </View>
           </View>
 
@@ -2010,66 +2164,67 @@ const handleStoreOwnerSubmit = (data: any) => {
                       </ThemedText>
                       <ThemedText style={[styles.statSubtext, { color: theme.textSecondary }]}>Per order</ThemedText>
                     </View>
-                    {/* Enhanced Financial Breakdown */}
-{globalTotals && (
-  <View style={styles.contentSection}>
-    <View style={styles.sectionHeader}>
-      <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
-        💰 Financial Breakdown
-      </ThemedText>
-    </View>
-    
-    <View style={styles.metricsRow}>
-      <View style={styles.metricBox}>
-        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
-          COD Collected
-        </ThemedText>
-        <ThemedText style={[styles.metricBoxValue, { color: theme.success }]}>
-          {formatCurrency(globalTotals.codCollected)}
-        </ThemedText>
-        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
-          Cash received
-        </ThemedText>
-      </View>
-      
-      <View style={styles.metricBox}>
-        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
-          COD Outstanding
-        </ThemedText>
-        <ThemedText style={[styles.metricBoxValue, { color: theme.warning }]}>
-          {formatCurrency(globalTotals.codPending)}
-        </ThemedText>
-        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
-          Pending collection
-        </ThemedText>
-      </View>
-      
-      <View style={styles.metricBox}>
-        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
-          Revenue Mix
-        </ThemedText>
-        <ThemedText style={[styles.metricBoxValue, { color: theme.primary }]}>
-          85% / 15%
-        </ThemedText>
-        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
-          Products / Delivery
-        </ThemedText>
-      </View>
-      
-      <View style={styles.metricBox}>
-        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
-          Est. Net Margin
-        </ThemedText>
-        <ThemedText style={[styles.metricBoxValue, { color: theme.secondary }]}>
-          ~8-10%
-        </ThemedText>
-        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
-          After all costs
-        </ThemedText>
-      </View>
-    </View>
-  </View>
-)}
+                  </View>
+                )}
+
+                {/* FINANCIAL BREAKDOWN */}
+                {globalTotals && (
+                  <View style={styles.contentSection}>
+                    <View style={styles.sectionHeader}>
+                      <ThemedText style={{ fontSize: 18, fontWeight: '700' }}>
+                        💰 Financial Breakdown
+                      </ThemedText>
+                    </View>
+                    
+                    <View style={styles.metricsRow}>
+                      <View style={styles.metricBox}>
+                        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+                          COD Collected
+                        </ThemedText>
+                        <ThemedText style={[styles.metricBoxValue, { color: theme.success }]}>
+                          {formatCurrency(globalTotals.codCollected)}
+                        </ThemedText>
+                        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+                          Cash received
+                        </ThemedText>
+                      </View>
+                      
+                      <View style={styles.metricBox}>
+                        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+                          COD Outstanding
+                        </ThemedText>
+                        <ThemedText style={[styles.metricBoxValue, { color: theme.warning }]}>
+                          {formatCurrency(globalTotals.codPending)}
+                        </ThemedText>
+                        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+                          Pending collection
+                        </ThemedText>
+                      </View>
+                      
+                      <View style={styles.metricBox}>
+                        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+                          Revenue Mix
+                        </ThemedText>
+                        <ThemedText style={[styles.metricBoxValue, { color: theme.primary }]}>
+                          85% / 15%
+                        </ThemedText>
+                        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+                          Products / Delivery
+                        </ThemedText>
+                      </View>
+                      
+                      <View style={styles.metricBox}>
+                        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+                          Est. Net Margin
+                        </ThemedText>
+                        <ThemedText style={[styles.metricBoxValue, { color: theme.secondary }]}>
+                          ~8-10%
+                        </ThemedText>
+                        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+                          After all costs
+                        </ThemedText>
+                      </View>
+                    </View>
                   </View>
                 )}
 
@@ -2175,35 +2330,35 @@ const handleStoreOwnerSubmit = (data: any) => {
                             {store.isActive ? 'Active' : 'Inactive'}
                           </ThemedText>
                         </View>
-                      {store.owner && (
-              <View style={{ 
-                marginTop: Spacing.md, 
-                paddingTop: Spacing.md, 
-                borderTopWidth: 1, 
-                borderTopColor: theme.border 
-              }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginBottom: Spacing.xs }}>
-                  <Feather name="user" size={14} color={theme.primary} />
-                  <ThemedText style={{ fontSize: 13, fontWeight: '600', color: theme.primary }}>
-                    Store Owner
-                  </ThemedText>
-                </View>
-                <ThemedText style={{ fontSize: 14, fontWeight: '600' }}>
-                  {store.owner.user?.name || store.owner.user?.username || 'No name'}
-                </ThemedText>
-                {store.owner.user?.phone && (
-                  <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
-                    📱 {store.owner.user.phone}
-                  </ThemedText>
-                )}
-                {store.owner.user?.email && (
-                  <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
-                    ✉️ {store.owner.user.email}
-                  </ThemedText>
-                )}
-              </View>
-            )}
-          </View>
+                        {store.owner && (
+                          <View style={{ 
+                            marginTop: Spacing.md, 
+                            paddingTop: Spacing.md, 
+                            borderTopWidth: 1, 
+                            borderTopColor: theme.border 
+                          }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginBottom: Spacing.xs }}>
+                              <Feather name="user" size={14} color={theme.primary} />
+                              <ThemedText style={{ fontSize: 13, fontWeight: '600', color: theme.primary }}>
+                                Store Owner
+                              </ThemedText>
+                            </View>
+                            <ThemedText style={{ fontSize: 14, fontWeight: '600' }}>
+                              {store.owner.user?.name || store.owner.user?.username || 'No name'}
+                            </ThemedText>
+                            {store.owner.user?.phone && (
+                              <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
+                                📱 {store.owner.user.phone}
+                              </ThemedText>
+                            )}
+                            {store.owner.user?.email && (
+                              <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
+                                ✉️ {store.owner.user.email}
+                              </ThemedText>
+                            )}
+                          </View>
+                        )}
+                      </View>
                       <View style={styles.storeActions}>
                         <Pressable 
                           style={[styles.iconButton, { backgroundColor: theme.secondary + '15' }]}
@@ -2364,13 +2519,13 @@ const handleStoreOwnerSubmit = (data: any) => {
               <View style={styles.contentSection}>
                 {promotions.map((promo: Promotion) => (
                   <View key={promo.id} style={[styles.promotionCard, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, opacity: promo.isActive ? 1 : 0.6 }]}>
-                   {(promo.image || promo.bannerImage) && (
-                    <Image 
-                      source={{ uri: getImageUrl(promo.image || promo.bannerImage) }} // ADD getImageUrl here
-                      style={styles.promotionImage}
-                      resizeMode="cover"
-                    />
-                  )}
+                    {(promo.image || promo.bannerImage) && (
+                      <Image 
+                        source={{ uri: getImageUrl(promo.image || promo.bannerImage) }}
+                        style={styles.promotionImage}
+                        resizeMode="cover"
+                      />
+                    )}
                     
                     <View style={styles.promotionHeader}>
                       <View style={{ flex: 1 }}>
@@ -2467,10 +2622,7 @@ const handleStoreOwnerSubmit = (data: any) => {
                 )}
               </View>
             )}
-
-            
-
-       </ScrollView>
+          </ScrollView>
         </View>
       </View>
 
@@ -2516,13 +2668,13 @@ const handleStoreOwnerSubmit = (data: any) => {
         onDelete={selectedPromotion ? () => handlePromotionDelete(selectedPromotion) : undefined}
         isLoading={isSubmitting}
       />
-      <StoreWithOwnerModal
-  visible={showStoreOwnerModal}
-  onClose={() => setShowStoreOwnerModal(false)}
-  onSubmit={handleStoreOwnerSubmit}
-  isLoading={createStoreWithOwnerMutation.isPending}
-/>
 
+      <StoreWithOwnerModal
+        visible={showStoreOwnerModal}
+        onClose={() => setShowStoreOwnerModal(false)}
+        onSubmit={handleStoreOwnerSubmit}
+        isLoading={createStoreWithOwnerMutation.isPending}
+      />
     </ThemedView>
   );
 }

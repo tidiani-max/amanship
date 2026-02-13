@@ -4409,79 +4409,93 @@ app.patch("/api/staff/status", async (req, res) => {
 // ============================================
 // GEOCODING HELPER ENDPOINT
 // ============================================
+
+
 app.post("/api/admin/geocode", async (req, res) => {
   try {
     const { address } = req.body;
 
-    console.log(`🗺️ Geocoding address: ${address}`);
+    console.log(`🗺️ Geocoding request for address: "${address}"`);
 
-    if (!address) {
+    if (!address || !address.trim()) {
       return res.status(400).json({ error: "Address is required" });
     }
 
+    // Default Jakarta coordinates (fallback)
+    const defaultLocation = {
+      latitude: -6.2088,
+      longitude: 106.8456,
+      displayName: "Default Location (Jakarta, Indonesia)",
+      isDefault: true
+    };
+
     try {
-      const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
-      console.log(`Fetching: ${geocodeUrl}`);
+      // Clean and encode the address
+      const cleanAddress = address.trim();
+      // Add ", Indonesia" to improve results
+      const searchAddress = cleanAddress.includes("Indonesia") 
+        ? cleanAddress 
+        : `${cleanAddress}, Indonesia`;
       
-      const geoResponse = await fetch(geocodeUrl, {
-        headers: { 
-          'User-Agent': 'ZendO-App/1.0',
+      const encodedAddress = encodeURIComponent(searchAddress);
+      
+      // Use Nominatim API with better parameters
+      const geocodeUrl = `https://nominatim.openstreetmap.org/search?` +
+        `format=json&` +
+        `q=${encodedAddress}&` +
+        `limit=1&` +
+        `countrycodes=id&` + // Restrict to Indonesia
+        `addressdetails=1`;
+      
+      console.log(`📍 Fetching: ${geocodeUrl}`);
+      
+      const response = await fetch(geocodeUrl, {
+        headers: {
+          'User-Agent': 'ZendO-AdminPanel/1.0',
           'Accept': 'application/json'
         }
       });
 
-      if (!geoResponse.ok) {
-        console.error(`Nominatim API error: ${geoResponse.status}`);
-        // Return default Jakarta coordinates instead of error
-        return res.json({
-          latitude: -6.2088,
-          longitude: 106.8456,
-          displayName: "Default location (Jakarta) - geocoding service unavailable",
-          isDefault: true
-        });
+      if (!response.ok) {
+        console.warn(`⚠️ Nominatim API returned ${response.status}`);
+        return res.json(defaultLocation);
       }
 
-      const geoData = await geoResponse.json();
-      console.log(`Geocoding response:`, geoData);
+      const data = await response.json();
+      console.log(`📦 Nominatim response:`, JSON.stringify(data, null, 2));
 
-      if (!geoData || geoData.length === 0) {
-        console.log(`❌ Location not found for: ${address}, using default`);
-        // Return default Jakarta coordinates instead of 404
-        return res.json({
-          latitude: -6.2088,
-          longitude: 106.8456,
-          displayName: "Default location (Jakarta) - address not found",
-          isDefault: true
-        });
+      if (data && data.length > 0) {
+        const location = data[0];
+        const result = {
+          latitude: parseFloat(location.lat),
+          longitude: parseFloat(location.lon),
+          displayName: location.display_name,
+          isDefault: false,
+          // Include more details for debugging
+          address: location.address || null,
+          boundingBox: location.boundingbox || null
+        };
+        
+        console.log(`✅ Geocoding successful:`, result);
+        return res.json(result);
+      } else {
+        console.log(`⚠️ No results found for "${searchAddress}", using default`);
+        return res.json(defaultLocation);
       }
-
-      const result = {
-        latitude: parseFloat(geoData[0].lat),
-        longitude: parseFloat(geoData[0].lon),
-        displayName: geoData[0].display_name,
-        isDefault: false
-      };
-
-      console.log(`✅ Geocoded:`, result);
-      res.json(result);
-    } catch (fetchError) {
-      console.error("Geocoding fetch error:", fetchError);
-      // Return default coordinates on any error
-      res.json({
-        latitude: -6.2088,
-        longitude: 106.8456,
-        displayName: "Default location (Jakarta) - geocoding error",
-        isDefault: true
-      });
+    } catch (geocodeError) {
+      console.error('❌ Geocoding request failed:', geocodeError);
+      return res.json(defaultLocation);
     }
+
   } catch (error) {
-    console.error("❌ Geocoding error:", error);
-    // Return default coordinates instead of 500 error
+    console.error("❌ Geocoding endpoint error:", error);
+    // Always return a valid response, never crash
     res.json({
       latitude: -6.2088,
       longitude: 106.8456,
-      displayName: "Default location (Jakarta)",
-      isDefault: true
+      displayName: "Default Location (Jakarta, Indonesia)",
+      isDefault: true,
+      error: error instanceof Error ? error.message : "Unknown error"
     });
   }
 });
@@ -5883,6 +5897,137 @@ app.delete("/api/admin/promotions/:id", async (req, res) => {
 });
 
 
+
+// ==========================================
+// ADD THIS ENDPOINT TO YOUR routes.ts FILE
+// Place it AFTER your existing /api/admin/stores POST endpoint
+// (Around line 1550 in your routes.ts)
+// ==========================================
+
+// ✅ CREATE STORE WITH OWNER (Atomic Transaction)
+app.post("/api/admin/stores-with-owner", async (req, res) => {
+  try {
+    const {
+      userId, // admin user ID for verification
+      storeName,
+      storeAddress,
+      storeLatitude,
+      storeLongitude,
+      codAllowed,
+      ownerName,
+      ownerPhone,
+      ownerEmail,
+      tempPassword
+    } = req.body;
+
+    console.log("👨‍💼 Creating store with owner:", { storeName, ownerPhone });
+
+    // Validate admin access
+    const [adminUser] = await db.select().from(users).where(eq(users.id, userId));
+    if (!adminUser || (adminUser.role !== "admin" && userId !== "demo-user")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    // Validate required fields
+    if (!storeName || !storeAddress || !ownerName || !ownerPhone) {
+      return res.status(400).json({ 
+        error: "Store name, address, owner name, and phone are required" 
+      });
+    }
+
+    // Check if phone number already exists
+    const [existingUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.phone, ownerPhone))
+      .limit(1);
+
+    if (existingUser) {
+      return res.status(400).json({ 
+        error: `Phone number ${ownerPhone} is already registered` 
+      });
+    }
+
+    // Hash the temporary password
+    const hashedPassword = await hashPassword(tempPassword);
+
+    // ✅ ATOMIC TRANSACTION: Create store + owner + link them
+    const result = await db.transaction(async (tx) => {
+      // 1. Create the store
+      const [store] = await tx
+        .insert(stores)
+        .values({
+          name: storeName,
+          address: storeAddress,
+          latitude: String(storeLatitude || -6.2088),
+          longitude: String(storeLongitude || 106.8456),
+          isActive: true,
+          codAllowed: codAllowed ?? true,
+        })
+        .returning();
+
+      console.log(`✅ Store created: ${store.id}`);
+
+      // 2. Create the owner user account
+      const [ownerUser] = await tx
+        .insert(users)
+        .values({
+          phone: ownerPhone,
+          email: ownerEmail || null,
+          name: ownerName,
+          username: ownerPhone.replace(/\s/g, ''), // Remove spaces from phone for username
+          password: hashedPassword,
+          role: 'store_owner',
+          firstLogin: true, // Force password reset on first login
+        })
+        .returning();
+
+      console.log(`✅ Owner user created: ${ownerUser.id}`);
+
+      // 3. Link owner to store
+      const [storeOwner] = await tx
+        .insert(storeOwners)
+        .values({
+          userId: ownerUser.id,
+          storeId: store.id,
+        })
+        .returning();
+
+      console.log(`✅ Store-Owner link created: ${storeOwner.id}`);
+
+      return { store, ownerUser, storeOwner };
+    });
+
+    console.log(`🎉 Successfully created store "${storeName}" with owner ${ownerPhone}`);
+
+    res.status(201).json({
+      success: true,
+      message: `Store "${storeName}" created! Owner account: ${ownerPhone}. Share the temporary password with the owner: ${tempPassword}`,
+      store: {
+        id: result.store.id,
+        name: result.store.name,
+        address: result.store.address,
+      },
+      owner: {
+        id: result.ownerUser.id,
+        name: result.ownerUser.name,
+        phone: result.ownerUser.phone,
+        email: result.ownerUser.email,
+      },
+      credentials: {
+        phone: ownerPhone,
+        tempPassword, // Return this so admin can share with owner
+        message: "Owner must reset password on first login"
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Create store with owner error:", error);
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : "Failed to create store with owner" 
+    });
+  }
+});
 
 
 // ===== HOME: GET PROMOTION BANNERS FROM NEAREST STORES =====
