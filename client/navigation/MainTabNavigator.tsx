@@ -133,6 +133,7 @@ export default function MainTabNavigator() {
           options={{
             tabBarLabel: "PROFILE",
             tabBarIcon: ({ color }) => <Feather name="user" size={20} color={color} />,
+            tabBarStyle: { display: 'none' },
           }}
         />
       </Tab.Navigator>

@@ -60,6 +60,10 @@ export default function AccountScreen() {
     ]);
   };
 
+  const handleBackPress = () => {
+    navigation.goBack();
+  };
+
   return (
     <ThemedView style={[styles.container, { backgroundColor: '#F8F9FE' }]}>
       <ScrollView
@@ -68,6 +72,15 @@ export default function AccountScreen() {
       >
         {/* PREMIUM HEADER */}
         <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
+          {/* Back Button */}
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={handleBackPress}
+            activeOpacity={0.7}
+          >
+            <Feather name="arrow-left" size={24} color="#1e293b" />
+          </TouchableOpacity>
+
           <View style={styles.profileContainer}>
             <View style={styles.avatarWrapper}>
               <View style={styles.avatar}>
@@ -162,6 +175,15 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowRadius: 10,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   profileContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   avatarWrapper: { position: 'relative' },

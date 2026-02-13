@@ -3639,7 +3639,7 @@ console.log("👑 Registering admin routes...");
 // ADMIN METRICS ENDPOINT - Enhanced with financials
 
 // ============================================
-// FIXED ADMIN METRICS ENDPOINT
+// FIXED ADMIN METRICS ENDPOINTs
 // Replace the existing /api/admin/metrics endpoint with this version
 // ============================================
 
@@ -8327,6 +8327,8 @@ app.post("/api/automation/trigger-scan", async (req, res) => {
 });
 
 console.log("✅ Smart Grocery Automation routes registered");
+
+
 
 
 
