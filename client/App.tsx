@@ -20,12 +20,7 @@ import { LocationProvider } from "@/context/LocationContext";
 import { OnboardingProvider } from "@/context/OnboardingContext";
 import { SearchProvider } from "@/context/SearchContext";
 import { NotificationAlertProvider } from "@/components/NotificationAlertProvider";
-
-
-
-
-
-
+import { ThemeProvider } from "@/context/ThemeContext"; // ← ADD THIS IMPORT
 
 // 1. SILENCE ALL ERRORS & WARNINGS (This stops the red/yellow boxes)
 LogBox.ignoreAllLogs();
@@ -97,27 +92,30 @@ function AppContent() {
  * Organized with Data Providers -> Auth -> Location -> Cart -> Content
  * 
  * ✅ CORRECT ORDER:
+ * - ThemeProvider at the TOP (provides theme to all components)
  * - LocationProvider BEFORE CartProvider (CartProvider uses useLocation)
  */
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <OnboardingProvider>
-          <LanguageProvider>
-            <SearchProvider>
-              <LocationProvider>  {/* ✅ MOVED UP - Must come before CartProvider */}
-                <CartProvider>    {/* ✅ Now this can use useLocation() */}
-                  {/* ErrorBoundary wraps the content to prevent total app crash */}
-                  <ErrorBoundary>
-                    <AppContent />
-                  </ErrorBoundary>
-                </CartProvider>
-              </LocationProvider>
-            </SearchProvider>
-          </LanguageProvider>
-        </OnboardingProvider>
-      </AuthProvider>
+      <ThemeProvider>          {/* ← ADD THIS - Wraps everything for dark mode support */}
+        <AuthProvider>
+          <OnboardingProvider>
+            <LanguageProvider>
+              <SearchProvider>
+                <LocationProvider>  {/* ✅ MOVED UP - Must come before CartProvider */}
+                  <CartProvider>    {/* ✅ Now this can use useLocation() */}
+                    {/* ErrorBoundary wraps the content to prevent total app crash */}
+                    <ErrorBoundary>
+                      <AppContent />
+                    </ErrorBoundary>
+                  </CartProvider>
+                </LocationProvider>
+              </SearchProvider>
+            </LanguageProvider>
+          </OnboardingProvider>
+        </AuthProvider>
+      </ThemeProvider>          {/* ← ADD THIS */}
     </QueryClientProvider>
   );
 }
@@ -125,22 +123,6 @@ export default function App() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFFFFF', // This is fine - will be overridden by themed components
   },
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -24,10 +24,17 @@ export function ThemedText({
   const { theme, isDark } = useTheme();
   const { language } = useLanguage();
 
+  // ✅ FIXED: Properly get color based on theme
   const getColor = () => {
+    // If custom colors provided, use them
     if (isDark && darkColor) return darkColor;
     if (!isDark && lightColor) return lightColor;
+    
+    // Otherwise use theme colors based on type
     if (type === "link") return theme.link;
+    if (type === "caption" || type === "small") return theme.textSecondary;
+    
+    // Default to theme.text (this fixes your dark mode!)
     return theme.text;
   };
 
@@ -45,12 +52,6 @@ export function ThemedText({
     }
   };
 
-  /**
-   * SAFETY LOGIC: 
-   * 1. If noTranslate is active, return original.
-   * 2. If children isn't a string, return original.
-   * 3. If autoTranslate returns an empty result, fallback to original children.
-   */
   const translatedChildren = useMemo(() => {
     if (noTranslate || typeof children !== 'string' || !children.trim()) {
       return children;
@@ -58,7 +59,6 @@ export function ThemedText({
 
     try {
       const result = autoTranslate(children, language);
-      // If result is null/undefined/empty, we MUST show the original children
       return result && result.length > 0 ? result : children;
     } catch (error) {
       console.warn("Translation failed for:", children);
@@ -68,7 +68,11 @@ export function ThemedText({
 
   return (
     <Text 
-      style={[{ color: getColor() }, getTypeStyle(), style]} 
+      style={[
+        { color: getColor() }, // ✅ This now uses theme.text in dark mode
+        getTypeStyle(), 
+        style
+      ]} 
       {...rest}
     >
       {translatedChildren}
