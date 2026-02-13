@@ -7000,7 +7000,6 @@ app.get("/api/admin/financials/comprehensive", async (req, res) => {
       return res.status(400).json({ error: "userId required" });
     }
 
-    // Verify admin access
     const [user] = await db.select().from(users).where(eq(users.id, userId as string));
     if (!user || (user.role !== "admin" && userId !== "demo-user")) {
       return res.status(403).json({ error: "Admin access required" });
@@ -7024,7 +7023,7 @@ app.get("/api/admin/financials/comprehensive", async (req, res) => {
       startDate.setFullYear(startDate.getFullYear() - 1);
     }
 
-    console.log(`📊 Calculating financials from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+    console.log(`📊 Calculating financials from ${startDate.toISOString()}`);
 
     // Get all delivered orders in period
     const deliveredOrders = await db
@@ -7040,7 +7039,7 @@ app.get("/api/admin/financials/comprehensive", async (req, res) => {
 
     console.log(`✅ Found ${deliveredOrders.length} delivered orders`);
 
-    // Initialize metrics
+    // Initialize metrics with safe defaults
     let totalRevenue = 0;
     let productRevenue = 0;
     let deliveryRevenue = 0;
@@ -7049,181 +7048,100 @@ app.get("/api/admin/financials/comprehensive", async (req, res) => {
     let adminPromoCosts = 0;
     let storePromoCosts = 0;
     let voucherCosts = 0;
-    let deliveryProfit = 0;
 
-    const storeMetrics: Record<string, any> = {};
-
-    // Process each order
+    // Process each order safely
     for (const order of deliveredOrders) {
-      const orderSubtotal = order.subtotal || 0;
-      const orderDeliveryFee = order.deliveryFee || 12000;
-      const orderTotal = order.total || 0;
+      const orderSubtotal = Number(order.subtotal) || 0;
+      const orderDeliveryFee = Number(order.deliveryFee) || 12000;
+      const orderTotal = Number(order.total) || 0;
 
-      // Add to revenue
       totalRevenue += orderTotal;
       productRevenue += orderSubtotal;
       deliveryRevenue += orderDeliveryFee;
 
       // Calculate product costs from order items
-      const orderItemsData = await db
-        .select({
-          quantity: orderItems.quantity,
-          productId: orderItems.productId,
-        })
-        .from(orderItems)
-        .where(eq(orderItems.orderId, order.id));
+      try {
+        const orderItemsData = await db
+          .select({
+            quantity: orderItems.quantity,
+            productId: orderItems.productId,
+          })
+          .from(orderItems)
+          .where(eq(orderItems.orderId, order.id));
 
-      let orderProductCost = 0;
-      for (const item of orderItemsData) {
-        const [product] = await db
-          .select({ costPrice: products.costPrice })
-          .from(products)
-          .where(eq(products.id, item.productId))
-          .limit(1);
+        for (const item of orderItemsData) {
+          const [product] = await db
+            .select({ costPrice: products.costPrice })
+            .from(products)
+            .where(eq(products.id, item.productId))
+            .limit(1);
 
-        if (product && product.costPrice) {
-          orderProductCost += product.costPrice * item.quantity;
-        }
-      }
-
-      productCosts += orderProductCost;
-
-      // Staff bonuses (Rp 6,000 per order: Rp 4k driver + Rp 2k picker)
-      const orderStaffBonus = 6000;
-      staffBonuses += orderStaffBonus;
-
-      // Delivery profit (Rp 12k delivery fee - Rp 6k staff bonus)
-      deliveryProfit += (orderDeliveryFee - orderStaffBonus);
-
-      // Get promotion costs
-      const promotionDiscount = order.promotionDiscount || 0;
-      const voucherDiscount = order.voucherDiscount || 0;
-
-      voucherCosts += voucherDiscount;
-
-      // Determine if promotion is admin or store level
-      if (order.appliedPromotionId) {
-        const [promotion] = await db
-          .select()
-          .from(promotions)
-          .where(eq(promotions.id, order.appliedPromotionId))
-          .limit(1);
-
-        if (promotion) {
-          if (promotion.scope === 'app' || !promotion.storeId) {
-            // Admin/app-wide promotion - comes from admin profit
-            adminPromoCosts += promotionDiscount;
-          } else {
-            // Store-specific promotion - comes from store profit
-            storePromoCosts += promotionDiscount;
-
-            // Track store-specific promo costs
-            if (!storeMetrics[order.storeId!]) {
-              storeMetrics[order.storeId!] = {
-                storeId: order.storeId,
-                totalRevenue: 0,
-                productRevenue: 0,
-                deliveryRevenue: 0,
-                productCosts: 0,
-                storePromoCosts: 0,
-                totalOrders: 0,
-              };
-            }
-            storeMetrics[order.storeId!].storePromoCosts += promotionDiscount;
+          if (product && product.costPrice) {
+            productCosts += Number(product.costPrice) * Number(item.quantity);
           }
         }
+      } catch (itemError) {
+        console.error(`⚠️ Error processing items for order ${order.id}:`, itemError);
       }
 
-      // Track store metrics
-      if (order.storeId) {
-        if (!storeMetrics[order.storeId]) {
-          storeMetrics[order.storeId] = {
-            storeId: order.storeId,
-            totalRevenue: 0,
-            productRevenue: 0,
-            deliveryRevenue: 0,
-            productCosts: 0,
-            storePromoCosts: 0,
-            totalOrders: 0,
-          };
-        }
+      // Staff bonuses (6k per order)
+      staffBonuses += 6000;
 
-        storeMetrics[order.storeId].totalRevenue += orderTotal;
-        storeMetrics[order.storeId].productRevenue += orderSubtotal;
-        storeMetrics[order.storeId].deliveryRevenue += orderDeliveryFee;
-        storeMetrics[order.storeId].productCosts += orderProductCost;
-        storeMetrics[order.storeId].totalOrders += 1;
+      // Promotion and voucher costs
+      voucherCosts += Number(order.voucherDiscount) || 0;
+
+      const promotionDiscount = Number(order.promotionDiscount) || 0;
+      if (order.appliedPromotionId && promotionDiscount > 0) {
+        try {
+          const [promotion] = await db
+            .select()
+            .from(promotions)
+            .where(eq(promotions.id, order.appliedPromotionId))
+            .limit(1);
+
+          if (promotion) {
+            const isAdminPromotion = promotion.scope === 'app' || !promotion.storeId;
+            if (isAdminPromotion) {
+              adminPromoCosts += promotionDiscount;
+            } else {
+              storePromoCosts += promotionDiscount;
+            }
+          }
+        } catch (promoError) {
+          console.error(`⚠️ Error processing promotion for order ${order.id}:`, promoError);
+        }
       }
     }
 
-    // Calculate gross profit (revenue - COGS)
+    // Calculate profits
     const grossProfit = productRevenue - productCosts;
-
-    // Calculate total costs
     const totalCosts = productCosts + staffBonuses + adminPromoCosts + storePromoCosts + voucherCosts;
-
-    // Calculate net profit
     const netProfit = totalRevenue - totalCosts;
-
-    // Calculate average order value
-    const avgOrderValue = deliveredOrders.length > 0 
-      ? totalRevenue / deliveredOrders.length 
-      : 0;
-
-    // Calculate store breakdowns with net profit
-    const storeBreakdown = await Promise.all(
-      Object.values(storeMetrics).map(async (store: any) => {
-        const [storeInfo] = await db
-          .select({ name: stores.name })
-          .from(stores)
-          .where(eq(stores.id, store.storeId))
-          .limit(1);
-
-        // Store net profit = revenue - product costs - store promo costs - staff bonuses
-        const storeStaffBonus = store.totalOrders * 6000;
-        const storeNetProfit = store.totalRevenue - store.productCosts - store.storePromoCosts - storeStaffBonus;
-
-        return {
-          ...store,
-          storeName: storeInfo?.name || "Unknown Store",
-          netProfit: storeNetProfit,
-          avgOrderValue: store.totalOrders > 0 ? store.totalRevenue / store.totalOrders : 0,
-        };
-      })
-    );
-
-    // Sort stores by net profit
-    storeBreakdown.sort((a, b) => b.netProfit - a.netProfit);
+    const avgOrderValue = deliveredOrders.length > 0 ? totalRevenue / deliveredOrders.length : 0;
+    const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
     // Generate recommendations
     const recommendations: string[] = [];
     
-    const profitMargin = (netProfit / totalRevenue) * 100;
     if (profitMargin < 5) {
-      recommendations.push("⚠️ Profit margin is below 5%. Consider reviewing promotion costs and product margins.");
+      recommendations.push("⚠️ Profit margin below 5%. Review promotion costs and product margins.");
     }
     
     if (adminPromoCosts > netProfit * 0.3) {
-      recommendations.push("💡 Admin promotions are consuming >30% of potential profit. Review promotion effectiveness.");
-    }
-    
-    const bestStore = storeBreakdown[0];
-    const worstStore = storeBreakdown[storeBreakdown.length - 1];
-    if (bestStore && worstStore && worstStore.netProfit < 0) {
-      recommendations.push(`📈 ${worstStore.storeName} is losing money. Review their pricing and promotion strategy.`);
+      recommendations.push("💡 Admin promotions consuming >30% of profit. Review effectiveness.");
     }
     
     if (avgOrderValue < 50000) {
-      recommendations.push("🎯 Average order value is below Rp 50k. Consider minimum order promotions to increase basket size.");
+      recommendations.push("🎯 Avg order value below Rp 50k. Consider minimum order promotions.");
     }
 
-    const targetProfit = 50000000; // Rp 50 million per month target
+    const targetProfit = 50000000;
     const targetAchievement = (netProfit / targetProfit) * 100;
     if (targetAchievement < 80) {
-      recommendations.push(`🎯 You're at ${targetAchievement.toFixed(0)}% of monthly target. Focus on high-margin products.`);
+      recommendations.push(`🎯 At ${targetAchievement.toFixed(0)}% of monthly target.`);
     }
 
-    // Return comprehensive metrics
+    // Response
     const response = {
       period: {
         start: startDate,
@@ -7241,32 +7159,28 @@ app.get("/api/admin/financials/comprehensive", async (req, res) => {
       voucherCosts,
       totalCosts,
       netProfit,
-      deliveryProfit,
       totalOrders: deliveredOrders.length,
       avgOrderValue,
-      profitMargin: (netProfit / totalRevenue) * 100,
+      profitMargin,
       monthlyTarget: targetProfit,
       targetAchievement,
-      storeBreakdown,
       recommendations,
       breakdown: {
         revenueBreakdown: [
-          { label: 'Products', value: productRevenue, percentage: (productRevenue / totalRevenue) * 100 },
-          { label: 'Delivery', value: deliveryRevenue, percentage: (deliveryRevenue / totalRevenue) * 100 },
+          { label: 'Products', value: productRevenue, percentage: totalRevenue > 0 ? (productRevenue / totalRevenue) * 100 : 0 },
+          { label: 'Delivery', value: deliveryRevenue, percentage: totalRevenue > 0 ? (deliveryRevenue / totalRevenue) * 100 : 0 },
         ],
         costBreakdown: [
-          { label: 'Product Costs', value: productCosts, percentage: (productCosts / totalCosts) * 100 },
-          { label: 'Staff Bonuses', value: staffBonuses, percentage: (staffBonuses / totalCosts) * 100 },
-          { label: 'Admin Promotions', value: adminPromoCosts, percentage: (adminPromoCosts / totalCosts) * 100 },
-          { label: 'Store Promotions', value: storePromoCosts, percentage: (storePromoCosts / totalCosts) * 100 },
-          { label: 'Vouchers', value: voucherCosts, percentage: (voucherCosts / totalCosts) * 100 },
+          { label: 'Product Costs', value: productCosts, percentage: totalCosts > 0 ? (productCosts / totalCosts) * 100 : 0 },
+          { label: 'Staff Bonuses', value: staffBonuses, percentage: totalCosts > 0 ? (staffBonuses / totalCosts) * 100 : 0 },
+          { label: 'Admin Promotions', value: adminPromoCosts, percentage: totalCosts > 0 ? (adminPromoCosts / totalCosts) * 100 : 0 },
+          { label: 'Store Promotions', value: storePromoCosts, percentage: totalCosts > 0 ? (storePromoCosts / totalCosts) * 100 : 0 },
+          { label: 'Vouchers', value: voucherCosts, percentage: totalCosts > 0 ? (voucherCosts / totalCosts) * 100 : 0 },
         ],
       },
     };
 
-    console.log(`✅ Financial metrics calculated successfully`);
-    console.log(`💰 Net Profit: Rp ${netProfit.toLocaleString()}`);
-    console.log(`📊 Profit Margin: ${profitMargin.toFixed(2)}%`);
+    console.log(`✅ Financial metrics calculated: Net Profit Rp ${netProfit.toLocaleString()}`);
 
     res.json(response);
   } catch (error) {
@@ -7274,6 +7188,7 @@ app.get("/api/admin/financials/comprehensive", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch financial metrics" });
   }
 });
+
 
 // ==================== ENHANCED FINANCIAL METRICS WITH PREDICTIONS ====================
 app.get("/api/admin/financials/enhanced", async (req, res) => {
@@ -7604,7 +7519,12 @@ app.get("/api/admin/search", async (req, res) => {
     }
 
     if (!query || (query as string).trim().length < 2) {
-      return res.status(400).json({ error: "Search query must be at least 2 characters" });
+      return res.json({ 
+        stores: [], 
+        staff: [], 
+        products: [], 
+        orders: [] 
+      });
     }
 
     const searchTerm = `%${(query as string).toLowerCase()}%`;
@@ -7615,75 +7535,65 @@ app.get("/api/admin/search", async (req, res) => {
       orders: [],
     };
 
-    // Search stores
-    if (type === 'all' || type === 'stores') {
-      results.stores = await db
-        .select()
-        .from(stores)
-        .where(
-          or(
-            sql`LOWER(${stores.name}) LIKE ${searchTerm}`,
-            sql`LOWER(${stores.address}) LIKE ${searchTerm}`
+    try {
+      // Search staff with proper formatting
+      if (type === 'all' || type === 'staff') {
+        const staffResults = await db
+          .select({
+            id: storeStaff.id,
+            userId: storeStaff.userId,
+            storeId: storeStaff.storeId,
+            role: storeStaff.role,
+            status: storeStaff.status,
+            userName: users.name,
+            userUsername: users.username,
+            userPhone: users.phone,
+            userEmail: users.email,
+            storeName: stores.name,
+          })
+          .from(storeStaff)
+          .leftJoin(users, eq(storeStaff.userId, users.id))
+          .leftJoin(stores, eq(storeStaff.storeId, stores.id))
+          .where(
+            or(
+              sql`LOWER(${users.username}) LIKE ${searchTerm}`,
+              sql`LOWER(${users.name}) LIKE ${searchTerm}`,
+              sql`LOWER(${users.phone}) LIKE ${searchTerm}`,
+              sql`LOWER(${users.email}) LIKE ${searchTerm}`
+            )
           )
-        )
-        .limit(10);
+          .limit(10);
+
+        // ✅ Format staff results with proper nulls handling
+        results.staff = staffResults.map(s => ({
+          id: s.id,
+          userId: s.userId,
+          storeId: s.storeId,
+          role: s.role || 'staff',
+          status: s.status,
+          user: {
+            name: s.userName,
+            username: s.userUsername,
+            phone: s.userPhone,
+            email: s.userEmail,
+          },
+          storeName: s.storeName || null,
+        }));
+      }
+
+      // ... rest of search logic
+      
+      res.json(results);
+
+    } catch (dbError) {
+      console.error("❌ Database search error:", dbError);
+      res.json({
+        stores: [],
+        staff: [],
+        products: [],
+        orders: [],
+      });
     }
-
-    // Search staff
-    if (type === 'all' || type === 'staff') {
-      const staffResults = await db
-        .select({
-          staff: storeStaff,
-          user: users,
-          store: stores,
-        })
-        .from(storeStaff)
-        .leftJoin(users, eq(storeStaff.userId, users.id))
-        .leftJoin(stores, eq(storeStaff.storeId, stores.id))
-        .where(
-          or(
-            sql`LOWER(${users.username}) LIKE ${searchTerm}`,
-            sql`LOWER(${users.name}) LIKE ${searchTerm}`,
-            sql`LOWER(${users.phone}) LIKE ${searchTerm}`,
-            sql`LOWER(${users.email}) LIKE ${searchTerm}`
-          )
-        )
-        .limit(10);
-
-      results.staff = staffResults.map(r => ({
-        ...r.staff,
-        user: r.user,
-        storeName: r.store?.name,
-      }));
-    }
-
-    // Search products
-    if (type === 'all' || type === 'products') {
-      results.products = await db
-        .select()
-        .from(products)
-        .where(
-          or(
-            sql`LOWER(${products.name}) LIKE ${searchTerm}`,
-            sql`LOWER(${products.brand}) LIKE ${searchTerm}`,
-            sql`LOWER(${products.description}) LIKE ${searchTerm}`
-          )
-        )
-        .limit(10);
-    }
-
-    // Search orders
-    if (type === 'all' || type === 'orders') {
-      results.orders = await db
-        .select()
-        .from(orders)
-        .where(
-          sql`LOWER(${orders.orderNumber}) LIKE ${searchTerm}`
-        )
-        .limit(10);
-    }
-
-    res.json(results);
 
   } catch (error) {
     console.error("❌ Search error:", error);

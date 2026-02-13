@@ -2227,80 +2227,106 @@ export default function AdminDashboardScreen() {
               
               {/* Search Results Dropdown */}
               {searchResults && searchQuery && (
-                <Card style={{
-                  marginTop: Spacing.sm,
-                  maxHeight: 400,
-                  maxWidth: 500,
-                  position: 'absolute',
-                  top: 90,
-                  left: 0,
-                  right: 0,
-                  zIndex: 1000,
-                  backgroundColor: theme.backgroundDefault,
-                  borderColor: theme.border,
-                }}>
-                  <ScrollView>
-                    {searchResults.stores?.length > 0 && (
-                      <View style={{ padding: Spacing.md }}>
-                        <ThemedText style={{ fontWeight: '600', marginBottom: Spacing.sm }}>
-                          Stores ({searchResults.stores.length})
-                        </ThemedText>
-                        {searchResults.stores.map((store: any) => (
-                          <Pressable 
-                            key={store.id}
-                            style={{ paddingVertical: Spacing.sm }}
-                            onPress={() => {
-                              setActiveTab('stores');
-                              setSearchQuery("");
-                              setSearchResults(null);
-                            }}
-                          >
-                            <ThemedText>{store.name}</ThemedText>
-                            <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
-                              {store.address}
-                            </ThemedText>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )}
-                    
-                    {searchResults.staff?.length > 0 && (
-                      <View style={{ padding: Spacing.md, borderTopWidth: 1, borderTopColor: theme.border }}>
-                        <ThemedText style={{ fontWeight: '600', marginBottom: Spacing.sm }}>
-                          Staff ({searchResults.staff.length})
-                        </ThemedText>
-                        {searchResults.staff.map((staff: any) => (
-                          <Pressable 
-                            key={staff.id}
-                            style={{ paddingVertical: Spacing.sm }}
-                            onPress={() => {
-                              setActiveTab('stores');
-                              setSearchQuery("");
-                              setSearchResults(null);
-                            }}
-                          >
-                            <ThemedText>{staff.user?.name || staff.user?.username}</ThemedText>
-                            <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
-                              {staff.role} • {staff.storeName}
-                            </ThemedText>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )}
-                    
-                    {!searchResults.stores?.length && 
-                     !searchResults.staff?.length && 
-                     !searchResults.products?.length && 
-                     !searchResults.orders?.length && (
-                      <View style={{ padding: Spacing.xl, alignItems: 'center' }}>
-                        <ThemedText style={{ color: theme.textSecondary }}>
-                          No results found
-                        </ThemedText>
-                      </View>
-                    )}
-                  </ScrollView>
-                </Card>
-              )}
+  <Card style={{
+    marginTop: Spacing.sm,
+    maxHeight: 400,
+    maxWidth: 500,
+    position: 'absolute',
+    top: 90,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    backgroundColor: theme.backgroundDefault,
+    borderColor: theme.border,
+  }}>
+    <ScrollView>
+      {searchResults.stores?.length > 0 && (
+        <View style={{ padding: Spacing.md }}>
+          <ThemedText style={{ fontWeight: '600', marginBottom: Spacing.sm }}>
+            Stores ({searchResults.stores.length})
+          </ThemedText>
+          {searchResults.stores.map((store: any) => (
+            <Pressable 
+              key={store.id}
+              style={{ paddingVertical: Spacing.sm }}
+              onPress={() => {
+                setActiveTab('stores');
+                setSearchQuery("");
+                setSearchResults(null);
+              }}
+            >
+              <ThemedText>{store.name || 'Unknown Store'}</ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
+                {store.address || 'No address'}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+      )}
+      
+      {searchResults.staff?.length > 0 && (
+        <View style={{ padding: Spacing.md, borderTopWidth: 1, borderTopColor: theme.border }}>
+          <ThemedText style={{ fontWeight: '600', marginBottom: Spacing.sm }}>
+            Staff ({searchResults.staff.length})
+          </ThemedText>
+          {searchResults.staff.map((staff: any) => (
+            <Pressable 
+              key={staff.id || Math.random()}
+              style={{ paddingVertical: Spacing.sm }}
+              onPress={() => {
+                setActiveTab('stores');
+                setSearchQuery("");
+                setSearchResults(null);
+              }}
+            >
+              <ThemedText>
+                {staff.user?.name || staff.user?.username || 'Unknown Staff'}
+              </ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
+                {staff.role || 'Staff'}
+                {staff.storeName ? ` • ${staff.storeName}` : ''}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+      )}
+      
+      {searchResults.products?.length > 0 && (
+        <View style={{ padding: Spacing.md, borderTopWidth: 1, borderTopColor: theme.border }}>
+          <ThemedText style={{ fontWeight: '600', marginBottom: Spacing.sm }}>
+            Products ({searchResults.products.length})
+          </ThemedText>
+          {searchResults.products.map((product: any) => (
+            <Pressable 
+              key={product.id}
+              style={{ paddingVertical: Spacing.sm }}
+              onPress={() => {
+                setSearchQuery("");
+                setSearchResults(null);
+              }}
+            >
+              <ThemedText>{product.name || 'Unknown Product'}</ThemedText>
+              <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
+                {product.brand || 'Generic'}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+      )}
+      
+      {!searchResults.stores?.length && 
+       !searchResults.staff?.length && 
+       !searchResults.products?.length && 
+       !searchResults.orders?.length && (
+        <View style={{ padding: Spacing.xl, alignItems: 'center' }}>
+          <ThemedText style={{ color: theme.textSecondary }}>
+            No results found
+          </ThemedText>
+        </View>
+      )}
+    </ScrollView>
+  </Card>
+)}
             </View>
             
             <View style={styles.headerActions}>
