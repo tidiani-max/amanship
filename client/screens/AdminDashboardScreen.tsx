@@ -136,13 +136,22 @@ interface AdminMetrics {
 }
 
 // ===================== HELPERS =====================
-const formatCurrency = (amount: number) => {
+const formatCurrency = (amount: number | undefined | null) => {
+  const validAmount = Number(amount) || 0;
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(amount);
+  }).format(validAmount);
+};
+
+const safeNumber = (value: any): number => {
+  return Number(value) || 0;
+};
+const safeText = (value: any, fallback: string = '') => {
+  if (value === null || value === undefined) return fallback;
+  return String(value);
 };
 
 const confirmAction = (title: string, message: string, onConfirm: () => void) => {
@@ -2225,8 +2234,8 @@ export default function AdminDashboardScreen() {
                 )}
               </View>
               
-              {/* Search Results Dropdown */}
-              {searchResults && searchQuery && (
+            {/* Search Results Dropdown */}
+{searchResults && searchQuery && (
   <Card style={{
     marginTop: Spacing.sm,
     maxHeight: 400,
@@ -2283,8 +2292,10 @@ export default function AdminDashboardScreen() {
                 {staff.user?.name || staff.user?.username || 'Unknown Staff'}
               </ThemedText>
               <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>
-                {staff.role || 'Staff'}
-                {staff.storeName ? ` • ${staff.storeName}` : ''}
+                {[
+                  staff.role || 'Staff',
+                  staff.storeName
+                ].filter(Boolean).join(' • ')}
               </ThemedText>
             </Pressable>
           ))}
@@ -2430,16 +2441,16 @@ export default function AdminDashboardScreen() {
                     
                     <View style={styles.metricsRow}>
                       <View style={styles.metricBox}>
-                        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
-                          COD Collected
-                        </ThemedText>
-                        <ThemedText style={[styles.metricBoxValue, { color: theme.success }]}>
-                          {formatCurrency(globalTotals.codCollected)}
-                        </ThemedText>
-                        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
-                          Cash received
-                        </ThemedText>
-                      </View>
+  <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+    COD Collected
+  </ThemedText>
+  <ThemedText style={[styles.metricBoxValue, { color: theme.success }]}>
+    {formatCurrency(globalTotals.codCollected)}
+  </ThemedText>
+  <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+    Cash received
+  </ThemedText>
+</View>
                       
                       <View style={styles.metricBox}>
                         <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
@@ -2454,28 +2465,28 @@ export default function AdminDashboardScreen() {
                       </View>
                       
                       <View style={styles.metricBox}>
-                        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
-                          Revenue Mix
-                        </ThemedText>
-                        <ThemedText style={[styles.metricBoxValue, { color: theme.primary }]}>
-                          85% / 15%
-                        </ThemedText>
-                        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
-                          Products / Delivery
-                        </ThemedText>
-                      </View>
+  <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+    Revenue Mix
+  </ThemedText>
+  <ThemedText style={[styles.metricBoxValue, { color: theme.primary }]}>
+    {'85% / 15%'}
+  </ThemedText>
+  <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+    Products / Delivery
+  </ThemedText>
+</View>
                       
                       <View style={styles.metricBox}>
-                        <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
-                          Est. Net Margin
-                        </ThemedText>
-                        <ThemedText style={[styles.metricBoxValue, { color: theme.secondary }]}>
-                          ~8-10%
-                        </ThemedText>
-                        <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
-                          After all costs
-                        </ThemedText>
-                      </View>
+  <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+    Est. Net Margin
+  </ThemedText>
+  <ThemedText style={[styles.metricBoxValue, { color: theme.secondary }]}>
+    {'~8-10%'}
+  </ThemedText>
+  <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+    After all costs
+  </ThemedText>
+</View>
                     </View>
                   </View>
                 )}
@@ -2582,34 +2593,34 @@ export default function AdminDashboardScreen() {
                             {store.isActive ? 'Active' : 'Inactive'}
                           </ThemedText>
                         </View>
-                        {store.owner && (
-                          <View style={{ 
-                            marginTop: Spacing.md, 
-                            paddingTop: Spacing.md, 
-                            borderTopWidth: 1, 
-                            borderTopColor: theme.border 
-                          }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginBottom: Spacing.xs }}>
-                              <Feather name="user" size={14} color={theme.primary} />
-                              <ThemedText style={{ fontSize: 13, fontWeight: '600', color: theme.primary }}>
-                                Store Owner
-                              </ThemedText>
-                            </View>
-                            <ThemedText style={{ fontSize: 14, fontWeight: '600' }}>
-                              {store.owner.user?.name || store.owner.user?.username || 'No name'}
-                            </ThemedText>
-                            {store.owner.user?.phone && (
-                              <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
-                                📱 {store.owner.user.phone}
-                              </ThemedText>
-                            )}
-                            {store.owner.user?.email && (
-                              <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
-                                ✉️ {store.owner.user.email}
-                              </ThemedText>
-                            )}
-                          </View>
-                        )}
+                       {store.owner && (
+  <View style={{ 
+    marginTop: Spacing.md, 
+    paddingTop: Spacing.md, 
+    borderTopWidth: 1, 
+    borderTopColor: theme.border 
+  }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginBottom: Spacing.xs }}>
+      <Feather name="user" size={14} color={theme.primary} />
+      <ThemedText style={{ fontSize: 13, fontWeight: '600', color: theme.primary }}>
+        Store Owner
+      </ThemedText>
+    </View>
+    <ThemedText style={{ fontSize: 14, fontWeight: '600' }}>
+      {store.owner.user?.name || store.owner.user?.username || 'No name'}
+    </ThemedText>
+    {store.owner.user?.phone && (
+      <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
+        📱 {store.owner.user.phone}
+      </ThemedText>
+    )}
+    {store.owner.user?.email && (
+      <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
+        ✉️ {store.owner.user.email}
+      </ThemedText>
+    )}
+  </View>
+)}
                       </View>
                       <View style={styles.storeActions}>
                         <Pressable 
@@ -2876,14 +2887,194 @@ export default function AdminDashboardScreen() {
             )}
 
             {/* FINANCIALS TAB */}
+
+
+{/* FINANCIALS TAB */}
 {activeTab === 'financials' && (
   <View style={styles.contentSection}>
-    <ThemedText style={{ fontSize: 20, fontWeight: '700', marginBottom: Spacing.lg }}>
-      Financial Dashboard
-    </ThemedText>
-    <ThemedText style={{ color: theme.textSecondary }}>
-      Comprehensive financial reporting coming soon...
-    </ThemedText>
+    {!financialMetrics ? (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <ThemedText style={{ marginTop: Spacing.md, color: theme.textSecondary }}>
+          Loading financial data...
+        </ThemedText>
+      </View>
+    ) : (
+      <>
+        {/* Summary Cards */}
+        <View style={styles.statsGrid}>
+          <View style={[styles.statCard, { backgroundColor: theme.success + '10', borderColor: theme.success + '30' }]}>
+            <ThemedText style={[styles.statLabel, { color: theme.success }]}>Total Revenue</ThemedText>
+            <ThemedText style={[styles.statValue, { color: theme.success }]}>
+              {formatCurrency(financialMetrics.totalRevenue)}
+            </ThemedText>
+            <ThemedText style={[styles.statSubtext, { color: theme.textSecondary }]}>
+              {financialMetrics.totalOrders} orders
+            </ThemedText>
+          </View>
+          
+          <View style={[styles.statCard, { backgroundColor: theme.primary + '10', borderColor: theme.primary + '30' }]}>
+            <ThemedText style={[styles.statLabel, { color: theme.primary }]}>Net Profit</ThemedText>
+            <ThemedText style={[styles.statValue, { color: theme.primary }]}>
+              {formatCurrency(financialMetrics.netProfit)}
+            </ThemedText>
+            <ThemedText style={[styles.statSubtext, { color: theme.textSecondary }]}>
+              {financialMetrics.profitMargin?.toFixed(1)}% margin
+            </ThemedText>
+          </View>
+          
+          <View style={[styles.statCard, { backgroundColor: theme.warning + '10', borderColor: theme.warning + '30' }]}>
+            <ThemedText style={[styles.statLabel, { color: theme.warning }]}>Total Costs</ThemedText>
+            <ThemedText style={[styles.statValue, { color: theme.warning }]}>
+              {formatCurrency(financialMetrics.costs?.total || 0)}
+            </ThemedText>
+            <ThemedText style={[styles.statSubtext, { color: theme.textSecondary }]}>
+              All expenses
+            </ThemedText>
+          </View>
+          
+          <View style={[styles.statCard, { backgroundColor: theme.secondary + '10', borderColor: theme.secondary + '30' }]}>
+            <ThemedText style={[styles.statLabel, { color: theme.secondary }]}>Avg Order</ThemedText>
+            <ThemedText style={[styles.statValue, { color: theme.secondary }]}>
+              {formatCurrency(financialMetrics.summary?.avgOrderValue || 0)}
+            </ThemedText>
+            <ThemedText style={[styles.statSubtext, { color: theme.textSecondary }]}>
+              Per transaction
+            </ThemedText>
+          </View>
+        </View>
+
+        {/* Revenue Breakdown */}
+        <View style={{ marginTop: Spacing.xl }}>
+          <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: Spacing.lg }}>
+            Revenue Breakdown
+          </ThemedText>
+          
+          <View style={styles.metricsRow}>
+            <View style={styles.metricBox}>
+              <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+                Product Revenue
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxValue, { color: theme.success }]}>
+                {formatCurrency(financialMetrics.revenue?.product || 0)}
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+                Main income
+              </ThemedText>
+            </View>
+            
+            <View style={styles.metricBox}>
+              <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+                Delivery Fees
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxValue, { color: theme.primary }]}>
+                {formatCurrency(financialMetrics.revenue?.delivery || 0)}
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+                Service fees
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+
+        {/* Cost Breakdown */}
+        <View style={{ marginTop: Spacing.xl }}>
+          <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: Spacing.lg }}>
+            Cost Breakdown
+          </ThemedText>
+          
+          <View style={styles.metricsRow}>
+            <View style={styles.metricBox}>
+              <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+                Product Costs
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxValue, { color: theme.error }]}>
+                {formatCurrency(financialMetrics.costs?.productCosts || 0)}
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+                Cost of goods
+              </ThemedText>
+            </View>
+            
+            <View style={styles.metricBox}>
+              <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+                Staff Bonuses
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxValue, { color: theme.warning }]}>
+                {formatCurrency(financialMetrics.costs?.staffBonuses || 0)}
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+                Picker + Driver
+              </ThemedText>
+            </View>
+            
+            <View style={styles.metricBox}>
+              <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+                Admin Promos
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxValue, { color: theme.secondary }]}>
+                {formatCurrency(financialMetrics.costs?.adminPromotions || 0)}
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+                App-wide discounts
+              </ThemedText>
+            </View>
+            
+            <View style={styles.metricBox}>
+              <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+                Store Promos
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxValue, { color: theme.secondary }]}>
+                {formatCurrency(financialMetrics.costs?.storePromotions || 0)}
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+                Store-specific
+              </ThemedText>
+            </View>
+            
+            <View style={styles.metricBox}>
+              <ThemedText style={[styles.metricBoxLabel, { color: theme.textSecondary }]}>
+                Vouchers
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxValue, { color: theme.warning }]}>
+                {formatCurrency(financialMetrics.costs?.vouchers || 0)}
+              </ThemedText>
+              <ThemedText style={[styles.metricBoxSub, { color: theme.textSecondary }]}>
+                Customer vouchers
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+
+        {/* Recommendations */}
+        {financialMetrics.recommendations && financialMetrics.recommendations.length > 0 && (
+          <View style={{ marginTop: Spacing.xl }}>
+            <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: Spacing.lg }}>
+              💡 Recommendations
+            </ThemedText>
+            
+            {financialMetrics.recommendations.map((rec: string, idx: number) => (
+              <View 
+                key={idx}
+                style={[
+                  styles.infoBox, 
+                  { 
+                    backgroundColor: theme.warning + '10', 
+                    borderColor: theme.warning + '30',
+                    marginBottom: Spacing.md 
+                  }
+                ]}
+              >
+                <Feather name="alert-circle" size={16} color={theme.warning} />
+                <ThemedText style={{ flex: 1, marginLeft: Spacing.sm, fontSize: 14, color: theme.text }}>
+                  {rec}
+                </ThemedText>
+              </View>
+            ))}
+          </View>
+        )}
+      </>
+    )}
   </View>
 )}
           </ScrollView>

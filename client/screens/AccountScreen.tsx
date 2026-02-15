@@ -101,18 +101,7 @@ export default function AccountScreen() {
 
         <View style={styles.content}>
           {/* SECTION: WALLET & REWARDS */}
-          <View style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>REWARDS & PAYMENTS</ThemedText>
-            <Card style={styles.menuCard}>
-              <MenuItem icon="credit-card" label={t.account.paymentMethods} onPress={() => {}} />
-              <MenuItem 
-                icon="tag" 
-                label={t.account.myVouchers} 
-                onPress={() => navigation.navigate("Vouchers")} 
-                showBadge 
-              />
-            </Card>
-          </View>
+          
 
           {/* SECTION: ACCOUNT SETTINGS */}
           <View style={styles.section}>
@@ -147,7 +136,7 @@ export default function AccountScreen() {
             <ThemedText style={styles.sectionTitle}>SUPPORT</ThemedText>
             <Card style={styles.menuCard}>
               <MenuItem icon="help-circle" label={t.account.helpCenter} onPress={() => navigation.navigate("HelpCenter")} />
-              <MenuItem icon="info" label={t.account.about} onPress={() => navigation.navigate("About")} />
+              {/* <MenuItem icon="info" label={t.account.about} onPress={() => navigation.navigate("About")} /> */}
             </Card>
           </View>
 

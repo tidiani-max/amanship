@@ -1,5 +1,5 @@
 // Enhanced Picker Dashboard with FIXED PRICING - Cost Price Focus
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { 
   View, StyleSheet, ScrollView, RefreshControl, 
   Pressable, TextInput, Modal, Image, TouchableOpacity, ActivityIndicator, Alert 
@@ -64,7 +64,6 @@ interface Promotion {
 }
 
 // ==================== ORDER CARD COMPONENT ====================
-
 function OrderCard({ 
   order, 
   onUpdateStatus,
@@ -77,6 +76,7 @@ function OrderCard({
   userId: string;
 }) {
   const { theme } = useTheme();
+  const [itemsChecked, setItemsChecked] = useState<Set<string>>(new Set());
   
   const status = order?.status || "pending";
   const total = order?.total ? Number(order.total).toLocaleString() : "0";
@@ -101,6 +101,20 @@ function OrderCard({
     email: order.customerEmail || undefined,
   };
 
+  const handleCheckItem = (productId: string) => {
+    const newChecked = new Set(itemsChecked);
+    if (newChecked.has(productId)) {
+      newChecked.delete(productId);
+    } else {
+      newChecked.add(productId);
+    }
+    setItemsChecked(newChecked);
+  };
+
+  const progress = Array.isArray(order.items) 
+    ? Math.round((itemsChecked.size / order.items.length) * 100) 
+    : 0;
+
   return (
     <Card style={styles.orderCard}>
       <View style={styles.orderHeader}>
@@ -115,17 +129,158 @@ function OrderCard({
         <ThemedText style={styles.orderPrice}>Rp {total}</ThemedText>
       </View>
 
+      {/* ✅ PHASE 1: AI OPTIMIZATION BANNER */}
+      {order.aiOptimized && (
+        <View style={[styles.aiOptimizationBanner, { backgroundColor: '#10b981' + '15', borderColor: '#10b981' + '30' }]}>
+          <Feather name="zap" size={18} color="#10b981" />
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <ThemedText style={{ color: '#10b981', fontWeight: '700', fontSize: 13 }}>
+              🤖 AI Optimized Route - Pick in {order.estimatedPickTime}
+            </ThemedText>
+            <ThemedText style={{ color: '#059669', fontSize: 11, marginTop: 2 }}>
+              Save {order.timeSavings} vs random picking
+              {order.freshItemsCount > 0 && ` · ${order.freshItemsCount} fresh items prioritized`}
+            </ThemedText>
+          </View>
+        </View>
+      )}
+
+      {/* ✅ PHASE 1: PICKING PROGRESS BAR (when picking) */}
+      {status === "picking" && (
+        <View style={{ marginTop: 12, marginBottom: 8 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+            <ThemedText type="caption" style={{ color: theme.textSecondary, fontWeight: '600' }}>
+              Picking Progress
+            </ThemedText>
+            <ThemedText type="caption" style={{ color: theme.primary, fontWeight: '700' }}>
+              {itemsChecked.size}/{order.items?.length || 0} items ({progress}%)
+            </ThemedText>
+          </View>
+          <View style={[styles.progressBar, { backgroundColor: theme.backgroundTertiary }]}>
+            <View 
+              style={[
+                styles.progressFill, 
+                { 
+                  width: `${progress}%`, 
+                  backgroundColor: progress === 100 ? '#10b981' : theme.primary 
+                }
+              ]} 
+            />
+          </View>
+        </View>
+      )}
+
+      {/* ✅ PHASE 1: OPTIMIZED PICK SEQUENCE */}
       {Array.isArray(order.items) && order.items.length > 0 && (
-        <View style={{ marginTop: 10 }}>
-          {order.items.map((item: any, idx: number) => (
-            <View key={idx} style={{ flexDirection: "row", marginBottom: 8, alignItems: "center" }}>
-              <Image source={{ uri: getImageUrl(item.image) }} style={{ width: 40, height: 40, borderRadius: 6, marginRight: 10 }} />
-              <View style={{ flex: 1 }}>
-                <ThemedText type="body">{item.name}</ThemedText>
-                <ThemedText type="caption">Qty: {item.quantity} · 📍 {item.location || "N/A"}</ThemedText>
-              </View>
-            </View>
-          ))}
+        <View style={{ marginTop: 12 }}>
+          <ThemedText type="body" style={{ fontWeight: '700', marginBottom: 10, color: theme.text }}>
+            📋 Pick Items in This Order:
+          </ThemedText>
+          
+          {order.items.map((item: any, idx: number) => {
+            const isChecked = itemsChecked.has(item.productId);
+            const isPriority = item.priority === 'HIGH';
+            
+            return (
+              <Pressable
+                key={idx}
+                style={[
+                  styles.pickStepCard,
+                  { 
+                    backgroundColor: isChecked 
+                      ? theme.success + '15' 
+                      : isPriority 
+                        ? '#fef3c7' 
+                        : theme.backgroundTertiary,
+                    borderColor: isChecked 
+                      ? theme.success 
+                      : isPriority 
+                        ? '#f59e0b' 
+                        : theme.border,
+                  }
+                ]}
+                onPress={() => handleCheckItem(item.productId)}
+              >
+                {/* Pick Order Number Badge */}
+                <View 
+                  style={[
+                    styles.pickOrderBadge, 
+                    { 
+                      backgroundColor: isChecked 
+                        ? theme.success 
+                        : isPriority 
+                          ? '#f59e0b' 
+                          : theme.primary 
+                    }
+                  ]}
+                >
+                  {isChecked ? (
+                    <Feather name="check" size={16} color="white" />
+                  ) : (
+                    <ThemedText style={styles.pickOrderNumber}>{item.pickOrder || idx + 1}</ThemedText>
+                  )}
+                </View>
+
+                {/* Product Image */}
+                <Image 
+                  source={{ uri: getImageUrl(item.image) }} 
+                  style={[styles.pickItemImage, isChecked && { opacity: 0.6 }]} 
+                />
+
+                {/* Product Info */}
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <ThemedText 
+                      type="body" 
+                      style={[
+                        { fontWeight: '600', flex: 1 },
+                        isChecked && { textDecorationLine: 'line-through', opacity: 0.6 }
+                      ]}
+                    >
+                      {item.name}
+                    </ThemedText>
+                    {isPriority && !isChecked && (
+                      <View style={[styles.priorityBadge, { backgroundColor: '#f59e0b' }]}>
+                        <ThemedText style={{ color: 'white', fontSize: 9, fontWeight: '800' }}>
+                          PRIORITY
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
+                  
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                    <Feather name="map-pin" size={12} color={theme.textSecondary} />
+                    <ThemedText type="caption" style={{ marginLeft: 4, color: theme.textSecondary }}>
+                      📍 {item.location || "N/A"} · Qty: {item.quantity}
+                    </ThemedText>
+                  </View>
+
+                  {/* Freshness Note */}
+                  {item.freshnessNote && !isChecked && (
+                    <View style={[styles.freshnessAlert, { backgroundColor: '#dbeafe' }]}>
+                      <Feather name="alert-circle" size={11} color="#2563eb" />
+                      <ThemedText style={{ fontSize: 10, color: '#2563eb', marginLeft: 4, fontWeight: '600' }}>
+                        {item.freshnessNote}
+                      </ThemedText>
+                    </View>
+                  )}
+                </View>
+
+                {/* Check Circle */}
+                <View 
+                  style={[
+                    styles.checkCircle,
+                    { 
+                      borderColor: isChecked ? theme.success : theme.border,
+                      backgroundColor: isChecked ? theme.success : 'transparent' 
+                    }
+                  ]}
+                >
+                  {isChecked && <Feather name="check" size={14} color="white" />}
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       )}
 
@@ -144,16 +299,200 @@ function OrderCard({
       
       {nextStatus !== "" && (
         <TouchableOpacity 
-          style={[styles.actionBtn, { backgroundColor: status === "picking" ? "#2ecc71" : theme.primary }]}
+          style={[
+            styles.actionBtn, 
+            { 
+              backgroundColor: progress === 100 
+                ? '#10b981' 
+                : status === "picking" 
+                  ? '#2ecc71' 
+                  : theme.primary 
+            }
+          ]}
           onPress={() => onUpdateStatus(order.id, nextStatus)}
         >
           <Feather name={icon} size={16} color="white" />
-          <ThemedText style={styles.actionBtnText}>{buttonText}</ThemedText>
+          <ThemedText style={styles.actionBtnText}>
+            {status === "picking" 
+              ? `${buttonText} (${progress}%)` 
+              : buttonText
+            }
+          </ThemedText>
         </TouchableOpacity>
       )}
     </Card>
   );
 }
+
+
+interface PreStagingWidgetProps {
+  userId: string;
+}
+
+export const PreStagingWidget: React.FC<PreStagingWidgetProps> = ({ userId }) => {
+  const [recommendations, setRecommendations] = useState<any>(null);
+  const { theme } = useTheme();
+  
+  useEffect(() => {
+    fetchRecommendations();
+    
+    // Refresh every 30 minutes
+    const interval = setInterval(fetchRecommendations, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [userId]);
+  
+  const fetchRecommendations = async () => {
+    try {
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/picker/pre-staging-recommendations?userId=${userId}`
+      );
+      const data = await res.json();
+      setRecommendations(data);
+    } catch (error) {
+      console.error('Failed to fetch recommendations:', error);
+    }
+  };
+  
+  if (!recommendations || recommendations.recommendations.length === 0) {
+    return null;
+  }
+  
+  return (
+    <Card style={styles.preStagingCard}>
+      <View style={styles.preStagingHeader}>
+        <Feather name="zap" size={20} color="#f59e0b" />
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <ThemedText style={{ fontWeight: '700', fontSize: 15 }}>
+            🧠 AI Pre-Staging Alert
+          </ThemedText>
+          <ThemedText type="caption" style={{ color: theme.textSecondary, marginTop: 2 }}>
+            {recommendations.timeContext}
+          </ThemedText>
+        </View>
+      </View>
+      
+      <View style={styles.preStagingContent}>
+        <ThemedText type="caption" style={{ marginBottom: 10, color: theme.textSecondary }}>
+          {recommendations.message}
+        </ThemedText>
+        
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {recommendations.recommendations.map((rec: any, idx: number) => (
+            <View key={idx} style={[styles.preStagingItem, { backgroundColor: theme.backgroundTertiary }]}>
+              <Image 
+                source={{ uri: getImageUrl(rec.product.image) }}
+                style={styles.preStagingImage}
+              />
+              <ThemedText type="caption" style={{ fontWeight: '600', marginTop: 6 }}>
+                {rec.product.name}
+              </ThemedText>
+              <View style={[
+                styles.confidenceBadge,
+                { backgroundColor: rec.confidenceLevel === 'HIGH' ? '#10b981' : '#f59e0b' }
+              ]}>
+                <ThemedText style={{ color: 'white', fontSize: 9, fontWeight: '800' }}>
+                  {Math.round(rec.probability * 100)}% likely
+                </ThemedText>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    </Card>
+  );
+};
+
+interface AICoachWidgetProps {
+  userId: string;
+}
+
+export const AICoachWidget: React.FC<AICoachWidgetProps> = ({ userId }) => {
+  const [coaching, setCoaching] = useState<any>(null);
+  const { theme } = useTheme();
+  
+  useEffect(() => {
+    fetchCoaching();
+    
+    // Refresh every 15 minutes
+    const interval = setInterval(fetchCoaching, 15 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [userId]);
+  
+  const fetchCoaching = async () => {
+    try {
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_DOMAIN}/api/picker/ai-coach?userId=${userId}`
+      );
+      const data = await res.json();
+      setCoaching(data);
+    } catch (error) {
+      console.error('Failed to fetch coaching:', error);
+    }
+  };
+  
+  if (!coaching) return null;
+  
+  return (
+    <Card style={styles.coachCard}>
+      <View style={styles.coachHeader}>
+        <Feather name="trending-up" size={20} color="#6366f1" />
+        <ThemedText style={{ fontWeight: '700', fontSize: 15, marginLeft: 10 }}>
+          📊 AI Performance Coach
+        </ThemedText>
+      </View>
+      
+      {/* Achievements */}
+      {coaching.achievements.length > 0 && (
+        <View style={styles.achievementsSection}>
+          {coaching.achievements.map((achievement: string, idx: number) => (
+            <View key={idx} style={styles.achievementBadge}>
+              <ThemedText style={{ fontSize: 13 }}>{achievement}</ThemedText>
+            </View>
+          ))}
+        </View>
+      )}
+      
+      {/* Potential */}
+      <View style={[styles.potentialCard, { backgroundColor: theme.primary + '15' }]}>
+        <ThemedText style={{ fontWeight: '700', marginBottom: 8, color: theme.primary }}>
+          🚀 Your Potential Today:
+        </ThemedText>
+        <ThemedText type="caption" style={{ color: theme.textSecondary }}>
+          Current: {coaching.potential.currentSpeed} → 
+          Possible: {coaching.potential.potentialSpeed}
+        </ThemedText>
+        <ThemedText type="caption" style={{ color: theme.success, fontWeight: '700', marginTop: 4 }}>
+          Extra earnings: {coaching.potential.extraBonus}
+        </ThemedText>
+      </View>
+      
+      {/* Tips */}
+      <View style={styles.tipsSection}>
+        <ThemedText style={{ fontWeight: '600', marginBottom: 8 }}>
+          💡 AI Tips:
+        </ThemedText>
+        {coaching.tips.slice(0, 3).map((tip: string, idx: number) => (
+          <View key={idx} style={styles.tipRow}>
+            <Feather name="chevron-right" size={14} color={theme.primary} />
+            <ThemedText type="caption" style={{ flex: 1, marginLeft: 8 }}>
+              {tip}
+            </ThemedText>
+          </View>
+        ))}
+      </View>
+      
+      {/* Next Milestone */}
+      {coaching.nextMilestone.ordersUntilBonus > 0 && (
+        <View style={[styles.milestoneCard, { backgroundColor: '#fef3c7' }]}>
+          <Feather name="target" size={16} color="#f59e0b" />
+          <ThemedText style={{ marginLeft: 8, color: '#92400e', fontWeight: '600' }}>
+            {coaching.nextMilestone.message}
+          </ThemedText>
+        </View>
+      )}
+    </Card>
+  );
+};
 
 // ==================== PROMOTION CARD COMPONENT ====================
 
@@ -1422,4 +1761,135 @@ const styles = StyleSheet.create({
   typeButtonText: { fontWeight: '600' },
   checkboxContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 15 },
   checkbox: { width: 24, height: 24, borderRadius: 4, borderWidth: 2, borderColor: '#ddd', justifyContent: 'center', alignItems: 'center' },
+  aiOptimizationBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 12,
+    borderWidth: 1,
+  },
+  progressBar: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  pickStepCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 10,
+    borderWidth: 2,
+  },
+  pickOrderBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickOrderNumber: {
+    color: 'white',
+    fontWeight: '900',
+    fontSize: 14,
+  },
+  pickItemImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    marginLeft: 10,
+  },
+  priorityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  freshnessAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  checkCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
+   preStagingCard: {
+    marginBottom: 15,
+  },
+  preStagingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  preStagingContent: {
+    marginTop: 10,
+  },
+  preStagingItem: {
+    width: 100,
+    padding: 10,
+    borderRadius: 10,
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  preStagingImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+  },
+  confidenceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 6,
+  },
+  coachCard: {
+    marginBottom: 15,
+  },
+  coachHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  achievementsSection: {
+    marginBottom: 12,
+  },
+  achievementBadge: {
+    backgroundColor: '#fef3c7',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 6,
+  },
+  potentialCard: {
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  tipsSection: {
+    marginBottom: 12,
+  },
+  tipRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  milestoneCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+  },
+
 });
