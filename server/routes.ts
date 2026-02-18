@@ -63,6 +63,10 @@ import {
   getDeliveryPriorityProducts,
 } from '../server/services/productTracking';
 import { startAllJobs,triggerManualScan  } from '../server/services/scheduledJobs';
+// At the top of registerRoutes()
+import grabmapsTilesRouter from "./routes/grabmapsTiles";
+
+
 
 import cron from 'node-cron';
 
@@ -1367,6 +1371,9 @@ app.get("/api/driver/dashboard", async (req, res) => {
     res.status(500).json({ error: "Failed to load dashboard" });
   }
 });
+
+// Inside registerRoutes(), BEFORE other routes:
+app.use("/api/grabmaps", grabmapsTilesRouter);
 
 
 app.put("/api/driver/orders/:id/status", async (req, res) => {
