@@ -25,7 +25,7 @@ import PhoneSignupScreen from "@/screens/onboarding/PhoneSignupScreen";
 import { useAuth } from "@/context/AuthContext";
 import ChatScreen from "@/screens/ChatScreen";
 import StoreOwnerDashboardScreen from "@/screens/StoreOwnerDashboardScreen";
-import ConfirmPinMapScreen from "@/screens/ConfirmPinMapScreen";
+import ConfirmPinMapScreen from "../screens/ConfirmPinMapScreen";
 
 export type RootStackParamList = {
   Onboarding: undefined;
