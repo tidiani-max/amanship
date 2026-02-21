@@ -9,6 +9,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import QRCode from "react-native-qrcode-svg";
+import { getSmartZoom, GRABMAPS_CONFIG } from "@/lib/mapConfig";
+import { haversineKm, bearingDeg } from "@/hooks/useDriverLocationTracking";
 
 const BRAND_PURPLE = "#6338f2";
 const MAP_UPDATE_INTERVAL = 2000;
@@ -35,7 +37,7 @@ export default function OrderTrackingScreen() {
     refetchInterval: 3000,
   });
 
-  // ✅ NEW: Fetch payment status
+  // Fetch payment status
   const { data: paymentStatus } = useQuery({
     queryKey: ["payment-status", orderId],
     queryFn: async () => {
@@ -57,12 +59,41 @@ export default function OrderTrackingScreen() {
 
   const simpleStatus = getSimpleStatus();
 
-  // Fetch driver location
+  const customerLat = order?.customerLat ? parseFloat(order.customerLat) : null;
+  const customerLng = order?.customerLng ? parseFloat(order.customerLng) : null;
+
+  // Fetch driver location with enhanced calculations
   const { data: driverData } = useQuery({
     queryKey: ["driver-location", orderId],
     queryFn: async () => {
       const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/${orderId}`);
-      return res.json();
+      const data = await res.json();
+      
+      // Calculate distance and bearing if we have both positions
+      if (data?.location && customerLat && customerLng) {
+        const distance = haversineKm(
+          data.location.latitude,
+          data.location.longitude,
+          customerLat,
+          customerLng
+        );
+        
+        const bearing = bearingDeg(
+          data.location.latitude,
+          data.location.longitude,
+          customerLat,
+          customerLng
+        );
+        
+        return {
+          ...data,
+          distance: parseFloat(distance.toFixed(2)),
+          bearing: parseFloat(bearing.toFixed(1)),
+          etaMinutes: Math.ceil(distance / 0.5), // Assuming 30 km/h average speed
+        };
+      }
+      
+      return data;
     },
     enabled: simpleStatus === 'delivering' && !!order?.driverId,
     refetchInterval: MAP_UPDATE_INTERVAL,
@@ -73,19 +104,18 @@ export default function OrderTrackingScreen() {
   const deliveryFee = order?.deliveryFee || 10000;
   const total = order?.total || (subtotal + deliveryFee);
   
-  const customerLat = order?.customerLat ? parseFloat(order.customerLat) : null;
-  const customerLng = order?.customerLng ? parseFloat(order.customerLng) : null;
   const driverLat = driverData?.location?.latitude || null;
   const driverLng = driverData?.location?.longitude || null;
-  const driverHeading = driverData?.location?.heading || 0;
+  const driverHeading = driverData?.bearing || driverData?.location?.heading || 0;
   const driverSpeed = driverData?.location?.speed || 0;
   const distance = driverData?.distance || null;
+  const etaMinutes = driverData?.etaMinutes || null;
 
   const showMap = (simpleStatus === 'packed' || simpleStatus === 'delivering') && customerLat && customerLng;
   const showDriver = simpleStatus === 'delivering' && driverLat && driverLng;
   const searchingDriver = simpleStatus === 'packed' && !order?.driverId;
 
-  // ✅ Check if payment is pending
+  // Check if payment is pending
   const isQRISPending = order?.paymentMethod === "qris" && !paymentStatus?.isPaid;
 
   if (isLoading && !order) {
@@ -98,7 +128,7 @@ export default function OrderTrackingScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ✅ QRIS Payment Modal */}
+      {/* QRIS Payment Modal */}
       <Modal
         visible={showQRISModal}
         animationType="slide"
@@ -169,6 +199,7 @@ export default function OrderTrackingScreen() {
               searchingDriver={searchingDriver}
               showDriver={showDriver}
               distance={distance}
+              etaMinutes={etaMinutes}
             />
           ) : (
             <NativeMapView
@@ -208,7 +239,7 @@ export default function OrderTrackingScreen() {
           <View style={[styles.etaBadge, { top: insets.top + 10 }]}>
             <MaterialCommunityIcons name="clock-outline" size={16} color="white" />
             <ThemedText style={styles.etaText}>
-              {distance} km • {Math.ceil(distance * 3)} min
+              {distance.toFixed(1)} km • {etaMinutes || Math.ceil(distance * 3)} min
             </ThemedText>
           </View>
         )}
@@ -221,7 +252,7 @@ export default function OrderTrackingScreen() {
       >
         <View style={styles.handle} />
 
-        {/* ✅ Payment Status Banner */}
+        {/* Payment Status Banner */}
         {isQRISPending && (
           <Pressable 
             style={styles.paymentBanner}
@@ -347,7 +378,7 @@ export default function OrderTrackingScreen() {
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.driverName}>{order.driverName}</ThemedText>
                 <ThemedText style={styles.vehicleInfo}>
-                  {distance ? `${distance} km away` : 'On the way'}
+                  {distance ? `${distance.toFixed(1)} km away` : 'On the way'}
                 </ThemedText>
               </View>
               <View style={styles.contactActions}>
@@ -399,7 +430,16 @@ export default function OrderTrackingScreen() {
 }
 
 // ==================== WEB MAP COMPONENT ====================
-function WebMapView({ customerLat, customerLng, driverLat, driverLng, searchingDriver, showDriver, distance }: any) {
+function WebMapView({ 
+  customerLat, 
+  customerLng, 
+  driverLat, 
+  driverLng, 
+  searchingDriver, 
+  showDriver, 
+  distance,
+  etaMinutes 
+}: any) {
   return (
     <View style={styles.webMapContainer}>
       <View style={styles.webMapPlaceholder}>
@@ -419,7 +459,9 @@ function WebMapView({ customerLat, customerLng, driverLat, driverLng, searchingD
               Driver: {driverLat.toFixed(5)}, {driverLng.toFixed(5)}
             </ThemedText>
             {distance && (
-              <ThemedText style={styles.webDistance}>{distance} km away</ThemedText>
+              <ThemedText style={styles.webDistance}>
+                {distance.toFixed(1)} km • {etaMinutes || Math.ceil(distance * 3)} min away
+              </ThemedText>
             )}
           </View>
         )}
@@ -443,7 +485,7 @@ function NativeMapView({
   const [MapComponents, setMapComponents] = useState<any>(null);
   const [prevDriverPos, setPrevDriverPos] = useState<{lat: number, lng: number} | null>(null);
   
-  // Animated values for smooth driver movement
+  // Enhanced smooth interpolation
   const animatedLat = useRef(new Animated.Value(driverLat || 0)).current;
   const animatedLng = useRef(new Animated.Value(driverLng || 0)).current;
   const animatedRotation = useRef(new Animated.Value(driverHeading || 0)).current;
@@ -456,19 +498,19 @@ function NativeMapView({
     }
   }, []);
 
-  // Smooth animation when driver position updates
+  // Smoother animation with easing
   useEffect(() => {
     if (driverLat && driverLng && prevDriverPos) {
       Animated.parallel([
         Animated.timing(animatedLat, {
           toValue: driverLat,
           duration: DRIVER_ANIMATION_DURATION,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(animatedLng, {
           toValue: driverLng,
           duration: DRIVER_ANIMATION_DURATION,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(animatedRotation, {
           toValue: driverHeading,
@@ -477,7 +519,6 @@ function NativeMapView({
         }),
       ]).start();
     } else if (driverLat && driverLng) {
-      // First position - set immediately
       animatedLat.setValue(driverLat);
       animatedLng.setValue(driverLng);
       animatedRotation.setValue(driverHeading);
@@ -488,7 +529,7 @@ function NativeMapView({
     }
   }, [driverLat, driverLng, driverHeading]);
 
-  // Auto-zoom to fit both markers
+  // Auto-zoom with smart padding
   useEffect(() => {
     if (mapRef.current && customerLat && customerLng && driverLat && driverLng) {
       setTimeout(() => {
@@ -528,6 +569,7 @@ function NativeMapView({
         latitudeDelta: 0.02,
         longitudeDelta: 0.02,
       }}
+      maxZoomLevel={GRABMAPS_CONFIG.maxZoom}
       customMapStyle={mapStyle}
       showsUserLocation={false}
       showsMyLocationButton={false}
@@ -553,7 +595,7 @@ function NativeMapView({
         strokeWidth={2}
       />
 
-      {/* Driver Animated Marker */}
+      {/* Driver Animated Marker with interpolated position */}
       {showDriver && (
         <Marker.Animated
           coordinate={{
@@ -562,6 +604,7 @@ function NativeMapView({
           }}
           anchor={{ x: 0.5, y: 0.5 }}
           flat
+          rotation={driverHeading}
         >
           <DriverMarker 
             heading={driverHeading} 
@@ -571,10 +614,9 @@ function NativeMapView({
         </Marker.Animated>
       )}
 
-      {/* Animated Route Line */}
+      {/* Route Line */}
       {showDriver && (
         <>
-          {/* Main route */}
           <Polyline
             coordinates={[
               { latitude: driverLat, longitude: driverLng },
@@ -585,7 +627,6 @@ function NativeMapView({
             lineDashPattern={[1, 10]}
           />
           
-          {/* Glow effect */}
           <Polyline
             coordinates={[
               { latitude: driverLat, longitude: driverLng },
@@ -632,21 +673,17 @@ function DriverMarker({ heading, speed, isMoving }: { heading: number; speed: nu
 
   return (
     <View style={styles.driverMarkerContainer}>
-      {/* Glow effect when moving */}
       {isMoving && (
         <Animated.View style={[styles.driverGlow, { opacity: glowOpacity }]} />
       )}
       
-      {/* Main marker */}
       <View style={[styles.driverMarker, { transform: [{ rotate: `${heading}deg` }] }]}>
         <View style={styles.driverIconContainer}>
           <MaterialCommunityIcons name="motorbike" size={24} color="white" />
         </View>
-        {/* Direction arrow */}
         <View style={styles.directionArrow} />
       </View>
       
-      {/* Speed indicator */}
       {speed > 0 && (
         <View style={styles.speedBadge}>
           <ThemedText style={styles.speedText}>{Math.round(speed * 3.6)} km/h</ThemedText>
@@ -700,7 +737,7 @@ function PulsingCircle() {
   );
 }
 
-// ==================== CUSTOM MAP STYLE (Optional - Clean look) ====================
+// ==================== CUSTOM MAP STYLE ====================
 const mapStyle = [
   {
     featureType: "poi",
@@ -720,7 +757,6 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
   map: { flex: 1 },
   
-  // Illustration
   illustrationContainer: { 
     flex: 1, 
     backgroundColor: '#f8fafc', 
@@ -735,7 +771,6 @@ const styles = StyleSheet.create({
     color: '#64748b' 
   },
   
-  // Buttons
   backButton: { 
     position: 'absolute', 
     left: 15, 
@@ -774,7 +809,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   
-  // Bottom Sheet
   bottomSheet: { 
     flex: 1, 
     backgroundColor: 'white', 
@@ -796,7 +830,6 @@ const styles = StyleSheet.create({
     marginTop: 12 
   },
   
-  // Status Header
   statusHeader: { 
     flexDirection: 'row', 
     justifyContent: 'space-between', 
@@ -829,7 +862,6 @@ const styles = StyleSheet.create({
     color: '#475569' 
   },
   
-  // Progress Bar
   progressContainer: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -880,7 +912,6 @@ const styles = StyleSheet.create({
   },
   progressLineActive: { backgroundColor: BRAND_PURPLE },
   
-  // Driver Card
   driverCard: { 
     marginTop: 20, 
     padding: 16, 
@@ -924,7 +955,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   
-  // Summary
   summarySection: { marginTop: 30 },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: '#1e293b' },
   divider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 15 },
@@ -973,9 +1003,6 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: 17, fontWeight: '900', color: '#1e293b' },
   totalValue: { fontSize: 17, fontWeight: '900', color: BRAND_PURPLE },
   
-  // ==================== MAP MARKERS ====================
-  
-  // Customer Marker
   customerMarkerContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1002,7 +1029,6 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND_PURPLE 
   },
   
-  // Driver Marker
   driverMarkerContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1030,7 +1056,7 @@ const styles = StyleSheet.create({
     borderColor: 'white',
   },
   driverIconContainer: {
-    transform: [{ rotate: '0deg' }], // Keep icon upright
+    transform: [{ rotate: '0deg' }],
   },
   directionArrow: {
     position: 'absolute',
@@ -1065,7 +1091,6 @@ const styles = StyleSheet.create({
     color: BRAND_PURPLE,
   },
   
-  // Pulsing Circle
   pulsingCircle: { 
     position: 'absolute',
     width: 100, 
@@ -1076,7 +1101,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(99, 56, 242, 0.15)',
   },
   
-  // ==================== WEB-SPECIFIC STYLES ====================
   webMapContainer: { 
     flex: 1, 
     backgroundColor: '#f8fafc', 
@@ -1127,7 +1151,7 @@ const styles = StyleSheet.create({
     color: BRAND_PURPLE,
     fontWeight: '700',
   },
-   paymentBanner: {
+  paymentBanner: {
     backgroundColor: '#fef3c7',
     borderRadius: 16,
     marginTop: 16,
@@ -1169,7 +1193,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fee2e2',
   },
   
-  // ✅ NEW: QRIS Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
