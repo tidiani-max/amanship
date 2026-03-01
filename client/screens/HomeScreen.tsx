@@ -713,7 +713,7 @@ useEffect(() => {
             >
               <Feather name="message-circle" size={20} color="white" />
               <ThemedText style={styles.aiChatText}>
-                🤖 Ask AI: "What should I cook today?"
+                🤖 Ask AI: "Find the best recipes, healthy choices, or lowest prices".
               </ThemedText>
               <Feather name="star" size={16} color="white" />
             </LinearGradient>

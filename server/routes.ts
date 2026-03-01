@@ -9307,17 +9307,24 @@ cron.schedule('0 9 * * *', async () => {
 
 
 
-// 🌐 SERVE THE WEBSITE PAGE
-// Put this AFTER all app.post and app.get("/api/...") routes
+/// 🌐 SERVE STATIC FILES
 app.use(express.static(path.join(process.cwd(), 'public')));
 
-// Fallback: If they go to a route that doesn't exist, show the website
-app.get('*', (req, res) => {
-  res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
+// 🏠 ROOT → Landing page
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'landing.html'));
 });
+
+// 📱 All non-API routes → Expo app (index.html)
+app.get(/^\/(?!api).*/, (_req, res) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'index.html'), (err) => {
+    if (err) res.status(404).send('Not found');
+  });
+});
+
 startAllJobs(); // Start automation
 console.log('✅ Smart Grocery Automation started');
-  
+
   const httpServer = createServer(app);
   return httpServer;
 }

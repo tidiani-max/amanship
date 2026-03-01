@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Qikly — Belanja Kilat 15 Menit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    :root {
+      --blue:   #1AABE8;
+      --purple: #6B4FE0;
+      --dark:   #060610;
+      --card:   #0F0F1E;
+      --card2:  #161625;
+      --text:   #F0F0FF;
+      --muted:  #7878A0;
+      --border: rgba(255,255,255,.07);
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--dark);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+    /* grain overlay */
+    body::after {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 9000; opacity: .3;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='f'%3E%3CfeTurbulence baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)' opacity='.05'/%3E%3C/svg%3E");
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 500;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 48px;
+      background: rgba(6,6,16,.85); backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .logo { display: flex; align-items: center; gap: 11px; text-decoration: none; }
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--blue), var(--purple));
+      border-radius: 10px; display: flex; align-items: center; justify-content: center;
+      font-family: 'Syne', sans-serif; font-weight: 800; font-size: 16px; color: #fff;
+    }
+    .logo-text { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 20px; }
+
+    .nav-right { display: flex; align-items: center; gap: 10px; }
+    .btn-ghost {
+      padding: 9px 18px; background: transparent; border: 1px solid var(--border);
+      border-radius: 50px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13px;
+      text-decoration: none; cursor: pointer; transition: border-color .2s, background .2s;
+    }
+    .btn-ghost:hover { border-color: rgba(255,255,255,.22); background: rgba(255,255,255,.04); }
+    .btn-grad {
+      padding: 10px 20px;
+      background: linear-gradient(135deg, var(--blue), var(--purple));
+      border: none; border-radius: 50px; color: #fff;
+      font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500;
+      cursor: pointer; display: flex; align-items: center; gap: 7px;
+      transition: opacity .2s, transform .18s;
+      box-shadow: 0 4px 20px rgba(107,79,224,.3);
+    }
+    .btn-grad:hover { opacity: .88; transform: translateY(-1px); }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 112px 48px 72px; position: relative; overflow: hidden;
+    }
+    .blob { position: absolute; border-radius: 50%; pointer-events: none; }
+    .b1 { width: 560px; height: 560px; background: radial-gradient(circle,rgba(107,79,224,.22) 0%,transparent 70%); top: -80px; left: -80px; }
+    .b2 { width: 480px; height: 480px; background: radial-gradient(circle,rgba(26,171,232,.17) 0%,transparent 70%); bottom: -60px; right: -60px; }
+
+    .hero-inner {
+      max-width: 1080px; width: 100%;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 72px;
+      align-items: center; position: relative; z-index: 2;
+    }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 7px; padding: 5px 13px;
+      background: rgba(26,171,232,.1); border: 1px solid rgba(26,171,232,.25);
+      border-radius: 50px; font-size: 12px; color: var(--blue); font-weight: 500;
+      margin-bottom: 22px; animation: up .55s ease both;
+    }
+    h1 {
+      font-family: 'Syne', sans-serif; font-weight: 800;
+      font-size: clamp(36px,5vw,58px); line-height: 1.05; margin-bottom: 20px;
+      animation: up .55s .08s ease both;
+    }
+    h1 em {
+      font-style: normal;
+      background: linear-gradient(135deg,var(--blue),var(--purple));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .sub {
+      font-size: 17px; line-height: 1.75; color: var(--muted);
+      max-width: 430px; margin-bottom: 38px; animation: up .55s .16s ease both;
+    }
+    .ctas { display: flex; gap: 12px; flex-wrap: wrap; animation: up .55s .24s ease both; }
+    .btn-big {
+      padding: 14px 28px;
+      background: linear-gradient(135deg,var(--blue),var(--purple));
+      border: none; border-radius: 50px; color: #fff;
+      font-family: 'DM Sans',sans-serif; font-size: 15px; font-weight: 500;
+      cursor: pointer; text-decoration: none;
+      transition: transform .2s, box-shadow .2s;
+      box-shadow: 0 8px 26px rgba(107,79,224,.34);
+    }
+    .btn-big:hover { transform: translateY(-2px); box-shadow: 0 12px 34px rgba(107,79,224,.5); }
+
+    /* ── PHONE MOCKUP ── */
+    .hero-right { display: flex; justify-content: center; align-items: center; animation: up .6s .12s ease both; }
+    .phone-wrap { position: relative; }
+    .phone-glow {
+      position: absolute; inset: -44px;
+      background: radial-gradient(ellipse at center,rgba(107,79,224,.26) 0%,transparent 65%);
+      pointer-events: none;
+    }
+    .phone {
+      width: 250px; background: var(--card); border-radius: 40px;
+      border: 2px solid rgba(255,255,255,.09); overflow: hidden;
+      box-shadow: 0 0 0 1px rgba(255,255,255,.04), 0 40px 80px rgba(0,0,0,.65);
+      position: relative; z-index: 1;
+    }
+    .notch { width: 90px; height: 24px; background: #000; border-radius: 0 0 16px 16px; margin: 0 auto; }
+    .pscr  { padding: 7px 11px 20px; }
+    .prow  { display: flex; align-items: center; justify-content: space-between; padding: 6px 0 11px; }
+    .plogo { display: flex; align-items: center; gap: 5px; }
+    .pi    { width: 24px; height: 24px; background: linear-gradient(135deg,var(--blue),var(--purple)); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-family:'Syne',sans-serif; font-weight:800; font-size:10px; color:#fff; }
+    .pt    { font-family:'Syne',sans-serif; font-weight:800; font-size:12px; }
+    .ploc  { background:rgba(255,255,255,.07); border-radius:18px; padding:4px 9px; font-size:9px; color:var(--muted); }
+    .psrch { background:rgba(255,255,255,.06); border-radius:10px; padding:7px 10px; font-size:10px; color:var(--muted); margin-bottom:8px; display:flex; align-items:center; gap:5px; }
+    .pai   { background:linear-gradient(135deg,var(--purple),var(--blue)); border-radius:10px; padding:8px 10px; font-size:9px; color:rgba(255,255,255,.92); margin-bottom:10px; }
+    .pbann { background:linear-gradient(135deg,#1a1a3a,#2a1e58); border-radius:12px; padding:13px 12px; margin-bottom:10px; position:relative; overflow:hidden; }
+    .pbann::before { content:''; position:absolute; right:-8px; top:-8px; width:70px; height:70px; background:radial-gradient(circle,rgba(107,79,224,.38),transparent); }
+    .pbadge { background:#F5B400; color:#000; font-size:7px; font-weight:700; padding:1px 6px; border-radius:3px; display:inline-block; margin-bottom:5px; }
+    .pbtitle { font-family:'Syne',sans-serif; font-weight:800; font-size:11px; line-height:1.3; margin-bottom:2px; }
+    .pbsub  { font-size:9px; color:var(--blue); margin-bottom:8px; }
+    .pbbtn  { background:var(--purple); color:#fff; font-size:8px; font-weight:500; padding:4px 11px; border-radius:16px; display:inline-block; }
+    .pcatt  { font-family:'Syne',sans-serif; font-weight:700; font-size:10px; margin-bottom:7px; }
+    .pcats  { display:flex; gap:5px; }
+    .pcat   { width:44px; background:rgba(255,255,255,.05); border-radius:10px; padding:6px 3px 5px; display:flex; flex-direction:column; align-items:center; gap:3px; }
+    .pci    { width:28px; height:28px; background:rgba(255,255,255,.08); border-radius:7px; }
+    .pcl    { font-size:7px; color:var(--muted); }
+
+    /* float badges */
+    .ftag { position:absolute; background:var(--card2); border:1px solid var(--border); border-radius:14px; padding:10px 14px; display:flex; align-items:center; gap:9px; backdrop-filter:blur(10px); box-shadow:0 8px 28px rgba(0,0,0,.4); z-index:2; }
+    .ft1 { top:36px; right:-56px; animation:fl 3s ease-in-out infinite; }
+    .ft2 { bottom:56px; left:-62px; animation:fl 3s 1.5s ease-in-out infinite; }
+    .fti { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; }
+    .ftib { background:rgba(26,171,232,.14); } .ftip { background:rgba(107,79,224,.14); }
+    .ftv  { font-family:'Syne',sans-serif; font-weight:700; font-size:13px; }
+    .ftl  { font-size:10px; color:var(--muted); }
+    @keyframes fl { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+
+    /* ── STATS ── */
+    .stats { max-width:1080px; margin:0 auto; padding:0 48px 88px; display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+    .stat  { background:var(--card); border:1px solid var(--border); border-radius:18px; padding:28px; opacity:0; transition:border-color .2s,transform .2s; }
+    .stat:hover { border-color:rgba(107,79,224,.38); transform:translateY(-2px); }
+    .sn { font-family:'Syne',sans-serif; font-weight:800; font-size:40px; line-height:1; background:linear-gradient(135deg,var(--blue),var(--purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; margin-bottom:7px; }
+    .sl { font-size:14px; color:var(--muted); }
+
+    /* ── SECTIONS ── */
+    .sec { max-width:1080px; margin:0 auto; padding:0 48px 88px; }
+    .eyebrow { font-size:11px; font-weight:500; letter-spacing:2px; text-transform:uppercase; color:var(--blue); margin-bottom:13px; }
+    .sec-h   { font-family:'Syne',sans-serif; font-weight:800; font-size:clamp(25px,3.5vw,38px); line-height:1.1; margin-bottom:48px; }
+    .g3 { display:grid; grid-template-columns:repeat(3,1fr); gap:17px; }
+    .fcard { background:var(--card); border:1px solid var(--border); border-radius:18px; padding:28px; opacity:0; transition:border-color .2s,transform .2s; }
+    .fcard:hover { border-color:rgba(107,79,224,.32); transform:translateY(-3px); }
+    .ficon { width:48px; height:48px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:22px; margin-bottom:17px; }
+    .fib { background:rgba(26,171,232,.1); } .fip { background:rgba(107,79,224,.1); } .fig { background:rgba(16,185,129,.1); }
+    .ft  { font-family:'Syne',sans-serif; font-weight:700; font-size:16px; margin-bottom:8px; }
+    .fd  { font-size:13px; color:var(--muted); line-height:1.7; }
+
+    /* steps */
+    .steps { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; position:relative; }
+    .steps::before { content:''; position:absolute; top:27px; left:52px; right:52px; height:1px; background:linear-gradient(90deg,var(--border),rgba(107,79,224,.26),var(--border)); }
+    .step  { text-align:center; opacity:0; }
+    .snum  { width:52px; height:52px; border-radius:50%; background:var(--card); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-family:'Syne',sans-serif; font-weight:800; font-size:16px; margin:0 auto 16px; position:relative; z-index:1; }
+    .snum.on { background:linear-gradient(135deg,var(--blue),var(--purple)); border-color:transparent; }
+    .stit { font-family:'Syne',sans-serif; font-weight:700; font-size:14px; margin-bottom:6px; }
+    .sdsc { font-size:12px; color:var(--muted); line-height:1.6; }
+
+    /* CTA */
+    .cta-w { max-width:1080px; margin:0 auto; padding:0 48px 108px; }
+    .cta-b {
+      background:linear-gradient(135deg,rgba(107,79,224,.18),rgba(26,171,232,.12));
+      border:1px solid rgba(107,79,224,.26); border-radius:28px; padding:64px 52px; text-align:center; position:relative; overflow:hidden;
+    }
+    .cta-b::before { content:''; position:absolute; top:-70px; left:50%; transform:translateX(-50%); width:360px; height:360px; background:radial-gradient(circle,rgba(107,79,224,.17),transparent 70%); pointer-events:none; }
+    .cta-h   { font-family:'Syne',sans-serif; font-weight:800; font-size:clamp(24px,3.5vw,38px); line-height:1.1; margin-bottom:12px; position:relative; }
+    .cta-s   { font-size:15px; color:var(--muted); margin-bottom:34px; position:relative; }
+    .cta-row { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; position:relative; }
+
+    /* QR section */
+    .qr-wrap {
+      background:var(--card); border:1px solid var(--border); border-radius:20px;
+      padding:32px; display:flex; gap:28px; align-items:center;
+      max-width:540px; margin:0 auto;
+    }
+    .qr-box {
+      width:130px; height:130px; flex-shrink:0;
+      background:#fff; border-radius:12px; padding:8px;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .qr-box svg { width:114px; height:114px; }
+    .qr-info h3 { font-family:'Syne',sans-serif; font-weight:800; font-size:17px; margin-bottom:8px; }
+    .qr-info p  { font-size:13px; color:var(--muted); line-height:1.65; margin-bottom:14px; }
+    .qr-url {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:7px 14px; background:rgba(26,171,232,.1);
+      border:1px solid rgba(26,171,232,.25); border-radius:8px;
+      font-size:11px; color:var(--blue); font-family:monospace;
+      text-decoration:none; word-break:break-all;
+      transition:background .2s;
+    }
+    .qr-url:hover { background:rgba(26,171,232,.18); }
+
+    /* footer */
+    footer { border-top:1px solid var(--border); padding:30px 48px; display:flex; align-items:center; justify-content:space-between; max-width:1080px; margin:0 auto; }
+    .flogo   { display:flex; align-items:center; gap:9px; text-decoration:none; }
+    .flogo-i { width:28px; height:28px; background:linear-gradient(135deg,var(--blue),var(--purple)); border-radius:7px; display:flex; align-items:center; justify-content:center; font-family:'Syne',sans-serif; font-weight:800; font-size:12px; color:#fff; }
+    .fcopy   { font-size:12px; color:var(--muted); }
+
+    /* ── MODAL ── */
+    .overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,.8); backdrop-filter:blur(14px);
+      z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;
+      opacity:0; pointer-events:none; transition:opacity .22s ease;
+    }
+    .overlay.open { opacity:1; pointer-events:all; }
+    .modal {
+      background:var(--card); border:1px solid rgba(107,79,224,.3); border-radius:24px;
+      padding:40px 34px; width:100%; max-width:390px; position:relative;
+      transform:translateY(18px) scale(.97); transition:transform .22s ease;
+      box-shadow:0 40px 80px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.04);
+    }
+    .overlay.open .modal { transform:translateY(0) scale(1); }
+
+    .mclose {
+      position:absolute; top:16px; right:16px;
+      width:28px; height:28px; background:rgba(255,255,255,.07);
+      border:none; border-radius:50%; color:var(--muted); font-size:13px;
+      cursor:pointer; display:flex; align-items:center; justify-content:center;
+      transition:background .2s;
+    }
+    .mclose:hover { background:rgba(255,255,255,.12); color:var(--text); }
+
+    .m-icon  { width:52px; height:52px; background:linear-gradient(135deg,var(--blue),var(--purple)); border-radius:14px; display:flex; align-items:center; justify-content:center; font-family:'Syne',sans-serif; font-weight:800; font-size:20px; color:#fff; margin-bottom:18px; }
+    .m-title { font-family:'Syne',sans-serif; font-weight:800; font-size:21px; margin-bottom:5px; }
+    .m-sub   { font-size:13px; color:var(--muted); margin-bottom:24px; line-height:1.6; }
+
+    .merr { background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.25); border-radius:9px; padding:9px 12px; font-size:12px; color:#f87171; margin-bottom:13px; display:none; }
+
+    .fg   { margin-bottom:15px; }
+    .flbl { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; font-weight:500; }
+    .finp { width:100%; background:rgba(255,255,255,.05); border:1px solid var(--border); border-radius:10px; padding:12px 14px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:15px; outline:none; transition:border-color .2s; }
+    .finp:focus { border-color:var(--purple); }
+    .finp::placeholder { color:rgba(120,120,160,.45); }
+    .fhint { font-size:11px; color:var(--muted); margin-top:5px; display:flex; align-items:center; gap:4px; }
+
+    /* password toggle */
+    .pw-wrap { position:relative; }
+    .pw-eye  { position:absolute; right:13px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--muted); cursor:pointer; padding:0; display:flex; align-items:center; }
+    .pw-eye:hover { color:var(--text); }
+
+    .msub-btn { width:100%; padding:13px; background:linear-gradient(135deg,var(--blue),var(--purple)); border:none; border-radius:11px; color:#fff; font-family:'Syne',sans-serif; font-weight:700; font-size:14px; cursor:pointer; transition:opacity .2s,transform .18s; box-shadow:0 7px 20px rgba(107,79,224,.32); margin-top:4px; }
+    .msub-btn:hover    { opacity:.9; transform:translateY(-1px); }
+    .msub-btn:disabled { opacity:.46; cursor:not-allowed; transform:none; }
+
+    .mdivider { text-align:center; color:var(--muted); font-size:11px; margin:15px 0 12px; position:relative; }
+    .mdivider::before,.mdivider::after { content:''; position:absolute; top:50%; width:34%; height:1px; background:var(--border); }
+    .mdivider::before { left:0; } .mdivider::after { right:0; }
+
+    .mweb { display:flex; align-items:center; justify-content:center; gap:7px; width:100%; padding:11px; background:transparent; border:1px solid var(--border); border-radius:11px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:13px; cursor:pointer; text-decoration:none; transition:border-color .2s,background .2s; }
+    .mweb:hover { border-color:rgba(255,255,255,.2); background:rgba(255,255,255,.03); }
+
+    .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* animations */
+    @keyframes up    { from{opacity:0;transform:translateY(22px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-5px)} 40%,80%{transform:translateX(5px)} }
+
+    /* responsive */
+    @media(max-width:880px) {
+      nav { padding:13px 20px; }
+      .hero { padding:96px 22px 52px; }
+      .hero-inner { grid-template-columns:1fr; gap:48px; text-align:center; }
+      .ctas { justify-content:center; }
+      .sub  { margin:0 auto 36px; }
+      .hero-right { order:-1; }
+      .stats { grid-template-columns:1fr; padding:0 22px 52px; }
+      .sec,.cta-w { padding-left:22px; padding-right:22px; }
+      .g3 { grid-template-columns:1fr; }
+      .steps { grid-template-columns:repeat(2,1fr); }
+      .steps::before { display:none; }
+      .cta-b { padding:40px 20px; }
+      .qr-wrap { flex-direction:column; text-align:center; }
+      footer { flex-direction:column; gap:11px; text-align:center; padding:24px 20px; }
+      .ft1 { right:-8px; } .ft2 { left:-8px; }
+    }
+    @media(max-width:440px) {
+      .logo-text { display:none; }
+      .ftag { display:none; }
+      .phone { width:214px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="/" class="logo">
+    <div class="logo-icon">Q</div>
+    <span class="logo-text">Qikly</span>
+  </a>
+  <div class="nav-right">
+    <button class="btn-ghost" onclick="scrollToApp()">Buka App</button>
+    <button class="btn-grad" onclick="openModal()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+      Login
+    </button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="hero-inner">
+    <div>
+      <div class="badge">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Pengiriman 10–15 Menit · Indonesia
+      </div>
+      <h1>Belanja Kilat,<br /><em>Sampai Sekarang</em></h1>
+      <p class="sub">Ribuan produk segar & kebutuhan sehari-hari, dikirim ke depan pintu Anda dalam 15 menit. Didukung AI untuk pengalaman belanja terdepan.</p>
+      <div class="ctas">
+        <button class="btn-big" onclick="scrollToApp()">Buka Aplikasi →</button>
+        <button class="btn-ghost" onclick="openModal()">Login Admin / Owner</button>
+      </div>
+    </div>
+
+    <div class="hero-right">
+      <div class="phone-wrap">
+        <div class="phone-glow"></div>
+        <div class="ftag ft1">
+          <div class="fti ftib">⚡</div>
+          <div><div class="ftv">14 min</div><div class="ftl">Rata-rata kirim</div></div>
+        </div>
+        <div class="ftag ft2">
+          <div class="fti ftip">📦</div>
+          <div><div class="ftv">2,400+</div><div class="ftl">Produk tersedia</div></div>
+        </div>
+        <div class="phone">
+          <div class="notch"></div>
+          <div class="pscr">
+            <div class="prow">
+              <div class="plogo"><div class="pi">Q</div><span class="pt">Qikly</span></div>
+              <div class="ploc">📍 Beranda</div>
+            </div>
+            <div class="psrch"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Search anything...</div>
+            <div class="pai">🤖 Ask AI: "What should I cook today?"</div>
+            <div class="pbann">
+              <div class="pbadge">⚡ PREMIUM DELIVERY</div>
+              <div class="pbtitle">Fast Delivery Guarantee</div>
+              <div class="pbsub">15 minutes or it's free</div>
+              <div class="pbbtn">Get Started →</div>
+            </div>
+            <div class="pcatt">Kategori</div>
+            <div class="pcats">
+              <div class="pcat"><div class="pci"></div><div class="pcl">Makanan</div></div>
+              <div class="pcat"><div class="pci"></div><div class="pcl">Camilan</div></div>
+              <div class="pcat"><div class="pci"></div><div class="pcl">Minuman</div></div>
+              <div class="pcat"><div class="pci"></div><div class="pcl">Susu</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="stat"><div class="sn">15<span style="font-size:22px">mnt</span></div><div class="sl">Garansi pengiriman atau gratis</div></div>
+  <div class="stat"><div class="sn">2,400+</div><div class="sl">Produk segar & kebutuhan harian</div></div>
+  <div class="stat"><div class="sn">24/7</div><div class="sl">Beroperasi setiap hari</div></div>
+</div>
+
+<!-- FEATURES -->
+<section class="sec">
+  <div class="eyebrow">Keunggulan Platform</div>
+  <h2 class="sec-h">Teknologi terdepan<br />untuk pengalaman terbaik</h2>
+  <div class="g3">
+    <div class="fcard"><div class="ficon fib">⚡</div><div class="ft">Pengiriman Kilat</div><div class="fd">Sistem dispatching AI memilihkan kurir terdekat otomatis dengan estimasi real-time.</div></div>
+    <div class="fcard"><div class="ficon fip">🤖</div><div class="ft">AI Smart Picking</div><div class="fd">Rute pengambilan produk dioptimasi AI, mengurangi waktu packing hingga 40% lebih cepat.</div></div>
+    <div class="fcard"><div class="ficon fig">📊</div><div class="ft">Dashboard Lengkap</div><div class="fd">Admin dan pemilik toko pantau finansial, staf, dan performa real-time dari satu panel.</div></div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="sec">
+  <div class="eyebrow">Cara Kerja</div>
+  <h2 class="sec-h">Dari pilih hingga depan pintu,<br />cepat dan mudah</h2>
+  <div class="steps">
+    <div class="step"><div class="snum on">1</div><div class="stit">Pilih Produk</div><div class="sdsc">Ribuan produk segar dari toko terdekat.</div></div>
+    <div class="step"><div class="snum on">2</div><div class="stit">Konfirmasi</div><div class="sdsc">Bayar COD, QRIS, atau metode digital.</div></div>
+    <div class="step"><div class="snum on">3</div><div class="stit">Packing AI</div><div class="sdsc">Picker dikemudikan rute AI ultra-cepat.</div></div>
+    <div class="step"><div class="snum on">4</div><div class="stit">Terima di Pintu</div><div class="sdsc">Lacak posisi kurir secara real-time.</div></div>
+  </div>
+</section>
+
+<!-- OPEN APP / QR SECTION -->
+<section class="sec" id="appSection">
+  <div class="eyebrow">Buka Aplikasi</div>
+  <h2 class="sec-h">Scan QR atau buka langsung<br />di smartphone Anda</h2>
+  <div class="qr-wrap">
+    <!-- QR code for exp+qikly-app://expo-development-client/?url=https%3A%2F%2Febrqnvm-dioti-8081.exp.direct -->
+    <div class="qr-box">
+      <svg viewBox="0 0 29 29" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+        <path fill="#000" d="M0 0h7v1H0zM8 0h1v1H8zM10 0h3v1h-3zM14 0h1v1h-1zM16 0h1v1h-1zM18 0h1v1h-1zM22 0h7v1h-7zM0 1h1v1H0zM6 1h1v1H6zM8 1h3v1H8zM12 1h1v1h-1zM14 1h1v1h-1zM16 1h1v1h-1zM22 1h1v1h-1zM28 1h1v1h-1zM0 2h1v1H0zM2 2h3v1H2zM6 2h1v1H6zM8 2h1v1H8zM10 2h1v1h-1zM12 2h2v1h-2zM15 2h1v1h-1zM17 2h3v1h-3zM22 2h1v1h-1zM24 2h3v1h-3zM28 2h1v1h-1zM0 3h1v1H0zM2 3h3v1H2zM6 3h1v1H6zM9 3h1v1H9zM11 3h4v1h-4zM16 3h2v1h-2zM19 3h1v1h-1zM22 3h1v1h-1zM24 3h3v1h-3zM28 3h1v1h-1zM0 4h1v1H0zM2 4h3v1H2zM6 4h1v1H6zM8 4h2v1H8zM11 4h1v1h-1zM14 4h1v1h-1zM17 4h2v1h-2zM22 4h1v1h-1zM24 4h3v1h-3zM28 4h1v1h-1zM0 5h1v1H0zM6 5h1v1H6zM9 5h1v1H9zM11 5h2v1h-2zM14 5h1v1h-1zM18 5h2v1h-2zM22 5h1v1h-1zM28 5h1v1h-1zM0 6h7v1H0zM8 6h1v1H8zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h1v1h-1zM20 6h1v1h-1zM22 6h7v1h-7zM9 7h2v1H9zM12 7h1v1h-1zM14 7h2v1h-2zM17 7h3v1h-3zM0 8h1v1H0zM3 8h3v1H3zM8 8h4v1H8zM14 8h1v1h-1zM16 8h1v1h-1zM18 8h1v1h-1zM20 8h2v1h-2zM23 8h2v1h-2zM26 8h2v1h-2zM0 9h3v1H0zM4 9h1v1H4zM7 9h2v1H7zM10 9h2v1h-2zM13 9h3v1h-3zM17 9h3v1h-3zM21 9h3v1h-3zM25 9h1v1h-1zM27 9h2v1h-2zM1 10h4v1H1zM6 10h2v1H6zM9 10h1v1H9zM12 10h3v1h-3zM16 10h1v1h-1zM18 10h1v1h-1zM21 10h1v1h-1zM24 10h1v1h-1zM26 10h2v1h-2zM0 11h1v1H0zM4 11h1v1H4zM7 11h1v1H7zM9 11h1v1H9zM11 11h2v1h-2zM14 11h2v1h-2zM17 11h1v1h-1zM20 11h2v1h-2zM25 11h2v1h-2zM28 11h1v1h-1zM0 12h2v1H0zM4 12h1v1H4zM6 12h1v1H6zM8 12h1v1H8zM10 12h3v1h-3zM15 12h2v1h-2zM18 12h1v1h-1zM20 12h1v1h-1zM22 12h2v1h-2zM27 12h2v1h-2zM2 13h2v1H2zM5 13h1v1H5zM8 13h1v1H8zM10 13h2v1h-2zM14 13h2v1h-2zM17 13h2v1h-2zM20 13h2v1h-2zM24 13h1v1h-1zM27 13h1v1h-1zM0 14h1v1H0zM3 14h2v1H3zM6 14h1v1H6zM8 14h1v1H8zM12 14h2v1h-2zM15 14h1v1h-1zM18 14h2v1h-2zM21 14h1v1h-1zM23 14h2v1h-2zM26 14h1v1h-1zM28 14h1v1h-1zM1 15h2v1H1zM4 15h2v1H4zM8 15h1v1H8zM11 15h1v1h-1zM13 15h2v1h-2zM16 15h1v1h-1zM19 15h1v1h-1zM22 15h2v1h-2zM25 15h1v1h-1zM27 15h2v1h-2zM0 16h3v1H0zM4 16h1v1H4zM6 16h2v1H6zM9 16h2v1H9zM12 16h1v1h-1zM14 16h2v1h-2zM18 16h2v1h-2zM22 16h1v1h-1zM25 16h1v1h-1zM28 16h1v1h-1zM8 17h2v1H8zM11 17h2v1h-2zM15 17h1v1h-1zM17 17h1v1h-1zM20 17h2v1h-2zM24 17h1v1h-1zM26 17h3v1h-3zM0 18h2v1H0zM3 18h1v1H3zM5 18h1v1H5zM8 18h1v1H8zM10 18h1v1h-1zM13 18h3v1h-3zM17 18h1v1h-1zM19 18h3v1h-3zM23 18h1v1h-1zM25 18h1v1h-1zM27 18h2v1h-2zM0 19h1v1H0zM2 19h2v1H2zM5 19h3v1H5zM9 19h3v1H9zM13 19h1v1h-1zM15 19h1v1h-1zM17 19h3v1h-3zM21 19h3v1h-3zM25 19h1v1h-1zM28 19h1v1h-1zM0 20h1v1H0zM3 20h2v1H3zM6 20h1v1H6zM8 20h3v1H8zM12 20h1v1h-1zM16 20h1v1h-1zM18 20h1v1h-1zM22 20h1v1h-1zM25 20h4v1h-4zM8 21h1v1H8zM11 21h1v1h-1zM13 21h2v1h-2zM17 21h2v1h-2zM20 21h2v1h-2zM23 21h2v1h-2zM26 21h1v1h-1zM28 21h1v1h-1zM0 22h7v1H0zM9 22h3v1H9zM13 22h1v1h-1zM16 22h3v1h-3zM20 22h1v1h-1zM23 22h1v1h-1zM25 22h1v1h-1zM27 22h2v1h-2zM0 23h1v1H0zM6 23h1v1H6zM9 23h2v1H9zM12 23h2v1h-2zM15 23h1v1h-1zM17 23h3v1h-3zM21 23h2v1h-2zM24 23h2v1h-2zM27 23h2v1h-2zM0 24h1v1H0zM2 24h3v1H2zM6 24h1v1H6zM8 24h1v1H8zM10 24h2v1h-2zM14 24h3v1h-3zM18 24h1v1h-1zM20 24h3v1h-3zM24 24h1v1h-1zM26 24h1v1h-1zM28 24h1v1h-1zM0 25h1v1H0zM2 25h3v1H2zM6 25h1v1H6zM8 25h2v1H8zM11 25h3v1h-3zM15 25h2v1h-2zM18 25h2v1h-2zM21 25h3v1h-3zM25 25h1v1h-1zM27 25h2v1h-2zM0 26h1v1H0zM6 26h1v1H6zM9 26h1v1H9zM11 26h1v1h-1zM14 26h2v1h-2zM17 26h1v1h-1zM19 26h2v1h-2zM22 26h3v1h-3zM26 26h2v1h-2zM0 27h7v1H0zM8 27h3v1H8zM12 27h2v1h-2zM15 27h1v1h-1zM18 27h2v1h-2zM21 27h1v1h-1zM23 27h1v1h-1zM25 27h1v1h-1zM27 27h1v1h-1z"/>
+      </svg>
+    </div>
+    <div class="qr-info">
+      <h3>Buka di Expo Go</h3>
+      <p>Scan QR code dengan kamera HP atau aplikasi Expo Go untuk langsung membuka Qikly di smartphone Anda.</p>
+      <a class="qr-url" href="exp+qikly-app://expo-development-client/?url=https%3A%2F%2Febrqnvm-dioti-8081.exp.direct" target="_blank">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        exp+qikly-app://expo-development-client
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<div class="cta-w">
+  <div class="cta-b">
+    <h2 class="cta-h">Siap bergabung dengan<br /><em style="font-style:normal;background:linear-gradient(135deg,#1AABE8,#6B4FE0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">ekosistem Qikly?</em></h2>
+    <p class="cta-s">Buka aplikasi, daftar, dan nikmati pengiriman pertama Anda hari ini.</p>
+    <div class="cta-row">
+      <button class="btn-big" onclick="scrollToApp()">Buka Aplikasi</button>
+      <button class="btn-ghost" onclick="openModal()">Login Admin / Owner</button>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <a href="/" class="flogo">
+    <div class="flogo-i">Q</div>
+    <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:14px">Qikly</span>
+  </a>
+  <span class="fcopy">© 2025 Qikly. Pengiriman kilat Indonesia.</span>
+</footer>
+
+<!-- ── LOGIN MODAL (phone + password, no OTP) ── -->
+<div class="overlay" id="ov" onclick="bgClick(event)">
+  <div class="modal">
+    <button class="mclose" onclick="closeModal()">✕</button>
+
+    <div class="m-icon">Q</div>
+    <h2 class="m-title">Login Qikly</h2>
+    <p class="m-sub">Masuk sebagai Admin atau Pemilik Toko untuk mengakses dashboard.</p>
+
+    <div class="merr" id="merr"></div>
+
+    <div class="fg">
+      <label class="flbl">Nomor Telepon</label>
+      <input type="tel" class="finp" id="phone" placeholder="+62 812 3456 7890" autocomplete="tel" />
+    </div>
+
+    <div class="fg">
+      <label class="flbl">Password</label>
+      <div class="pw-wrap">
+        <input type="password" class="finp" id="pass" placeholder="Masukkan password" autocomplete="current-password" style="padding-right:44px" />
+        <button class="pw-eye" type="button" onclick="togglePw()" id="eyeBtn" aria-label="Toggle password">
+          <svg id="eyeShow" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <svg id="eyeHide" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+        </button>
+      </div>
+      <div class="fhint">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Gunakan kredensial yang diberikan admin
+      </div>
+    </div>
+
+    <button class="msub-btn" id="btnLogin" onclick="doLogin()">Masuk →</button>
+
+    <div class="mdivider">atau</div>
+    <button class="mweb" onclick="scrollToApp();closeModal()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+      Buka Aplikasi Qikly
+    </button>
+  </div>
+</div>
+
+<script>
+  /* ─── MODAL ─── */
+  const ov = document.getElementById('ov');
+  function openModal()  { ov.classList.add('open');  document.body.style.overflow='hidden'; clrErr(); setTimeout(()=>document.getElementById('phone').focus(),260); }
+  function closeModal() { ov.classList.remove('open'); document.body.style.overflow=''; }
+  function bgClick(e)   { if(e.target===ov) closeModal(); }
+  document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
+
+  /* ─── PASSWORD TOGGLE ─── */
+  function togglePw() {
+    const inp = document.getElementById('pass');
+    const show = document.getElementById('eyeShow');
+    const hide = document.getElementById('eyeHide');
+    if (inp.type === 'password') {
+      inp.type = 'text'; show.style.display='none'; hide.style.display='block';
+    } else {
+      inp.type = 'password'; show.style.display='block'; hide.style.display='none';
+    }
+  }
+
+  /* ─── PHONE FORMAT ─── */
+  document.getElementById('phone').addEventListener('input', function() {
+    let v = this.value.replace(/[^\d+]/g,'');
+    if (v.startsWith('08'))  v = '+62' + v.slice(1);
+    if (/^628/.test(v))      v = '+' + v;
+    this.value = v;
+  });
+  document.getElementById('phone').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('pass').focus(); });
+  document.getElementById('pass').addEventListener('keydown',  e => { if(e.key==='Enter') doLogin(); });
+
+  /* ─── ERROR ─── */
+  function showErr(m) { const e=document.getElementById('merr'); e.textContent=m; e.style.display='block'; }
+  function clrErr()   { const e=document.getElementById('merr'); e.textContent=''; e.style.display='none'; }
+  function shake(id)  { const e=document.getElementById(id); e.style.animation='shake .36s ease'; setTimeout(()=>e.style.animation='',380); }
+
+  /* ─── LOGIN ─── */
+  async function doLogin() {
+    const phone = document.getElementById('phone').value.trim();
+    const password = document.getElementById('pass').value;
+    clrErr();
+
+    if (!phone || phone.length < 8) { shake('phone'); showErr('Masukkan nomor telepon yang valid.'); return; }
+    if (!password || password.length < 4) { shake('pass'); showErr('Masukkan password Anda.'); return; }
+
+    const btn = document.getElementById('btnLogin');
+    btn.innerHTML = '<span class="spinner"></span>';
+    btn.disabled = true;
+
+    try {
+      /* Uses same-origin so it works on both localhost AND Railway
+         without any CORS issues — the landing page is served by
+         the same Express server that handles /api/auth/login     */
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, password })
+      });
+
+      /* If the server returned HTML (wrong route / 404 page)
+         instead of JSON, catch it gracefully                    */
+      const ct = r.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        throw new Error('Server returned non-JSON response (route may not exist yet).');
+      }
+
+      const d = await r.json();
+
+      if (r.ok && d.token) {
+        localStorage.setItem('qikly_token', d.token);
+        localStorage.setItem('qikly_user',  JSON.stringify(d.user));
+
+        btn.innerHTML = '✓ Berhasil!';
+        btn.style.background = 'linear-gradient(135deg,#10b981,#059669)';
+
+        setTimeout(() => {
+          const role = d.user?.role;
+          window.location.href =
+            role === 'admin'        ? '/admin'        :
+            role === 'store_owner'  ? '/store-owner'  :
+            role === 'picker'       ? '/picker'       :
+            role === 'driver'       ? '/picker'       : '/';
+        }, 800);
+      } else {
+        showErr(d.error || 'Nomor atau password salah.');
+        shake('phone'); shake('pass');
+        btn.innerHTML = 'Masuk →'; btn.disabled = false;
+      }
+    } catch (err) {
+      console.error('login:', err);
+      showErr('Tidak dapat terhubung. Pastikan server berjalan dan route /api/auth/login tersedia.');
+      btn.innerHTML = 'Masuk →'; btn.disabled = false;
+    }
+  }
+
+  /* ─── SCROLL TO APP SECTION ─── */
+  function scrollToApp() {
+    document.getElementById('appSection').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  /* ─── SCROLL REVEAL ─── */
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.style.animation='up .5s ease both'; obs.unobserve(e.target); }
+    });
+  }, { threshold: .08 });
+  document.querySelectorAll('.stat,.fcard,.step').forEach(x => obs.observe(x));
+</script>
+</body>
+</html>

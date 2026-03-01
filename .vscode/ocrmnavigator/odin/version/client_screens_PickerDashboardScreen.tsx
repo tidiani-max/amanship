@@ -358,7 +358,7 @@ export const AICoachWidget: React.FC<{ userId: string }> = ({ userId }) => {
         </View>
       ))}
       <View style={{ padding: 12, borderRadius: 10, marginBottom: 12, backgroundColor: BRAND_PURPLE + "15" }}>
-        <ThemedText style={{ fontWeight: "700", marginBottom: 8, color: BRAND_PURPLE }}>🚀 Your Potential Today:</ThemedText>
+        <ThemedText style={{ fontWeight: "700", marginBottom: 8, color: BRAND_PURPLE }}> Your Potential Today:</ThemedText>
         <ThemedText type="caption" style={{ color: theme.textSecondary }}>Current: {coaching.potential?.currentSpeed} → Possible: {coaching.potential?.potentialSpeed}</ThemedText>
         <ThemedText type="caption" style={{ color: BRAND_MINT, fontWeight: "700", marginTop: 4 }}>Extra earnings: {coaching.potential?.extraBonus}</ThemedText>
       </View>
