@@ -9305,9 +9305,22 @@ cron.schedule('0 9 * * *', async () => {
   }
 });
 
+// 🔒 CSP HEADER (allows inline scripts/styles + Google Fonts)
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline' 'unsafe-hashes'; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "style-src-attr 'unsafe-inline'; " +
+    "font-src 'self' https://fonts.gstatic.com; " +
+    "img-src 'self' data: https:; " +
+    "connect-src 'self';"
+  );
+  next();
+});
 
-
-/// 🌐 SERVE STATIC FILES
+// 🌐 SERVE STATIC FILES
 app.use(express.static(path.join(process.cwd(), 'public')));
 
 // 🏠 ROOT → Landing page
