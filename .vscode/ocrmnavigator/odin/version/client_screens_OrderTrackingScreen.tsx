@@ -1,5 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
-import { View, StyleSheet, ScrollView, ActivityIndicator, Linking, Pressable, Image, Animated, Platform, Modal } from "react-native";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import {
+  View, StyleSheet, ScrollView, ActivityIndicator, Linking,
+  Pressable, Image, Animated, Platform, Modal
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -9,444 +12,93 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import QRCode from "react-native-qrcode-svg";
-import { getSmartZoom, GRABMAPS_CONFIG } from "@/lib/mapConfig";
+import { GRABMAPS_CONFIG } from "@/lib/mapConfig";
 import { haversineKm, bearingDeg } from "@/hooks/useDriverLocationTracking";
-import MapView, { Marker, Polyline, Circle, PROVIDER_GOOGLE } from "react-native-maps";
+import { MapView, Marker, Polyline, Circle, PROVIDER_GOOGLE } from "@/components/MapWrapper";
 
 const BRAND_PURPLE = "#6338f2";
-const MAP_UPDATE_INTERVAL = 2000;
-const DRIVER_ANIMATION_DURATION = 2000;
+const MAP_UPDATE_INTERVAL = 4000;   // was 2000 — halved poll rate
+const DRIVER_ANIMATION_DURATION = 1500;
 
 type OrderTrackingRouteProp = RouteProp<RootStackParamList, "OrderTracking">;
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-export default function OrderTrackingScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation<NavigationProp>();
-  const route = useRoute<OrderTrackingRouteProp>();
-  const { orderId } = route.params;
-  const mapRef = useRef<any>(null);
-  const [showQRISModal, setShowQRISModal] = useState(false);
+// ─── Memoised driver marker — never re-renders unless heading/speed changes ──
+const DriverMarker = React.memo(function DriverMarker({
+  heading, speed, isMoving,
+}: { heading: number; speed: number; isMoving: boolean }) {
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+  const loopRef   = useRef<Animated.CompositeAnimation | null>(null);
 
-  // Fetch order data
-  const { data: order, isLoading } = useQuery({
-    queryKey: ["order-tracking", orderId],
-    queryFn: async () => {
-      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}`);
-      return res.json();
-    },
-    refetchInterval: 3000,
-  });
+  useEffect(() => {
+    if (isMoving) {
+      loopRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
+        ])
+      );
+      loopRef.current.start();
+    } else {
+      loopRef.current?.stop();
+      pulseAnim.setValue(0);
+    }
+    return () => loopRef.current?.stop();
+  }, [isMoving]);
 
-  // Fetch payment status
-  const { data: paymentStatus } = useQuery({
-    queryKey: ["payment-status", orderId],
-    queryFn: async () => {
-      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}/payment-status`);
-      return res.json();
-    },
-    refetchInterval: order?.paymentMethod === "qris" && !order?.qrisConfirmed ? 3000 : false,
-    enabled: !!order,
-  });
-
-  const getSimpleStatus = () => {
-    const status = order?.status?.toLowerCase() || 'pending';
-    if (status === 'pending' || status === 'confirmed') return 'pending';
-    if (status === 'picking') return 'picking';
-    if (status === 'packed') return 'packed';
-    if (status === 'delivering' || status === 'delivered') return 'delivering';
-    return 'pending';
-  };
-
-  const simpleStatus = getSimpleStatus();
-
-  const customerLat = order?.customerLat ? parseFloat(order.customerLat) : null;
-  const customerLng = order?.customerLng ? parseFloat(order.customerLng) : null;
-
-  // Fetch driver location with enhanced calculations
-  const { data: driverData } = useQuery({
-    queryKey: ["driver-location", orderId],
-    queryFn: async () => {
-      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/${orderId}`);
-      const data = await res.json();
-      
-      // Calculate distance and bearing if we have both positions
-      if (data?.location && customerLat && customerLng) {
-        const distance = haversineKm(
-          data.location.latitude,
-          data.location.longitude,
-          customerLat,
-          customerLng
-        );
-        
-        const bearing = bearingDeg(
-          data.location.latitude,
-          data.location.longitude,
-          customerLat,
-          customerLng
-        );
-        
-        return {
-          ...data,
-          distance: parseFloat(distance.toFixed(2)),
-          bearing: parseFloat(bearing.toFixed(1)),
-          etaMinutes: Math.ceil(distance / 0.5), // Assuming 30 km/h average speed
-        };
-      }
-      
-      return data;
-    },
-    enabled: simpleStatus === 'delivering' && !!order?.driverId,
-    refetchInterval: MAP_UPDATE_INTERVAL,
-  });
-
-  const orderNumber = order?.orderNumber || `#${order?.id?.slice(0, 8).toUpperCase() || 'PENDING'}`;
-  const subtotal = order?.subtotal || 0;
-  const deliveryFee = order?.deliveryFee || 10000;
-  const total = order?.total || (subtotal + deliveryFee);
-  
-  const driverLat = driverData?.location?.latitude || null;
-  const driverLng = driverData?.location?.longitude || null;
-  const driverHeading = driverData?.bearing || driverData?.location?.heading || 0;
-  const driverSpeed = driverData?.location?.speed || 0;
-  const distance = driverData?.distance || null;
-  const etaMinutes = driverData?.etaMinutes || null;
-
-  const showMap = (simpleStatus === 'packed' || simpleStatus === 'delivering') && customerLat && customerLng;
-  const showDriver = simpleStatus === 'delivering' && driverLat && driverLng;
-  const searchingDriver = simpleStatus === 'packed' && !order?.driverId;
-
-  // Check if payment is pending
-  const isQRISPending = order?.paymentMethod === "qris" && !paymentStatus?.isPaid;
-
-  if (isLoading && !order) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={BRAND_PURPLE} />
-      </View>
-    );
-  }
+  const glowOpacity = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.8] });
 
   return (
-    <View style={styles.container}>
-      {/* QRIS Payment Modal */}
-      <Modal
-        visible={showQRISModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowQRISModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Complete Payment</ThemedText>
-              <Pressable onPress={() => setShowQRISModal(false)}>
-                <Feather name="x" size={24} color="#64748b" />
-              </Pressable>
-            </View>
-
-            <View style={styles.qrisContainer}>
-              {paymentStatus?.qrisUrl ? (
-                <QRCode value={paymentStatus.qrisUrl} size={240} />
-              ) : (
-                <ActivityIndicator size="large" color={BRAND_PURPLE} />
-              )}
-            </View>
-
-            <ThemedText style={styles.qrisInstruction}>
-              Scan this QR code with your mobile banking app
-            </ThemedText>
-
-            <View style={styles.qrisDetails}>
-              <View style={styles.qrisDetailRow}>
-                <ThemedText style={styles.qrisLabel}>Order Number</ThemedText>
-                <ThemedText style={styles.qrisValue}>{orderNumber}</ThemedText>
-              </View>
-              <View style={styles.qrisDetailRow}>
-                <ThemedText style={styles.qrisLabel}>Total Amount</ThemedText>
-                <ThemedText style={styles.qrisValue}>
-                  Rp {total.toLocaleString('id-ID')}
-                </ThemedText>
-              </View>
-              <View style={styles.qrisDetailRow}>
-                <ThemedText style={styles.qrisLabel}>Time Remaining</ThemedText>
-                <ThemedText style={[styles.qrisValue, { color: BRAND_PURPLE }]}>
-                  {paymentStatus?.minutesRemaining || 0} minutes
-                </ThemedText>
-              </View>
-            </View>
-
-            {paymentStatus?.status === "expired" && (
-              <View style={styles.expiredBanner}>
-                <Feather name="alert-circle" size={16} color="#dc2626" />
-                <ThemedText style={styles.expiredText}>
-                  QR code expired. Please create a new order.
-                </ThemedText>
-              </View>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* TOP: Map or Illustration */}
-      <View style={{ height: '52%' }}>
-        {showMap ? (
-          Platform.OS === "web" ? (
-            <WebMapView 
-              customerLat={customerLat!}
-              customerLng={customerLng!}
-              driverLat={driverLat}
-              driverLng={driverLng}
-              searchingDriver={searchingDriver}
-              showDriver={showDriver}
-              distance={distance}
-              etaMinutes={etaMinutes}
-            />
-          ) : (
-            <NativeMapView
-              mapRef={mapRef}
-              customerLat={customerLat!}
-              customerLng={customerLng!}
-              driverLat={driverLat}
-              driverLng={driverLng}
-              driverHeading={driverHeading}
-              driverSpeed={driverSpeed}
-              searchingDriver={searchingDriver}
-              showDriver={showDriver}
-            />
-          )
-        ) : (
-          <View style={styles.illustrationContainer}>
-            <Image 
-              source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3081/3081986.png' }} 
-              style={styles.illustration}
-              resizeMode="contain"
-            />
-            <ThemedText style={styles.illustrationText}>
-              {isQRISPending ? 'Waiting for Payment' : simpleStatus === 'pending' ? 'Order Confirmed!' : 'Preparing your order...'}
-            </ThemedText>
-          </View>
-        )}
-        
-        <Pressable 
-          onPress={() => navigation.goBack()}
-          style={[styles.backButton, { top: insets.top + 10 }]}
-        >
-          <Feather name="arrow-left" size={24} color="#1e293b" />
-        </Pressable>
-
-        {/* ETA Badge */}
-        {showDriver && distance && (
-          <View style={[styles.etaBadge, { top: insets.top + 10 }]}>
-            <MaterialCommunityIcons name="clock-outline" size={16} color="white" />
-            <ThemedText style={styles.etaText}>
-              {distance.toFixed(1)} km • {etaMinutes || Math.ceil(distance * 3)} min
-            </ThemedText>
-          </View>
-        )}
+    <View style={styles.driverMarkerContainer}>
+      {isMoving && <Animated.View style={[styles.driverGlow, { opacity: glowOpacity }]} />}
+      <View style={[styles.driverMarker, { transform: [{ rotate: `${heading}deg` }] }]}>
+        <MaterialCommunityIcons name="motorbike" size={24} color="white" />
+        <View style={styles.directionArrow} />
       </View>
-
-      {/* BOTTOM: Order Info */}
-      <ScrollView
-        style={styles.bottomSheet}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 20, paddingHorizontal: 20 }}
-      >
-        <View style={styles.handle} />
-
-        {/* Payment Status Banner */}
-        {isQRISPending && (
-          <Pressable 
-            style={styles.paymentBanner}
-            onPress={() => setShowQRISModal(true)}
-          >
-            <View style={styles.paymentBannerContent}>
-              <View style={styles.paymentBannerIcon}>
-                <MaterialCommunityIcons name="qrcode-scan" size={24} color={BRAND_PURPLE} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={styles.paymentBannerTitle}>
-                  Payment Required
-                </ThemedText>
-                <ThemedText style={styles.paymentBannerText}>
-                  Tap to complete QRIS payment • {paymentStatus?.minutesRemaining || 0} min left
-                </ThemedText>
-              </View>
-              <Feather name="chevron-right" size={20} color={BRAND_PURPLE} />
-            </View>
-          </Pressable>
-        )}
-
-        {/* Order number + Status */}
-        <View style={styles.statusHeader}>
-          <View style={{ flex: 1 }}>
-            <ThemedText style={styles.orderNumber}>Order {orderNumber}</ThemedText>
-            <ThemedText style={styles.statusText}>
-              {isQRISPending ? '⏳ Awaiting Payment' : 
-               simpleStatus === 'pending' && 'Order Placed'}
-              {simpleStatus === 'picking' && 'Picking Items'}
-              {simpleStatus === 'packed' && 'Ready for Pickup'}
-              {simpleStatus === 'delivering' && 'On the Way'}
-            </ThemedText>
-            {!isQRISPending && (
-              <ThemedText style={styles.pinText}>
-                PIN: <ThemedText style={styles.pinBold}>{order?.deliveryPin || 'N/A'}</ThemedText>
-              </ThemedText>
-            )}
-          </View>
-          <View style={[
-            styles.statusBadge,
-            isQRISPending && styles.statusBadgePending
-          ]}>
-            <ThemedText style={styles.statusLabel}>
-              {isQRISPending ? 'UNPAID' : simpleStatus.toUpperCase()}
-            </ThemedText>
-          </View>
+      {speed > 0 && (
+        <View style={styles.speedBadge}>
+          <ThemedText style={styles.speedText}>{Math.round(speed * 3.6)} km/h</ThemedText>
         </View>
-
-        {/* Progress Bar - Only show if paid */}
-        {!isQRISPending && (
-          <View style={styles.progressContainer}>
-            <View style={styles.progressStep}>
-              <View style={[styles.progressDot, styles.progressDotActive]}>
-                <Feather name="check" size={12} color="white" />
-              </View>
-              <ThemedText style={styles.progressLabelActive}>Placed</ThemedText>
-            </View>
-            
-            <View style={[styles.progressLine, simpleStatus !== 'pending' && styles.progressLineActive]} />
-            
-            <View style={styles.progressStep}>
-              <View style={[
-                styles.progressDot, 
-                simpleStatus !== 'pending' && styles.progressDotActive,
-                simpleStatus === 'picking' && styles.progressDotCurrent
-              ]}>
-                {simpleStatus !== 'pending' && <Feather name="check" size={12} color="white" />}
-              </View>
-              <ThemedText style={simpleStatus !== 'pending' ? styles.progressLabelActive : styles.progressLabel}>
-                Picking
-              </ThemedText>
-            </View>
-            
-            <View style={[
-              styles.progressLine, 
-              (simpleStatus === 'packed' || simpleStatus === 'delivering') && styles.progressLineActive
-            ]} />
-            
-            <View style={styles.progressStep}>
-              <View style={[
-                styles.progressDot, 
-                (simpleStatus === 'packed' || simpleStatus === 'delivering') && styles.progressDotActive,
-                simpleStatus === 'packed' && styles.progressDotCurrent
-              ]}>
-                {(simpleStatus === 'packed' || simpleStatus === 'delivering') && (
-                  <Feather name="check" size={12} color="white" />
-                )}
-              </View>
-              <ThemedText style={
-                (simpleStatus === 'packed' || simpleStatus === 'delivering') 
-                  ? styles.progressLabelActive 
-                  : styles.progressLabel
-              }>
-                Ready
-              </ThemedText>
-            </View>
-            
-            <View style={[styles.progressLine, simpleStatus === 'delivering' && styles.progressLineActive]} />
-            
-            <View style={styles.progressStep}>
-              <View style={[
-                styles.progressDot, 
-                simpleStatus === 'delivering' && styles.progressDotActive,
-                simpleStatus === 'delivering' && styles.progressDotCurrent
-              ]}>
-                {order?.status === 'delivered' && <Feather name="check" size={12} color="white" />}
-              </View>
-              <ThemedText style={simpleStatus === 'delivering' ? styles.progressLabelActive : styles.progressLabel}>
-                On Way
-              </ThemedText>
-            </View>
-          </View>
-        )}
-
-        {/* Driver card - Only show if paid */}
-        {!isQRISPending && order?.driverName && (
-          <Card style={styles.driverCard}>
-            <View style={styles.driverRow}>
-              <View style={styles.driverAvatar}>
-                <FontAwesome5 name="motorcycle" size={20} color="white" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={styles.driverName}>{order.driverName}</ThemedText>
-                <ThemedText style={styles.vehicleInfo}>
-                  {distance ? `${distance.toFixed(1)} km away` : 'On the way'}
-                </ThemedText>
-              </View>
-              <View style={styles.contactActions}>
-                <Pressable style={styles.iconBtn} onPress={() => Linking.openURL(`tel:${order.driverPhone}`)}>
-                  <Feather name="phone" size={18} color={BRAND_PURPLE} />
-                </Pressable>
-                <Pressable style={[styles.iconBtn, { backgroundColor: BRAND_PURPLE }]} onPress={() => navigation.navigate("Chat", { orderId })}>
-                  <Feather name="message-circle" size={18} color="white" />
-                </Pressable>
-              </View>
-            </View>
-          </Card>
-        )}
-
-        {/* Order summary */}
-        <View style={styles.summarySection}>
-          <ThemedText style={styles.sectionTitle}>Order Summary</ThemedText>
-          <View style={styles.divider} />
-          
-          {order?.items?.map((item: any, i: number) => (
-            <View key={i} style={styles.itemRow}>
-              <ThemedText style={styles.itemQty}>{item.quantity}x</ThemedText>
-              <ThemedText style={styles.itemName}>{item.productName}</ThemedText>
-              <ThemedText style={styles.itemPrice}>
-                Rp {(Number(item.priceAtEntry || 0) * Number(item.quantity || 1)).toLocaleString('id-ID')}
-              </ThemedText>
-            </View>
-          ))}
-
-          {/* Subtotal + Total */}
-          <View style={styles.priceContainer}>
-            <View style={styles.priceRow}>
-              <ThemedText style={styles.priceLabel}>Subtotal</ThemedText>
-              <ThemedText style={styles.priceValue}>Rp {subtotal.toLocaleString('id-ID')}</ThemedText>
-            </View>
-            <View style={styles.priceRow}>
-              <ThemedText style={styles.priceLabel}>Delivery Fee</ThemedText>
-              <ThemedText style={styles.priceValue}>Rp {deliveryFee.toLocaleString('id-ID')}</ThemedText>
-            </View>
-            <View style={[styles.priceRow, styles.totalRow]}>
-              <ThemedText style={styles.totalLabel}>Total Payment</ThemedText>
-              <ThemedText style={styles.totalValue}>Rp {total.toLocaleString('id-ID')}</ThemedText>
-            </View>
-          </View>
-        </View>
-      </ScrollView>
+      )}
     </View>
   );
-}
+});
 
-// ==================== WEB MAP COMPONENT ====================
-function WebMapView({ 
-  customerLat, 
-  customerLng, 
-  driverLat, 
-  driverLng, 
-  searchingDriver, 
-  showDriver, 
-  distance,
-  etaMinutes 
+// ─── Memoised pulsing circle ─────────────────────────────────────────────────
+const PulsingCircle = React.memo(function PulsingCircle() {
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 0,    useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+  return (
+    <Animated.View style={[
+      styles.pulsingCircle,
+      {
+        transform: [{ scale: pulseAnim.interpolate({ inputRange: [0,1], outputRange: [0.8, 2.5] }) }],
+        opacity:          pulseAnim.interpolate({ inputRange: [0,1], outputRange: [0.6, 0]   }),
+      },
+    ]} />
+  );
+});
+
+// ─── Web map placeholder ─────────────────────────────────────────────────────
+const WebMapView = React.memo(function WebMapView({
+  customerLat, customerLng, driverLat, driverLng,
+  searchingDriver, showDriver, distance, etaMinutes,
 }: any) {
   return (
     <View style={styles.webMapContainer}>
       <View style={styles.webMapPlaceholder}>
         <MaterialCommunityIcons name="map-marker" size={60} color={BRAND_PURPLE} />
         <ThemedText style={styles.webMapText}>
-          {searchingDriver ? 'Searching for driver...' : 'Your delivery location'}
+          {searchingDriver ? "Searching for driver…" : "Your delivery location"}
         </ThemedText>
         {customerLat && customerLng && (
           <ThemedText style={styles.webMapCoords}>
@@ -469,78 +121,45 @@ function WebMapView({
       </View>
     </View>
   );
-}
+});
 
-// ==================== NATIVE MAP COMPONENT WITH ANIMATIONS ====================
-function NativeMapView({ 
-  mapRef, 
-  customerLat, 
-  customerLng, 
-  driverLat, 
-  driverLng, 
-  driverHeading, 
-  driverSpeed,
-  searchingDriver, 
-  showDriver 
+// ─── Native map — only re-renders when coordinates actually change ────────────
+const NativeMapView = React.memo(function NativeMapView({
+  mapRef, customerLat, customerLng,
+  driverLat, driverLng, driverHeading, driverSpeed,
+  searchingDriver, showDriver,
 }: any) {
-  const [prevDriverPos, setPrevDriverPos] = useState<{lat: number, lng: number} | null>(null);
-  
-  // Enhanced smooth interpolation
-  const animatedLat = useRef(new Animated.Value(driverLat || 0)).current;
-  const animatedLng = useRef(new Animated.Value(driverLng || 0)).current;
-  const animatedRotation = useRef(new Animated.Value(driverHeading || 0)).current;
+  const animatedLat      = useRef(new Animated.Value(driverLat  || customerLat)).current;
+  const animatedLng      = useRef(new Animated.Value(driverLng  || customerLng)).current;
+  const fitScheduled     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const animRunning      = useRef(false);
 
-  // Smoother animation with easing
+  // Smooth driver position animation
   useEffect(() => {
-    if (driverLat && driverLng && prevDriverPos) {
-      Animated.parallel([
-        Animated.timing(animatedLat, {
-          toValue: driverLat,
-          duration: DRIVER_ANIMATION_DURATION,
-          useNativeDriver: false,
-        }),
-        Animated.timing(animatedLng, {
-          toValue: driverLng,
-          duration: DRIVER_ANIMATION_DURATION,
-          useNativeDriver: false,
-        }),
-        Animated.timing(animatedRotation, {
-          toValue: driverHeading,
-          duration: DRIVER_ANIMATION_DURATION,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else if (driverLat && driverLng) {
-      animatedLat.setValue(driverLat);
-      animatedLng.setValue(driverLng);
-      animatedRotation.setValue(driverHeading);
-    }
-    
-    if (driverLat && driverLng) {
-      setPrevDriverPos({ lat: driverLat, lng: driverLng });
-    }
-  }, [driverLat, driverLng, driverHeading]);
+    if (!driverLat || !driverLng) return;
+    if (animRunning.current) return; // don't stack animations
+    animRunning.current = true;
+    Animated.parallel([
+      Animated.timing(animatedLat, { toValue: driverLat, duration: DRIVER_ANIMATION_DURATION, useNativeDriver: false }),
+      Animated.timing(animatedLng, { toValue: driverLng, duration: DRIVER_ANIMATION_DURATION, useNativeDriver: false }),
+    ]).start(() => { animRunning.current = false; });
+  }, [driverLat, driverLng]);
 
-  // Auto-zoom with smart padding
+  // Auto-fit — debounced so map camera doesn't thrash every 4 s
   useEffect(() => {
-    if (mapRef.current && customerLat && customerLng && driverLat && driverLng) {
-      setTimeout(() => {
-        mapRef.current.fitToCoordinates(
-          [
-            { latitude: customerLat, longitude: customerLng },
-            { latitude: driverLat, longitude: driverLng },
-          ],
-          {
-            edgePadding: { top: 120, right: 60, bottom: 60, left: 60 },
-            animated: true,
-          }
-        );
-      }, 100);
-    }
-  }, [driverLat, driverLng, customerLat, customerLng]);
-
-  // On web, MapComponents will be null
-
+    if (!mapRef?.current || !customerLat || !customerLng || !driverLat || !driverLng) return;
+    if (fitScheduled.current) clearTimeout(fitScheduled.current);
+    fitScheduled.current = setTimeout(() => {
+      mapRef.current?.fitToCoordinates(
+        [
+          { latitude: customerLat, longitude: customerLng },
+          { latitude: driverLat,   longitude: driverLng   },
+        ],
+        { edgePadding: { top: 120, right: 60, bottom: 60, left: 60 }, animated: true }
+      );
+    }, 800); // debounce 800 ms
+    return () => { if (fitScheduled.current) clearTimeout(fitScheduled.current); };
+  }, [driverLat, driverLng]);
 
   return (
     <MapView
@@ -548,10 +167,8 @@ function NativeMapView({
       provider={PROVIDER_GOOGLE}
       style={styles.map}
       initialRegion={{
-        latitude: customerLat,
-        longitude: customerLng,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
+        latitude: customerLat, longitude: customerLng,
+        latitudeDelta: 0.02, longitudeDelta: 0.02,
       }}
       maxZoomLevel={GRABMAPS_CONFIG.maxZoom}
       customMapStyle={mapStyle}
@@ -559,9 +176,19 @@ function NativeMapView({
       showsMyLocationButton={false}
       showsCompass={false}
       toolbarEnabled={false}
+      // Performance flags
+      moveOnMarkerPress={false}
+      scrollEnabled
+      zoomEnabled
+      rotateEnabled={false}
+      pitchEnabled={false}
     >
-      {/* Customer Marker with Pulse */}
-      <Marker coordinate={{ latitude: customerLat, longitude: customerLng }} anchor={{ x: 0.5, y: 0.5 }}>
+      {/* Customer marker */}
+      <Marker
+        coordinate={{ latitude: customerLat, longitude: customerLng }}
+        anchor={{ x: 0.5, y: 0.5 }}
+        tracksViewChanges={false}   // ← critical perf fix
+      >
         <View style={styles.customerMarkerContainer}>
           {searchingDriver && <PulsingCircle />}
           <View style={styles.customerMarker}>
@@ -570,35 +197,31 @@ function NativeMapView({
         </View>
       </Marker>
 
-      {/* Customer Delivery Zone Circle */}
       <Circle
         center={{ latitude: customerLat, longitude: customerLng }}
         radius={50}
-        fillColor="rgba(99, 56, 242, 0.1)"
+        fillColor="rgba(99,56,242,0.1)"
         strokeColor={BRAND_PURPLE}
         strokeWidth={2}
       />
 
-      {/* Driver Animated Marker with interpolated position */}
+      {/* Animated driver marker */}
       {showDriver && (
         <Marker.Animated
-          coordinate={{
-            latitude: animatedLat,
-            longitude: animatedLng,
-          }}
+          coordinate={{ latitude: animatedLat, longitude: animatedLng }}
           anchor={{ x: 0.5, y: 0.5 }}
           flat
           rotation={driverHeading}
+          tracksViewChanges={false}   // ← critical perf fix
         >
-          <DriverMarker 
-            heading={driverHeading} 
+          <DriverMarker
+            heading={driverHeading}
             speed={driverSpeed}
             isMoving={driverSpeed > 0.5}
           />
         </Marker.Animated>
       )}
 
-      {/* Route Line */}
       {showDriver && (
         <>
           <Polyline
@@ -610,653 +233,459 @@ function NativeMapView({
             strokeWidth={5}
             lineDashPattern={[1, 10]}
           />
-          
           <Polyline
             coordinates={[
               { latitude: driverLat, longitude: driverLng },
               { latitude: customerLat, longitude: customerLng },
             ]}
-            strokeColor="rgba(99, 56, 242, 0.2)"
+            strokeColor="rgba(99,56,242,0.2)"
             strokeWidth={12}
           />
         </>
       )}
     </MapView>
   );
-}
+}, (prev, next) =>
+  // Only re-render when coordinates or driver state actually changes
+  prev.customerLat  === next.customerLat  &&
+  prev.customerLng  === next.customerLng  &&
+  prev.driverLat    === next.driverLat    &&
+  prev.driverLng    === next.driverLng    &&
+  prev.driverHeading=== next.driverHeading &&
+  prev.showDriver   === next.showDriver   &&
+  prev.searchingDriver === next.searchingDriver
+);
 
-// ==================== DRIVER MARKER WITH MOTION INDICATOR ====================
-function DriverMarker({ heading, speed, isMoving }: { heading: number; speed: number; isMoving: boolean }) {
-  const pulseAnim = useRef(new Animated.Value(0)).current;
+// ─── Main screen ─────────────────────────────────────────────────────────────
+export default function OrderTrackingScreen() {
+  const insets     = useSafeAreaInsets();
+  const navigation = useNavigation<NavigationProp>();
+  const route      = useRoute<OrderTrackingRouteProp>();
+  const { orderId } = route.params;
+  const mapRef     = useRef<any>(null);
+  const [showQRISModal, setShowQRISModal] = useState(false);
 
-  useEffect(() => {
-    if (isMoving) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 0,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    } else {
-      pulseAnim.setValue(0);
-    }
-  }, [isMoving]);
-
-  const glowOpacity = pulseAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.3, 0.8],
+  // ── Order data — poll every 5 s (was 3 s) ──────────────────────────────
+  const { data: order, isLoading } = useQuery({
+    queryKey: ["order-tracking", orderId],
+    queryFn: async () => {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}`);
+      return res.json();
+    },
+    refetchInterval: 5000,
+    staleTime: 4000,
+    notifyOnChangeProps: ["data"],   // don't re-render on isFetching changes
   });
 
-  return (
-    <View style={styles.driverMarkerContainer}>
-      {isMoving && (
-        <Animated.View style={[styles.driverGlow, { opacity: glowOpacity }]} />
-      )}
-      
-      <View style={[styles.driverMarker, { transform: [{ rotate: `${heading}deg` }] }]}>
-        <View style={styles.driverIconContainer}>
-          <MaterialCommunityIcons name="motorbike" size={24} color="white" />
-        </View>
-        <View style={styles.directionArrow} />
+  const simpleStatus = useMemo(() => {
+    const s = order?.status?.toLowerCase() || "pending";
+    if (s === "pending" || s === "confirmed") return "pending";
+    if (s === "picking")                       return "picking";
+    if (s === "packed")                        return "packed";
+    if (s === "delivering" || s === "delivered") return "delivering";
+    return "pending";
+  }, [order?.status]);
+
+  const customerLat = useMemo(
+    () => order?.customerLat ? parseFloat(order.customerLat) : null,
+    [order?.customerLat]
+  );
+  const customerLng = useMemo(
+    () => order?.customerLng ? parseFloat(order.customerLng) : null,
+    [order?.customerLng]
+  );
+
+  // ── Payment status — only poll when QRIS is unpaid ─────────────────────
+  const { data: paymentStatus } = useQuery({
+    queryKey: ["payment-status", orderId],
+    queryFn: async () => {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/orders/${orderId}/payment-status`);
+      return res.json();
+    },
+    refetchInterval: order?.paymentMethod === "qris" && !order?.qrisConfirmed ? 5000 : false,
+    enabled: !!order && order.paymentMethod === "qris",
+    staleTime: 4000,
+    notifyOnChangeProps: ["data"],
+  });
+
+  // ── Driver location — only poll when delivering ─────────────────────────
+  const { data: driverData } = useQuery({
+    queryKey: ["driver-location", orderId],
+    queryFn: async () => {
+      const res  = await fetch(`${process.env.EXPO_PUBLIC_DOMAIN}/api/driver/location/${orderId}`);
+      const data = await res.json();
+      if (data?.location && customerLat && customerLng) {
+        const distance = haversineKm(
+          data.location.latitude, data.location.longitude, customerLat, customerLng
+        );
+        const bearing = bearingDeg(
+          data.location.latitude, data.location.longitude, customerLat, customerLng
+        );
+        return {
+          ...data,
+          distance:   parseFloat(distance.toFixed(2)),
+          bearing:    parseFloat(bearing.toFixed(1)),
+          etaMinutes: Math.ceil(distance / 0.5),
+        };
+      }
+      return data;
+    },
+    enabled: simpleStatus === "delivering" && !!order?.driverId,
+    refetchInterval: MAP_UPDATE_INTERVAL,
+    staleTime: MAP_UPDATE_INTERVAL - 500,
+    notifyOnChangeProps: ["data"],
+  });
+
+  // ── Derived values (stable references) ─────────────────────────────────
+  const orderNumber  = order?.orderNumber || `#${order?.id?.slice(0, 8).toUpperCase() || "PENDING"}`;
+  const subtotal     = order?.subtotal   || 0;
+  const deliveryFee  = order?.deliveryFee || 10000;
+  const total        = order?.total      || subtotal + deliveryFee;
+  const driverLat    = driverData?.location?.latitude  || null;
+  const driverLng    = driverData?.location?.longitude || null;
+  const driverHeading= driverData?.bearing || driverData?.location?.heading || 0;
+  const driverSpeed  = driverData?.location?.speed || 0;
+  const distance     = driverData?.distance   || null;
+  const etaMinutes   = driverData?.etaMinutes || null;
+  const showMap      = (simpleStatus === "packed" || simpleStatus === "delivering") && customerLat && customerLng;
+  const showDriver   = simpleStatus === "delivering" && driverLat && driverLng;
+  const searchingDriver = simpleStatus === "packed" && !order?.driverId;
+  const isQRISPending   = order?.paymentMethod === "qris" && !paymentStatus?.isPaid;
+
+  const openQRIS  = useCallback(() => setShowQRISModal(true),  []);
+  const closeQRIS = useCallback(() => setShowQRISModal(false), []);
+  const goBack    = useCallback(() => navigation.goBack(),      [navigation]);
+  const openChat  = useCallback(() => navigation.navigate("Chat", { orderId }), [navigation, orderId]);
+  const callDriver= useCallback(() => Linking.openURL(`tel:${order?.driverPhone}`), [order?.driverPhone]);
+
+  if (isLoading && !order) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={BRAND_PURPLE} />
       </View>
-      
-      {speed > 0 && (
-        <View style={styles.speedBadge}>
-          <ThemedText style={styles.speedText}>{Math.round(speed * 3.6)} km/h</ThemedText>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* QRIS Modal */}
+      <Modal visible={showQRISModal} animationType="slide" transparent onRequestClose={closeQRIS}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Complete Payment</ThemedText>
+              <Pressable onPress={closeQRIS}>
+                <Feather name="x" size={24} color="#64748b" />
+              </Pressable>
+            </View>
+            <View style={styles.qrisContainer}>
+              {paymentStatus?.qrisUrl
+                ? <QRCode value={paymentStatus.qrisUrl} size={240} />
+                : <ActivityIndicator size="large" color={BRAND_PURPLE} />}
+            </View>
+            <ThemedText style={styles.qrisInstruction}>
+              Scan this QR code with your mobile banking app
+            </ThemedText>
+            <View style={styles.qrisDetails}>
+              <View style={styles.qrisDetailRow}>
+                <ThemedText style={styles.qrisLabel}>Order Number</ThemedText>
+                <ThemedText style={styles.qrisValue}>{orderNumber}</ThemedText>
+              </View>
+              <View style={styles.qrisDetailRow}>
+                <ThemedText style={styles.qrisLabel}>Total Amount</ThemedText>
+                <ThemedText style={styles.qrisValue}>Rp {total.toLocaleString("id-ID")}</ThemedText>
+              </View>
+              <View style={styles.qrisDetailRow}>
+                <ThemedText style={styles.qrisLabel}>Time Remaining</ThemedText>
+                <ThemedText style={[styles.qrisValue, { color: BRAND_PURPLE }]}>
+                  {paymentStatus?.minutesRemaining || 0} minutes
+                </ThemedText>
+              </View>
+            </View>
+            {paymentStatus?.status === "expired" && (
+              <View style={styles.expiredBanner}>
+                <Feather name="alert-circle" size={16} color="#dc2626" />
+                <ThemedText style={styles.expiredText}>QR code expired. Please create a new order.</ThemedText>
+              </View>
+            )}
+          </View>
         </View>
-      )}
+      </Modal>
+
+      {/* Map area */}
+      <View style={{ height: "52%" }}>
+        {showMap ? (
+          Platform.OS === "web" ? (
+            <WebMapView
+              customerLat={customerLat} customerLng={customerLng}
+              driverLat={driverLat} driverLng={driverLng}
+              searchingDriver={searchingDriver} showDriver={showDriver}
+              distance={distance} etaMinutes={etaMinutes}
+            />
+          ) : (
+            <NativeMapView
+              mapRef={mapRef}
+              customerLat={customerLat} customerLng={customerLng}
+              driverLat={driverLat} driverLng={driverLng}
+              driverHeading={driverHeading} driverSpeed={driverSpeed}
+              searchingDriver={searchingDriver} showDriver={showDriver}
+            />
+          )
+        ) : (
+          <View style={styles.illustrationContainer}>
+            <Image
+              source={{ uri: "https://cdn-icons-png.flaticon.com/512/3081/3081986.png" }}
+              style={styles.illustration}
+              resizeMode="contain"
+            />
+            <ThemedText style={styles.illustrationText}>
+              {isQRISPending
+                ? "Waiting for Payment"
+                : simpleStatus === "pending"
+                ? "Order Confirmed!"
+                : "Preparing your order…"}
+            </ThemedText>
+          </View>
+        )}
+
+        <Pressable onPress={goBack} style={[styles.backButton, { top: insets.top + 10 }]}>
+          <Feather name="arrow-left" size={24} color="#1e293b" />
+        </Pressable>
+
+        {showDriver && distance && (
+          <View style={[styles.etaBadge, { top: insets.top + 10 }]}>
+            <MaterialCommunityIcons name="clock-outline" size={16} color="white" />
+            <ThemedText style={styles.etaText}>
+              {distance.toFixed(1)} km • {etaMinutes || Math.ceil(distance * 3)} min
+            </ThemedText>
+          </View>
+        )}
+      </View>
+
+      {/* Bottom sheet */}
+      <ScrollView
+        style={styles.bottomSheet}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 20, paddingHorizontal: 20 }}
+        removeClippedSubviews   // perf: don't render off-screen items
+      >
+        <View style={styles.handle} />
+
+        {isQRISPending && (
+          <Pressable style={styles.paymentBanner} onPress={openQRIS}>
+            <View style={styles.paymentBannerContent}>
+              <View style={styles.paymentBannerIcon}>
+                <MaterialCommunityIcons name="qrcode-scan" size={24} color={BRAND_PURPLE} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.paymentBannerTitle}>Payment Required</ThemedText>
+                <ThemedText style={styles.paymentBannerText}>
+                  Tap to complete QRIS payment • {paymentStatus?.minutesRemaining || 0} min left
+                </ThemedText>
+              </View>
+              <Feather name="chevron-right" size={20} color={BRAND_PURPLE} />
+            </View>
+          </Pressable>
+        )}
+
+        <View style={styles.statusHeader}>
+          <View style={{ flex: 1 }}>
+            <ThemedText style={styles.orderNumber}>Order {orderNumber}</ThemedText>
+            <ThemedText style={styles.statusText}>
+              {isQRISPending          ? "⏳ Awaiting Payment"  :
+               simpleStatus === "pending"    ? "Order Placed"         :
+               simpleStatus === "picking"    ? "Picking Items"        :
+               simpleStatus === "packed"     ? "Ready for Pickup"     :
+               simpleStatus === "delivering" ? "On the Way"           : ""}
+            </ThemedText>
+            {!isQRISPending && (
+              <ThemedText style={styles.pinText}>
+                PIN: <ThemedText style={styles.pinBold}>{order?.deliveryPin || "N/A"}</ThemedText>
+              </ThemedText>
+            )}
+          </View>
+          <View style={[styles.statusBadge, isQRISPending && styles.statusBadgePending]}>
+            <ThemedText style={styles.statusLabel}>
+              {isQRISPending ? "UNPAID" : simpleStatus.toUpperCase()}
+            </ThemedText>
+          </View>
+        </View>
+
+        {/* Progress bar */}
+        {!isQRISPending && (
+          <View style={styles.progressContainer}>
+            {(["pending","picking","packed","delivering"] as const).map((step, i, arr) => {
+              const stepIndex = arr.indexOf(simpleStatus as any);
+              const isActive  = i <= stepIndex;
+              const isCurrent = i === stepIndex;
+              const label     = ["Placed","Picking","Ready","On Way"][i];
+              return (
+                <React.Fragment key={step}>
+                  <View style={styles.progressStep}>
+                    <View style={[
+                      styles.progressDot,
+                      isActive  && styles.progressDotActive,
+                      isCurrent && styles.progressDotCurrent,
+                    ]}>
+                      {isActive && <Feather name="check" size={12} color="white" />}
+                    </View>
+                    <ThemedText style={isActive ? styles.progressLabelActive : styles.progressLabel}>
+                      {label}
+                    </ThemedText>
+                  </View>
+                  {i < arr.length - 1 && (
+                    <View style={[styles.progressLine, isActive && i < stepIndex && styles.progressLineActive]} />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Driver card */}
+        {!isQRISPending && order?.driverName && (
+          <Card style={styles.driverCard}>
+            <View style={styles.driverRow}>
+              <View style={styles.driverAvatar}>
+                <FontAwesome5 name="motorcycle" size={20} color="white" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.driverName}>{order.driverName}</ThemedText>
+                <ThemedText style={styles.vehicleInfo}>
+                  {distance ? `${distance.toFixed(1)} km away` : "On the way"}
+                </ThemedText>
+              </View>
+              <View style={styles.contactActions}>
+                <Pressable style={styles.iconBtn} onPress={callDriver}>
+                  <Feather name="phone" size={18} color={BRAND_PURPLE} />
+                </Pressable>
+                <Pressable style={[styles.iconBtn, { backgroundColor: BRAND_PURPLE }]} onPress={openChat}>
+                  <Feather name="message-circle" size={18} color="white" />
+                </Pressable>
+              </View>
+            </View>
+          </Card>
+        )}
+
+        {/* Order summary */}
+        <View style={styles.summarySection}>
+          <ThemedText style={styles.sectionTitle}>Order Summary</ThemedText>
+          <View style={styles.divider} />
+          {order?.items?.map((item: any, i: number) => (
+            <View key={i} style={styles.itemRow}>
+              <ThemedText style={styles.itemQty}>{item.quantity}x</ThemedText>
+              <ThemedText style={styles.itemName}>{item.productName}</ThemedText>
+              <ThemedText style={styles.itemPrice}>
+                Rp {(Number(item.priceAtEntry || 0) * Number(item.quantity || 1)).toLocaleString("id-ID")}
+              </ThemedText>
+            </View>
+          ))}
+          <View style={styles.priceContainer}>
+            <View style={styles.priceRow}>
+              <ThemedText style={styles.priceLabel}>Subtotal</ThemedText>
+              <ThemedText style={styles.priceValue}>Rp {subtotal.toLocaleString("id-ID")}</ThemedText>
+            </View>
+            <View style={styles.priceRow}>
+              <ThemedText style={styles.priceLabel}>Delivery Fee</ThemedText>
+              <ThemedText style={styles.priceValue}>Rp {deliveryFee.toLocaleString("id-ID")}</ThemedText>
+            </View>
+            <View style={[styles.priceRow, styles.totalRow]}>
+              <ThemedText style={styles.totalLabel}>Total Payment</ThemedText>
+              <ThemedText style={styles.totalValue}>Rp {total.toLocaleString("id-ID")}</ThemedText>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
-// ==================== PULSING CIRCLE ANIMATION ====================
-function PulsingCircle() {
-  const pulseAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { 
-          toValue: 1, 
-          duration: 2000, 
-          useNativeDriver: true 
-        }),
-        Animated.timing(pulseAnim, { 
-          toValue: 0, 
-          duration: 0, 
-          useNativeDriver: true 
-        }),
-      ])
-    ).start();
-  }, []);
-
-  const scale = pulseAnim.interpolate({ 
-    inputRange: [0, 1], 
-    outputRange: [0.8, 2.5] 
-  });
-  
-  const opacity = pulseAnim.interpolate({ 
-    inputRange: [0, 1], 
-    outputRange: [0.6, 0] 
-  });
-
-  return (
-    <Animated.View 
-      style={[
-        styles.pulsingCircle, 
-        { 
-          transform: [{ scale }], 
-          opacity 
-        }
-      ]} 
-    />
-  );
-}
-
-// ==================== CUSTOM MAP STYLE ====================
 const mapStyle = [
-  {
-    featureType: "poi",
-    elementType: "labels",
-    stylers: [{ visibility: "off" }],
-  },
-  {
-    featureType: "transit",
-    elementType: "labels",
-    stylers: [{ visibility: "off" }],
-  },
+  { featureType: "poi",     elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", elementType: "labels", stylers: [{ visibility: "off" }] },
 ];
 
-// ==================== STYLES ====================
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'white' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-  map: { flex: 1 },
-  
-  illustrationContainer: { 
-    flex: 1, 
-    backgroundColor: '#f8fafc', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  illustration: { width: 200, height: 200 },
-  illustrationText: { 
-    marginTop: 20, 
-    fontSize: 16, 
-    fontWeight: '700', 
-    color: '#64748b' 
-  },
-  
-  backButton: { 
-    position: 'absolute', 
-    left: 15, 
-    width: 44, 
-    height: 44, 
-    backgroundColor: 'white', 
-    borderRadius: 22, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    elevation: 8, 
-    shadowColor: '#000', 
-    shadowOpacity: 0.25, 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowRadius: 12 
-  },
-  
-  etaBadge: {
-    position: 'absolute',
-    right: 15,
-    backgroundColor: BRAND_PURPLE,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
-  },
-  etaText: {
-    color: 'white',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  
-  bottomSheet: { 
-    flex: 1, 
-    backgroundColor: 'white', 
-    borderTopLeftRadius: 30, 
-    borderTopRightRadius: 30, 
-    marginTop: -30,
-    elevation: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: -4 },
-    shadowRadius: 20,
-  },
-  handle: { 
-    width: 40, 
-    height: 4, 
-    backgroundColor: '#e2e8f0', 
-    borderRadius: 2, 
-    alignSelf: 'center', 
-    marginTop: 12 
-  },
-  
-  statusHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginTop: 20, 
-    alignItems: 'flex-start' 
-  },
-  orderNumber: { 
-    fontSize: 24, 
-    fontWeight: '900', 
-    color: '#1e293b', 
-    marginBottom: 4 
-  },
-  statusText: { 
-    fontSize: 15, 
-    fontWeight: '600', 
-    color: BRAND_PURPLE, 
-    marginBottom: 4 
-  },
-  pinText: { color: '#94a3b8', fontSize: 13 },
-  pinBold: { color: BRAND_PURPLE, fontWeight: 'bold', fontSize: 15 },
-  statusBadge: { 
-    backgroundColor: '#f1f5f9', 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
-    borderRadius: 10 
-  },
-  statusLabel: { 
-    fontSize: 11, 
-    fontWeight: '800', 
-    color: '#475569' 
-  },
-  
-  progressContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginTop: 24, 
-    marginBottom: 20 
-  },
-  progressStep: { alignItems: 'center', flex: 1 },
-  progressDot: { 
-    width: 28, 
-    height: 28, 
-    borderRadius: 14, 
-    backgroundColor: '#e2e8f0', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginBottom: 6,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-  },
-  progressDotActive: { 
-    backgroundColor: BRAND_PURPLE,
-    elevation: 4,
-  },
-  progressDotCurrent: { 
-    borderWidth: 3, 
-    borderColor: '#e9d5ff',
-    elevation: 6,
-  },
-  progressLabel: { 
-    fontSize: 10, 
-    color: '#94a3b8', 
-    textAlign: 'center', 
-    fontWeight: '600' 
-  },
-  progressLabelActive: { 
-    fontSize: 10, 
-    color: '#1e293b', 
-    textAlign: 'center', 
-    fontWeight: '700' 
-  },
-  progressLine: { 
-    height: 3, 
-    flex: 1, 
-    backgroundColor: '#e2e8f0', 
-    marginHorizontal: -10 
-  },
+  container:          { flex: 1, backgroundColor: "white" },
+  loadingContainer:   { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f8fafc" },
+  map:                { flex: 1 },
+  illustrationContainer: { flex: 1, backgroundColor: "#f8fafc", justifyContent: "center", alignItems: "center" },
+  illustration:       { width: 200, height: 200 },
+  illustrationText:   { marginTop: 20, fontSize: 16, fontWeight: "700", color: "#64748b" },
+  backButton:         { position: "absolute", left: 15, width: 44, height: 44, backgroundColor: "white", borderRadius: 22, justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: "#000", shadowOpacity: 0.25, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12 },
+  etaBadge:           { position: "absolute", right: 15, backgroundColor: BRAND_PURPLE, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, elevation: 8, shadowColor: "#000", shadowOpacity: 0.25, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12 },
+  etaText:            { color: "white", fontSize: 13, fontWeight: "700" },
+  bottomSheet:        { flex: 1, backgroundColor: "white", borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -30, elevation: 20, shadowColor: "#000", shadowOpacity: 0.1, shadowOffset: { width: 0, height: -4 }, shadowRadius: 20 },
+  handle:             { width: 40, height: 4, backgroundColor: "#e2e8f0", borderRadius: 2, alignSelf: "center", marginTop: 12 },
+  statusHeader:       { flexDirection: "row", justifyContent: "space-between", marginTop: 20, alignItems: "flex-start" },
+  orderNumber:        { fontSize: 24, fontWeight: "900", color: "#1e293b", marginBottom: 4 },
+  statusText:         { fontSize: 15, fontWeight: "600", color: BRAND_PURPLE, marginBottom: 4 },
+  pinText:            { color: "#94a3b8", fontSize: 13 },
+  pinBold:            { color: BRAND_PURPLE, fontWeight: "bold", fontSize: 15 },
+  statusBadge:        { backgroundColor: "#f1f5f9", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  statusBadgePending: { backgroundColor: "#fee2e2" },
+  statusLabel:        { fontSize: 11, fontWeight: "800", color: "#475569" },
+  progressContainer:  { flexDirection: "row", alignItems: "center", marginTop: 24, marginBottom: 20 },
+  progressStep:       { alignItems: "center", flex: 1 },
+  progressDot:        { width: 28, height: 28, borderRadius: 14, backgroundColor: "#e2e8f0", justifyContent: "center", alignItems: "center", marginBottom: 6, elevation: 2, shadowColor: "#000", shadowOpacity: 0.1, shadowOffset: { width: 0, height: 2 }, shadowRadius: 4 },
+  progressDotActive:  { backgroundColor: BRAND_PURPLE, elevation: 4 },
+  progressDotCurrent: { borderWidth: 3, borderColor: "#e9d5ff", elevation: 6 },
+  progressLabel:      { fontSize: 10, color: "#94a3b8", textAlign: "center", fontWeight: "600" },
+  progressLabelActive:{ fontSize: 10, color: "#1e293b", textAlign: "center", fontWeight: "700" },
+  progressLine:       { height: 3, flex: 1, backgroundColor: "#e2e8f0", marginHorizontal: -10 },
   progressLineActive: { backgroundColor: BRAND_PURPLE },
-  
-  driverCard: { 
-    marginTop: 20, 
-    padding: 16, 
-    borderRadius: 20, 
-    borderWidth: 1, 
-    borderColor: '#f1f5f9',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-  },
-  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  driverAvatar: { 
-    width: 52, 
-    height: 52, 
-    borderRadius: 16, 
-    backgroundColor: BRAND_PURPLE, 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    elevation: 4,
-    shadowColor: BRAND_PURPLE,
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-  },
-  driverName: { fontSize: 17, fontWeight: '800', color: '#1e293b' },
-  vehicleInfo: { fontSize: 13, color: '#94a3b8', marginTop: 2 },
-  contactActions: { flexDirection: 'row', gap: 10 },
-  iconBtn: { 
-    width: 42, 
-    height: 42, 
-    borderRadius: 21, 
-    backgroundColor: '#f5f3ff', 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-  },
-  
-  summarySection: { marginTop: 30 },
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#1e293b' },
-  divider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 15 },
-  itemRow: { 
-    flexDirection: 'row', 
-    marginBottom: 12, 
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  itemQty: { 
-    width: 32, 
-    fontWeight: '800', 
-    color: BRAND_PURPLE,
-    fontSize: 14,
-  },
-  itemName: { 
-    flex: 1, 
-    color: '#475569', 
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  itemPrice: { 
-    fontWeight: '700',
-    color: '#1e293b',
-  },
-  
-  priceContainer: { 
-    marginTop: 20, 
-    padding: 16, 
-    backgroundColor: '#f8fafc', 
-    borderRadius: 16 
-  },
-  priceRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginBottom: 8 
-  },
-  priceLabel: { color: '#64748b', fontSize: 14, fontWeight: '500' },
-  priceValue: { fontWeight: '600', fontSize: 14, color: '#475569' },
-  totalRow: { 
-    marginTop: 12, 
-    paddingTop: 12, 
-    borderTopWidth: 2, 
-    borderTopColor: '#e2e8f0' 
-  },
-  totalLabel: { fontSize: 17, fontWeight: '900', color: '#1e293b' },
-  totalValue: { fontSize: 17, fontWeight: '900', color: BRAND_PURPLE },
-  
-  customerMarkerContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  customerMarker: { 
-    width: 24, 
-    height: 24, 
-    borderRadius: 12, 
-    backgroundColor: 'white', 
-    borderWidth: 4, 
-    borderColor: BRAND_PURPLE, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    elevation: 8,
-    shadowColor: BRAND_PURPLE,
-    shadowOpacity: 0.4,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
-  },
-  customerMarkerInner: { 
-    width: 12, 
-    height: 12, 
-    borderRadius: 6, 
-    backgroundColor: BRAND_PURPLE 
-  },
-  
-  driverMarkerContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  driverGlow: {
-    position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: BRAND_PURPLE,
-  },
-  driverMarker: { 
-    width: 56, 
-    height: 56, 
-    borderRadius: 28, 
-    backgroundColor: BRAND_PURPLE, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    elevation: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.4,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 12,
-    borderWidth: 3,
-    borderColor: 'white',
-  },
-  driverIconContainer: {
-    transform: [{ rotate: '0deg' }],
-  },
-  directionArrow: {
-    position: 'absolute',
-    top: -8,
-    width: 0,
-    height: 0,
-    borderLeftWidth: 8,
-    borderRightWidth: 8,
-    borderBottomWidth: 12,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderBottomColor: BRAND_PURPLE,
-  },
-  speedBadge: {
-    position: 'absolute',
-    bottom: -20,
-    backgroundColor: 'white',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  speedText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: BRAND_PURPLE,
-  },
-  
-  pulsingCircle: { 
-    position: 'absolute',
-    width: 100, 
-    height: 100, 
-    borderRadius: 50, 
-    borderWidth: 2, 
-    borderColor: BRAND_PURPLE, 
-    backgroundColor: 'rgba(99, 56, 242, 0.15)',
-  },
-  
-  webMapContainer: { 
-    flex: 1, 
-    backgroundColor: '#f8fafc', 
-    position: 'relative' 
-  },
-  webMapPlaceholder: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    padding: 20 
-  },
-  webMapText: { 
-    marginTop: 15, 
-    fontSize: 16, 
-    fontWeight: '700', 
-    color: '#64748b', 
-    textAlign: 'center' 
-  },
-  webMapCoords: { 
-    marginTop: 8, 
-    fontSize: 13, 
-    color: '#94a3b8',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  webDriverInfo: { 
-    marginTop: 20, 
-    alignItems: 'center',
-    gap: 8,
-    padding: 16, 
-    backgroundColor: 'white', 
-    borderRadius: 16, 
-    shadowColor: '#000', 
-    shadowOpacity: 0.1, 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#f1f5f9',
-  },
-  webDriverText: { 
-    fontSize: 14, 
-    color: '#475569', 
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  webDistance: {
-    fontSize: 12,
-    color: BRAND_PURPLE,
-    fontWeight: '700',
-  },
-  paymentBanner: {
-    backgroundColor: '#fef3c7',
-    borderRadius: 16,
-    marginTop: 16,
-    marginBottom: 8,
-    borderWidth: 2,
-    borderColor: '#fbbf24',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-  },
-  paymentBannerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    gap: 12,
-  },
-  paymentBannerIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'white',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  paymentBannerTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#92400e',
-    marginBottom: 4,
-  },
-  paymentBannerText: {
-    fontSize: 13,
-    color: '#78350f',
-    fontWeight: '600',
-  },
-  statusBadgePending: {
-    backgroundColor: '#fee2e2',
-  },
-  
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    padding: 24,
-    minHeight: '75%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#1e293b',
-  },
-  qrisContainer: {
-    backgroundColor: 'white',
-    padding: 24,
-    borderRadius: 20,
-    alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: '#f1f5f9',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
-  },
-  qrisInstruction: {
-    textAlign: 'center',
-    fontSize: 15,
-    color: '#64748b',
-    marginBottom: 24,
-    fontWeight: '600',
-  },
-  qrisDetails: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 16,
-    padding: 16,
-    gap: 12,
-  },
-  qrisDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  qrisLabel: {
-    fontSize: 14,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  qrisValue: {
-    fontSize: 15,
-    color: '#1e293b',
-    fontWeight: '700',
-  },
-  expiredBanner: {
-    marginTop: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#fee2e2',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#fca5a5',
-  },
-  expiredText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#dc2626',
-    fontWeight: '600',
-  },
+  driverCard:         { marginTop: 20, padding: 16, borderRadius: 20, borderWidth: 1, borderColor: "#f1f5f9", elevation: 2, shadowColor: "#000", shadowOpacity: 0.05, shadowOffset: { width: 0, height: 2 }, shadowRadius: 8 },
+  driverRow:          { flexDirection: "row", alignItems: "center", gap: 12 },
+  driverAvatar:       { width: 52, height: 52, borderRadius: 16, backgroundColor: BRAND_PURPLE, justifyContent: "center", alignItems: "center", elevation: 4, shadowColor: BRAND_PURPLE, shadowOpacity: 0.3, shadowOffset: { width: 0, height: 2 }, shadowRadius: 8 },
+  driverName:         { fontSize: 17, fontWeight: "800", color: "#1e293b" },
+  vehicleInfo:        { fontSize: 13, color: "#94a3b8", marginTop: 2 },
+  contactActions:     { flexDirection: "row", gap: 10 },
+  iconBtn:            { width: 42, height: 42, borderRadius: 21, backgroundColor: "#f5f3ff", justifyContent: "center", alignItems: "center", elevation: 2, shadowColor: "#000", shadowOpacity: 0.1, shadowOffset: { width: 0, height: 2 }, shadowRadius: 4 },
+  summarySection:     { marginTop: 30 },
+  sectionTitle:       { fontSize: 18, fontWeight: "800", color: "#1e293b" },
+  divider:            { height: 1, backgroundColor: "#f1f5f9", marginVertical: 15 },
+  itemRow:            { flexDirection: "row", marginBottom: 12, alignItems: "center", paddingVertical: 4 },
+  itemQty:            { width: 32, fontWeight: "800", color: BRAND_PURPLE, fontSize: 14 },
+  itemName:           { flex: 1, color: "#475569", fontSize: 15, fontWeight: "500" },
+  itemPrice:          { fontWeight: "700", color: "#1e293b" },
+  priceContainer:     { marginTop: 20, padding: 16, backgroundColor: "#f8fafc", borderRadius: 16 },
+  priceRow:           { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
+  priceLabel:         { color: "#64748b", fontSize: 14, fontWeight: "500" },
+  priceValue:         { fontWeight: "600", fontSize: 14, color: "#475569" },
+  totalRow:           { marginTop: 12, paddingTop: 12, borderTopWidth: 2, borderTopColor: "#e2e8f0" },
+  totalLabel:         { fontSize: 17, fontWeight: "900", color: "#1e293b" },
+  totalValue:         { fontSize: 17, fontWeight: "900", color: BRAND_PURPLE },
+  customerMarkerContainer: { alignItems: "center", justifyContent: "center" },
+  customerMarker:     { width: 24, height: 24, borderRadius: 12, backgroundColor: "white", borderWidth: 4, borderColor: BRAND_PURPLE, justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: BRAND_PURPLE, shadowOpacity: 0.4, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8 },
+  customerMarkerInner:{ width: 12, height: 12, borderRadius: 6, backgroundColor: BRAND_PURPLE },
+  driverMarkerContainer: { alignItems: "center", justifyContent: "center" },
+  driverGlow:         { position: "absolute", width: 80, height: 80, borderRadius: 40, backgroundColor: BRAND_PURPLE },
+  driverMarker:       { width: 56, height: 56, borderRadius: 28, backgroundColor: BRAND_PURPLE, justifyContent: "center", alignItems: "center", elevation: 12, shadowColor: "#000", shadowOpacity: 0.4, shadowOffset: { width: 0, height: 6 }, shadowRadius: 12, borderWidth: 3, borderColor: "white" },
+  directionArrow:     { position: "absolute", top: -8, width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderBottomWidth: 12, borderLeftColor: "transparent", borderRightColor: "transparent", borderBottomColor: BRAND_PURPLE },
+  speedBadge:         { position: "absolute", bottom: -20, backgroundColor: "white", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, elevation: 4, shadowColor: "#000", shadowOpacity: 0.2, shadowOffset: { width: 0, height: 2 }, shadowRadius: 4, borderWidth: 1, borderColor: "#e2e8f0" },
+  speedText:          { fontSize: 10, fontWeight: "700", color: BRAND_PURPLE },
+  pulsingCircle:      { position: "absolute", width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: BRAND_PURPLE, backgroundColor: "rgba(99,56,242,0.15)" },
+  webMapContainer:    { flex: 1, backgroundColor: "#f8fafc" },
+  webMapPlaceholder:  { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
+  webMapText:         { marginTop: 15, fontSize: 16, fontWeight: "700", color: "#64748b", textAlign: "center" },
+  webMapCoords:       { marginTop: 8, fontSize: 13, color: "#94a3b8" },
+  webDriverInfo:      { marginTop: 20, alignItems: "center", gap: 8, padding: 16, backgroundColor: "white", borderRadius: 16, shadowColor: "#000", shadowOpacity: 0.1, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, elevation: 4, borderWidth: 1, borderColor: "#f1f5f9" },
+  webDriverText:      { fontSize: 14, color: "#475569", fontWeight: "600" },
+  webDistance:        { fontSize: 12, color: BRAND_PURPLE, fontWeight: "700" },
+  paymentBanner:      { backgroundColor: "#fef3c7", borderRadius: 16, marginTop: 16, marginBottom: 8, borderWidth: 2, borderColor: "#fbbf24", elevation: 4, shadowColor: "#000", shadowOpacity: 0.1, shadowOffset: { width: 0, height: 2 }, shadowRadius: 8 },
+  paymentBannerContent: { flexDirection: "row", alignItems: "center", padding: 16, gap: 12 },
+  paymentBannerIcon:  { width: 48, height: 48, borderRadius: 24, backgroundColor: "white", justifyContent: "center", alignItems: "center" },
+  paymentBannerTitle: { fontSize: 16, fontWeight: "800", color: "#92400e", marginBottom: 4 },
+  paymentBannerText:  { fontSize: 13, color: "#78350f", fontWeight: "600" },
+  modalOverlay:       { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  modalContent:       { backgroundColor: "white", borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24, minHeight: "75%" },
+  modalHeader:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 24 },
+  modalTitle:         { fontSize: 24, fontWeight: "900", color: "#1e293b" },
+  qrisContainer:      { backgroundColor: "white", padding: 24, borderRadius: 20, alignItems: "center", marginBottom: 16, borderWidth: 2, borderColor: "#f1f5f9", elevation: 4, shadowColor: "#000", shadowOpacity: 0.1, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12 },
+  qrisInstruction:    { textAlign: "center", fontSize: 15, color: "#64748b", marginBottom: 24, fontWeight: "600" },
+  qrisDetails:        { backgroundColor: "#f8fafc", borderRadius: 16, padding: 16, gap: 12 },
+  qrisDetailRow:      { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  qrisLabel:          { fontSize: 14, color: "#64748b", fontWeight: "600" },
+  qrisValue:          { fontSize: 15, color: "#1e293b", fontWeight: "700" },
+  expiredBanner:      { marginTop: 16, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fee2e2", padding: 12, borderRadius: 12, borderWidth: 1, borderColor: "#fca5a5" },
+  expiredText:        { flex: 1, fontSize: 13, color: "#dc2626", fontWeight: "600" },
 });
