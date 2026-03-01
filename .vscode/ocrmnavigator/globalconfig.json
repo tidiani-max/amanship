@@ -1,0 +1,246 @@
+{
+  "categories": [
+    {
+      "label": "APPS_AND_PROJS",
+      "expanded": false,
+      "type": "folder",
+      "items": [
+        {
+          "label": "Project",
+          "path": "code-insiders -n f:/projectFolder",
+          "type": "powershellCommand"
+        },
+        {
+          "label": "PGAdmin",
+          "path": "& \"c:/Program Files/PostgreSQL/16/pgAdmin 4/runtime/pgAdmin4.exe\"",
+          "type": "powershellCommand"
+        },
+        {
+          "label": "PWSH - Admin",
+          "path": "Start-Process powershell -Verb RunAs",
+          "type": "powershellCommand"
+        },
+        {
+          "label": "Libre - Draw",
+          "path": "& \"c:/Program Files/LibreOffice/program/sdraw.exe\"",
+          "type": "powershellCommand"
+        }
+      ],
+      "global": true
+    },
+    {
+      "label": "CMDS",
+      "expanded": true,
+      "type": "folder",
+      "items": [
+        {
+          "label": "KILL Terminals && Start DEV Server",
+          "path": "killterms, startdev",
+          "type": "chain"
+        },
+        {
+          "label": "Format",
+          "path": "formatfile, saveall",
+          "type": "chain"
+        },
+        {
+          "label": "SAVE ALL",
+          "path": "workbench.action.files.saveAll",
+          "type": "command"
+        },
+        {
+          "label": "Commit And Push Current Dir",
+          "path": "saveall, commitpush",
+          "type": "chain"
+        },
+        {
+          "label": "Save All and Upgrade Patch",
+          "path": "saveall, plusversion",
+          "type": "chain"
+        },
+        {
+          "label": "🔽 1",
+          "path": "editor.foldLevel1",
+          "type": "command"
+        },
+        {
+          "label": "🔽 2",
+          "path": "editor.foldLevel2",
+          "type": "command"
+        },
+        {
+          "label": "🔽 3",
+          "path": "editor.foldLevel3",
+          "type": "command"
+        },
+        {
+          "label": "❌ editors",
+          "path": "saveall, closeeditors",
+          "type": "chain"
+        },
+        {
+          "label": "➕ vscode cmds",
+          "type": "folder",
+          "expanded": false,
+          "items": [
+            {
+              "label": "VSCE package",
+              "path": "vsce package",
+              "type": "powershellCommand"
+            },
+            {
+              "label": "🔽 4",
+              "path": "editor.foldLevel4",
+              "type": "command"
+            },
+            {
+              "label": "🔽 5",
+              "path": "editor.foldLevel5",
+              "type": "command"
+            },
+            {
+              "label": "🔽 6",
+              "path": "editor.foldLevel6",
+              "type": "command"
+            },
+            {
+              "label": "🔽 7",
+              "path": "editor.foldLevel7",
+              "type": "command"
+            },
+            {
+              "label": "🔼 All",
+              "path": "editor.unfoldAll",
+              "type": "command"
+            },
+            {
+              "label": "toggle 💻",
+              "path": "workbench.action.terminal.toggleTerminal",
+              "type": "command",
+              "collapsibleState": 0,
+              "filePath": ""
+            },
+            {
+              "label": "toggle word wrap",
+              "path": "editor.action.toggleWordWrap",
+              "type": "command"
+            },
+            {
+              "label": "show commands",
+              "path": "workbench.action.showCommands",
+              "type": "command"
+            },
+            {
+              "label": "toggle zen mode",
+              "path": "workbench.action.toggleZenMode",
+              "type": "command"
+            }
+          ],
+          "collapsibleState": 1,
+          "filePath": ""
+        },
+        {
+          "label": "term general",
+          "type": "folder",
+          "expanded": false,
+          "items": [
+            {
+              "label": "➕ Version Already Clean",
+              "path": "pnpm version patch && git push && git push --tags",
+              "type": "powershellCommand",
+              "collapsibleState": 0,
+              "filePath": ""
+            }
+          ],
+          "collapsibleState": 1,
+          "filePath": ""
+        },
+        {
+          "label": "killterms",
+          "path": "workbench.action.terminal.killAll",
+          "type": "command",
+          "hidden": true
+        },
+        {
+          "label": "startdev",
+          "path": "meth dev:app",
+          "type": "powershellCommand",
+          "hidden": true
+        },
+        {
+          "label": "saveall",
+          "path": "workbench.action.files.saveAll",
+          "type": "command",
+          "hidden": true
+        },
+        {
+          "label": "plusversion",
+          "path": "git add * && git commit -m \"Cleaning w/ push\" && git push && pnpm version patch && git push && git push --tags",
+          "type": "powershellCommand",
+          "hidden": true
+        },
+        {
+          "label": "commitpush",
+          "path": "git add . && git commit -m \"Cleaning w/ push\" && git push",
+          "type": "powershellCommand",
+          "hidden": true
+        },
+        {
+          "label": "closeeditors",
+          "path": "workbench.action.closeAllEditors",
+          "type": "command"
+        },
+        {
+          "label": "formatfile",
+          "path": "editor.action.formatDocument",
+          "type": "command",
+          "hidden": true
+        }
+      ],
+      "global": true
+    },
+    {
+      "label": "WEB",
+      "expanded": false,
+      "type": "folder",
+      "items": [],
+      "global": true
+    },
+    {
+      "label": "SNIPPETS",
+      "type": "folder",
+      "expanded": true,
+      "items": [],
+      "collapsibleState": 1,
+      "filePath": "",
+      "global": true
+    },
+    {
+      "label": "MD",
+      "type": "folder",
+      "expanded": false,
+      "items": [],
+      "collapsibleState": 1,
+      "filePath": "",
+      "global": true
+    },
+    {
+      "label": "OTHER",
+      "type": "folder",
+      "expanded": true,
+      "items": [
+        {
+          "label": "UNUSED_FUNCTIONS",
+          "type": "folder",
+          "expanded": true,
+          "items": [],
+          "collapsibleState": 1,
+          "filePath": ""
+        }
+      ],
+      "collapsibleState": 1,
+      "filePath": "",
+      "global": true
+    }
+  ]
+}

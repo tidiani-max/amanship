@@ -1,0 +1,787 @@
+{
+  "categories": [
+    {
+      "label": "APPS_AND_PROJS",
+      "expanded": false,
+      "type": "folder",
+      "items": [
+        {
+          "label": "Project",
+          "path": "code-insiders -n f:/projectFolder",
+          "type": "powershellCommand"
+        },
+        {
+          "label": "PGAdmin",
+          "path": "& \"c:/Program Files/PostgreSQL/16/pgAdmin 4/runtime/pgAdmin4.exe\"",
+          "type": "powershellCommand"
+        },
+        {
+          "label": "PWSH - Admin",
+          "path": "Start-Process powershell -Verb RunAs",
+          "type": "powershellCommand"
+        },
+        {
+          "label": "Libre - Draw",
+          "path": "& \"c:/Program Files/LibreOffice/program/sdraw.exe\"",
+          "type": "powershellCommand"
+        }
+      ],
+      "global": true
+    },
+    {
+      "label": "CMDS",
+      "expanded": true,
+      "type": "folder",
+      "items": [
+        {
+          "label": "KILL Terminals && Start DEV Server",
+          "path": "killterms, startdev",
+          "type": "chain"
+        },
+        {
+          "label": "Format",
+          "path": "formatfile, saveall",
+          "type": "chain"
+        },
+        {
+          "label": "SAVE ALL",
+          "path": "workbench.action.files.saveAll",
+          "type": "command"
+        },
+        {
+          "label": "Commit And Push Current Dir",
+          "path": "saveall, commitpush",
+          "type": "chain"
+        },
+        {
+          "label": "Save All and Upgrade Patch",
+          "path": "saveall, plusversion",
+          "type": "chain"
+        },
+        {
+          "label": "🔽 1",
+          "path": "editor.foldLevel1",
+          "type": "command"
+        },
+        {
+          "label": "🔽 2",
+          "path": "editor.foldLevel2",
+          "type": "command"
+        },
+        {
+          "label": "🔽 3",
+          "path": "editor.foldLevel3",
+          "type": "command"
+        },
+        {
+          "label": "❌ editors",
+          "path": "saveall, closeeditors",
+          "type": "chain"
+        },
+        {
+          "label": "➕ vscode cmds",
+          "type": "folder",
+          "expanded": false,
+          "items": [
+            {
+              "label": "VSCE package",
+              "path": "vsce package",
+              "type": "powershellCommand"
+            },
+            {
+              "label": "🔽 4",
+              "path": "editor.foldLevel4",
+              "type": "command"
+            },
+            {
+              "label": "🔽 5",
+              "path": "editor.foldLevel5",
+              "type": "command"
+            },
+            {
+              "label": "🔽 6",
+              "path": "editor.foldLevel6",
+              "type": "command"
+            },
+            {
+              "label": "🔽 7",
+              "path": "editor.foldLevel7",
+              "type": "command"
+            },
+            {
+              "label": "🔼 All",
+              "path": "editor.unfoldAll",
+              "type": "command"
+            },
+            {
+              "label": "toggle 💻",
+              "path": "workbench.action.terminal.toggleTerminal",
+              "type": "command",
+              "collapsibleState": 0,
+              "filePath": ""
+            },
+            {
+              "label": "toggle word wrap",
+              "path": "editor.action.toggleWordWrap",
+              "type": "command"
+            },
+            {
+              "label": "show commands",
+              "path": "workbench.action.showCommands",
+              "type": "command"
+            },
+            {
+              "label": "toggle zen mode",
+              "path": "workbench.action.toggleZenMode",
+              "type": "command"
+            }
+          ],
+          "collapsibleState": 1,
+          "filePath": ""
+        },
+        {
+          "label": "term general",
+          "type": "folder",
+          "expanded": false,
+          "items": [
+            {
+              "label": "➕ Version Already Clean",
+              "path": "pnpm version patch && git push && git push --tags",
+              "type": "powershellCommand",
+              "collapsibleState": 0,
+              "filePath": ""
+            }
+          ],
+          "collapsibleState": 1,
+          "filePath": ""
+        },
+        {
+          "label": "killterms",
+          "path": "workbench.action.terminal.killAll",
+          "type": "command",
+          "hidden": true
+        },
+        {
+          "label": "startdev",
+          "path": "meth dev:app",
+          "type": "powershellCommand",
+          "hidden": true
+        },
+        {
+          "label": "saveall",
+          "path": "workbench.action.files.saveAll",
+          "type": "command",
+          "hidden": true
+        },
+        {
+          "label": "plusversion",
+          "path": "git add * && git commit -m \"Cleaning w/ push\" && git push && pnpm version patch && git push && git push --tags",
+          "type": "powershellCommand",
+          "hidden": true
+        },
+        {
+          "label": "commitpush",
+          "path": "git add . && git commit -m \"Cleaning w/ push\" && git push",
+          "type": "powershellCommand",
+          "hidden": true
+        },
+        {
+          "label": "closeeditors",
+          "path": "workbench.action.closeAllEditors",
+          "type": "command"
+        },
+        {
+          "label": "formatfile",
+          "path": "editor.action.formatDocument",
+          "type": "command",
+          "hidden": true
+        }
+      ],
+      "global": true
+    },
+    {
+      "label": "WEB",
+      "expanded": false,
+      "type": "folder",
+      "items": [],
+      "global": true
+    },
+    {
+      "label": "SNIPPETS",
+      "type": "folder",
+      "expanded": true,
+      "items": [],
+      "collapsibleState": 1,
+      "filePath": "",
+      "global": true
+    },
+    {
+      "label": "MD",
+      "type": "folder",
+      "expanded": false,
+      "items": [],
+      "collapsibleState": 1,
+      "filePath": "",
+      "global": true
+    },
+    {
+      "label": "OTHER",
+      "type": "folder",
+      "expanded": true,
+      "items": [
+        {
+          "label": "UNUSED_FUNCTIONS",
+          "type": "folder",
+          "expanded": true,
+          "items": [],
+          "collapsibleState": 1,
+          "filePath": ""
+        }
+      ],
+      "collapsibleState": 1,
+      "filePath": "",
+      "global": true
+    },
+    {
+      "label": "LAYOUT",
+      "expanded": true,
+      "type": "folder",
+      "global": false,
+      "items": [
+        {
+          "label": "DevStack Default",
+          "path": "",
+          "type": "layout",
+          "icon": "editor-layout",
+          "global": false,
+          "args": [
+            {
+              "default": true,
+              "fileIconTheme": "vs-seti",
+              "productIconTheme": "Default",
+              "theme": "Default Dark Modern",
+              "workbench.colorCustomizations": {},
+              "editorGrid": {
+                "orientation": 0,
+                "version": "classic",
+                "editorFocus": "last",
+                "groups": [
+                  {
+                    "size": 0.5
+                  },
+                  {
+                    "size": 0.5
+                  }
+                ],
+                "files": [
+                  {
+                    "group": 1,
+                    "pinned": true,
+                    "foldLevel": [
+                      1,
+                      2
+                    ],
+                    "path": [
+                      "README.md"
+                    ]
+                  },
+                  {
+                    "group": 2,
+                    "pinned": true,
+                    "foldLevel": [
+                      1,
+                      2
+                    ],
+                    "path": [
+                      "package.json"
+                    ]
+                  }
+                ]
+              },
+              "terminalGrid": {
+                "orientation": 0,
+                "version": "classic",
+                "terminals": [
+                  {
+                    "name": "Dev Server",
+                    "group": 0,
+                    "cmd": "echo 'terminal grid'",
+                    "pinned": true,
+                    "location": "editor",
+                    "priority": 1
+                  }
+                ]
+              },
+              "keybindings": {
+                "workbench.action.files.saveAll": "ctrl+s",
+                "ocrmnavigator.menu.devstack": "alt+d",
+                "ocrmnavigator.odin.open": "alt+s",
+                "ocrmnavigator.menu.icons": "alt+i",
+                "ocrmnavigator.menu.catalystUi": "alt+u",
+                "ocrmnavigator.menu.snippets": "alt+f",
+                "ocrmnavigator.region.insert": "alt+r",
+                "ocrmnavigator.endregion.insert": "alt+e",
+                "ocrmnavigator.region.wrap": "alt+w",
+                "ocrmnavigator.devstack.site.colorWheel": "alt+q",
+                "ocrmnavigator.clipboardMgr.history.show": "alt+h",
+                "ocrmnavigator.bookmarks.show": "alt+b",
+                "ocrmnavigator.menu.github": "alt+g",
+                "ocrmnavigator.project.pkg.open": "alt+p",
+                "ocrmnavigator.project.readme.open": "alt+m"
+              },
+              "customizeLayout": {
+                "workbench.startupEditor": "none",
+                "explorer.decorations.colors": false,
+                "problems.decorations.enabled": false,
+                "window.menuBarVisibility": "toggle",
+                "window.commandCenter": false,
+                "menubar.layoutControls": false,
+                "editor.renderControlCharacters": false,
+                "editor.renderWhitespace": "none",
+                "editor.minimap.enabled": true,
+                "breadcrumbs.enabled": true,
+                "workbench.sideBar.location": "left",
+                "workbench.statusBar.visible": false,
+                "workbench.layoutControl.enabled": false,
+                "workbench.secondarySideBar.showLabels": false,
+                "workbench.navigationControl.enabled": false,
+                "workbench.editor.showTabs": "multiple",
+                "menubar.navigationControls": false,
+                "menubar.share": false,
+                "primarySidebar.display": true,
+                "secondarySidebar.display": true,
+                "panel.display": false,
+                "panel.alignment": "center",
+                "panel.view": "output",
+                "modes.centeredLayout": false,
+                "modes.fullScreen": false,
+                "modes.zenMode": false,
+                "window.zoomLevel": 0,
+                "editor.glyphMargin": true,
+                "editor.folding": true,
+                "editor.lineNumbers": "relative",
+                "editor.showFoldingControls": "always",
+                "editor.minimap.maxColumn": 50,
+                "editor.minimap.showRegionSectionHeaders": true,
+                "editor.minimap.showMarkSectionHeaders": false,
+                "editor.minimap.autohide": "mouseover",
+                "editor.minimap.showSlider": "mouseover",
+                "editor.minimap.side": "left",
+                "editor.minimap.size": "fill",
+                "editor.minimap.renderCharacters": false,
+                "editor.wordWrap": "off",
+                "editor.fontFamily": "Menlo, Monaco, 'Courier New', monospace",
+                "editor.fontLigatures": false,
+                "editor.fontVariations": false,
+                "workbench.editor.pinnedTabsOnSeparateRow": true,
+                "workbench.editor.alwaysShowEditorActions": true,
+                "workbench.editor.enablePreviewFromQuickOpen": false,
+                "workbench.editor.wrapTabs": true,
+                "workbench.externalBrowser": "",
+                "workbench.remoteIndicator.showExtensionRecommendations": false,
+                "workbench.commandPalette.history": 30,
+                "window.restoreWindows": "one",
+                "workbench.editor.autoLockGroups": true,
+                "workbench.panel.showLabels": false,
+                "editor.foldingImportsByDefault": false,
+                "git.diffEditor.renderGutterMenu": false,
+                "git.decorations.enabled": false,
+                "editor.scrollBeyondLastLine": false,
+                "terminal.integrated.fontSize": 12,
+                "editor.fontSize": 12,
+                "scm.diffDecorationsGutterAction": "none",
+                "scm.diffDecorations": "none",
+                "workbench.activityBar.location": "default",
+                "workbench.editor.decorations.colors": false,
+                "window.newWindowDimensions": "inherit",
+                "workbench.editor.highlightModifiedTabs": false,
+                "markdown.preview.scrollPreviewWithEditor": false,
+                "markdown.preview.scrollEditorWithPreview": false
+              },
+              "devstack": {
+                "ocrmnavigator.devstack.icons": true,
+                "ocrmnavigator.devstack.snapshotNgin": true,
+                "ocrmnavigator.devstack.ivaldi": true,
+                "ocrmnavigator.devstack.devstack": true,
+                "ocrmnavigator.devstack.odin": true,
+                "ocrmnavigator.devstack.formatters": true,
+                "ocrmnavigator.devstack.titlebar.search": true,
+                "ocrmnavigator.devstack.titlebar.refresh": true,
+                "ocrmnavigator.devstack.titlebar.config": true,
+                "ocrmnavigator.devstack.titlebar.ui": true,
+                "ocrmnavigator.baldr.icons": true,
+                "ocrmnavigator.odin.settings.exlcude.default": "",
+                "ocrmnavigator.odin.contextLinesBefore": 4,
+                "ocrmnavigator.odin.contextLinesAfter": 10,
+                "ocrmnavigator.odin.query": "",
+                "ocrmnavigator.odin.replace": "",
+                "ocrmnavigator.odin.includePattern": "",
+                "ocrmnavigator.odin.excludePattern": "",
+                "ocrmnavigator.odin.useRegex": false,
+                "ocrmnavigator.odin.caseSensitive": false,
+                "ocrmnavigator.odin.matchWholeWord": false,
+                "ocrmnavigator.odin.useFuzzy": false,
+                "ocrmnavigator.odin.searchInOpenEditorsOnly": false,
+                "ocrmnavigator.odin.useExcludeSettings": false,
+                "ocrmnavigator.odin.includeEnabled": false,
+                "ocrmnavigator.odin.excludeEnabled": false,
+                "ocrmnavigator.odin.searchScope": "workspace",
+                "ocrmnavigator.vfs.onFileOpen": "openInSetCol",
+                "ocrmnavigator.vfs.targetEditorGroup": 1,
+                "ocrmnavigator.codesnap.windowControlStyle": "Windows",
+                "ocrmnavigator.codesnap.showWindowTitle": true,
+                "ocrmnavigator.codesnap.windowBorderRadius": "8px",
+                "ocrmnavigator.codesnap.windowTitleStyle": "Filename",
+                "ocrmnavigator.codesnap.showLineNumbers": true,
+                "ocrmnavigator.codesnap.realLineNumbers": false,
+                "ocrmnavigator.codesnap.transparentBackground": false,
+                "ocrmnavigator.codesnap.trimEmptyLines": false,
+                "ocrmnavigator.vfs.AUTO_FOLD_PKGJSON_2": false,
+                "ocrmnavigator.vfs.AUTO_FOLD_PKGJSON_2_3": true,
+                "ocrmnavigator.vfs.AUTO_FOLD_1": false,
+                "ocrmnavigator.vfs.AUTO_FOLD_1_2": true,
+                "ocrmnavigator.devstack.tasks": true,
+                "ocrmnavigator.devstack.npmScripts": true,
+                "ocrmnavigator.devstack.snippets": true,
+                "ocrmnavigator.devstack.be": true,
+                "ocrmnavigator.AUTORUN_DIR": "src",
+                "ocrmnavigator.UPDATE_PROMPT_OBJECTS": false,
+                "ocrmnavigator.AUTORUN_SCRIPTS": true,
+                "ocrmnavigator.CONVERT_README_DEV_MD": false,
+                "ocrmnavigator.PRO7": false,
+                "ocrmnavigator.CONCURRENT": "bleeding-edge",
+                "ocrmnavigator.ARCHIVER": "custom",
+                "ocrmnavigator.DELETE_OLD_VSIX": true,
+                "ocrmnavigator.AUTO_INSTALL_VSIX": true,
+                "ocrmnavigator.OPEN_PUB_DASH": true,
+                "ocrmnavigator.RELOAD_INSTANCE": true,
+                "ocrmnavigator.todo.isPriv": false,
+                "ocrmnavigator.todo.checkRemindersInterval": "10",
+                "ocrmnavigator.todo.syncInterval": "20",
+                "ocrmnavigator.todo.syncOnSave": true,
+                "ocrmnavigator.runar.repo": "runardb",
+                "ocrmnavigator.runar.owner": "8an3",
+                "ocrmnavigator.runar.branch": "main",
+                "ocrmnavigator.devstack.item.hidden.toggle": true,
+                "ocrmnavigator.strPrismaUpdater": true,
+                "ocrmnavigator.commands": true,
+                "ocrmnavigator.vscodecmdref": true,
+                "ocrmnavigator.markdownViewer": true,
+                "ocrmnavigator.snippetsInEditor": true,
+                "ocrmnavigator.editorContextSnippets": true,
+                "ocrmnavigator.formatters": true,
+                "ocrmnavigator.trailingCommas": true,
+                "ocrmnavigator.batchRename": true,
+                "ocrmnavigator.eslintPrettier": true,
+                "ocrmnavigator.remixUtils": true,
+                "ocrmnavigator.theme": true,
+                "ocrmnavigator.vscode.theme.blacked": true,
+                "ocrmnavigator.vscode.theme.window.differentiator": true,
+                "ocrmnavigator.shadCNComponents": true,
+                "ocrmnavigator.repoMgr": true,
+                "ocrmnavigator.openGithub": true,
+                "ocrmnavigator.githubFunctions": true,
+                "ocrmnavigator.prismaFunctions": true,
+                "ocrmnavigator.remixComponents": true,
+                "ocrmnavigator.clickToSchema": true,
+                "ocrmnavigator.crudResolvers": true,
+                "ocrmnavigator.fileNesting": true,
+                "ocrmnavigator.revealExplorer": true,
+                "ocrmnavigator.devstack.item.path.copy": true,
+                "ocrmnavigator.bookmarks": true,
+                "ocrmnavigator.searchBar": true,
+                "ocrmnavigator.clipBoardHistory": true,
+                "ocrmnavigator.lucideIcons": true,
+                "ocrmnavigator.share": true,
+                "ocrmnavigator.url": true,
+                "ocrmnavigator.format.json.remove.comments.file": true,
+                "ocrmnavigator.con": true,
+                "ocrmnavigator.format.remove.comments.file": true,
+                "ocrmnavigator.unusedFunctions": true,
+                "ocrmnavigator.viewers": true,
+                "ocrmnavigator.uiDashboard": true,
+                "ocrmnavigator.devStackFunctions": true,
+                "ocrmnavigator.devstack.site.md.render": true,
+                "ocrmnavigator.project.index.smart.create": true,
+                "ocrmnavigator.devstack.site.tailwindConverter": true,
+                "ocrmnavigator.remix.project2agnostic.convert": true
+              },
+              "performance": {
+                "css.validate": false,
+                "diffEditor.codeLens": false,
+                "debug.openDebug": "neverOpen",
+                "debug.toolBarLocation": "hidden",
+                "debug.showInStatusBar": "never",
+                "editor.inlineSuggest.enabled": false,
+                "workbench.editor.enablePreviewFromQuickOpen": false,
+                "editor.inlayHints.enabled": "off",
+                "editor.parameterHints.enabled": false,
+                "editor.suggestOnTriggerCharacters": false,
+                "editor.acceptSuggestionOnEnter": "off",
+                "editor.acceptSuggestionOnCommitCharacter": false,
+                "editor.wordBasedSuggestions": "off",
+                "editor.formatOnType": false,
+                "editor.formatOnPaste": false,
+                "editor.formatOnSave": false,
+                "editor.semanticHighlighting.enabled": true,
+                "editor.occurrencesHighlight": "off",
+                "editor.selectionHighlight": true,
+                "editor.codeLens": false,
+                "editor.lightbulb.enabled": "onCode",
+                "merge-conflict.codeLens.enabled": false,
+                "multiDiffEditor.experimental.enabled": false,
+                "jsonc.validate.enable": true,
+                "json.validate.enable": true,
+                "prettier.enable": true,
+                "javascript.validate.enable": true,
+                "markdown.validate.enable": false,
+                "javascript.updateImportsOnFileMove.enabled": "always",
+                "extensions.ignoreRecommendations": true,
+                "github.copilot.enable": {
+                  "*": false,
+                  "plaintext": true,
+                  "markdown": false,
+                  "scminput": false
+                },
+                "files.watcherExclude": {},
+                "files.exclude": {},
+                "search.exclude": {},
+                "typescript.updateImportsOnFileMove.enabled": "always",
+                "typescript.validate.enable": true,
+                "markdown.server.log": "off",
+                "html.validate.scripts": false,
+                "search.smartCase": true,
+                "search.useIgnoreFiles": false,
+                "Codegeex.GenerationPreference": "line by line",
+                "Codegeex.Privacy": false,
+                "Codegeex.License": "",
+                "codegeex.codeLens.functionQuickOptions": {
+                  "addComment": false,
+                  "ghostComment": false,
+                  "fixBug": false,
+                  "generateUnitTest": false,
+                  "reviewCode": false,
+                  "codeOptimization": false,
+                  "addDocString": false,
+                  "addExceptionHandling": false,
+                  "printLogForDebugging": false,
+                  "improveRunningEfficiency": false,
+                  "renameSymbols": false,
+                  "newFileForDebugging": false,
+                  "tryANewApproach": false,
+                  "explainCode": false
+                },
+                "codegeex.codeLens.classQuickOptions": {
+                  "explainCode": false,
+                  "ghostComment": false,
+                  "fixBug": false,
+                  "generateUnitTest": false,
+                  "reviewCode": false,
+                  "addDocStringForClass": false,
+                  "addDocStringForMethods": false,
+                  "addComment": false
+                },
+                "geminicodeassist.chat.changeView": "Default diff view",
+                "geminicodeassist.displayInlineContextHint": false,
+                "geminicodeassist.enableTelemetry": false,
+                "geminicodeassist.inlineSuggestions.enableAuto": false,
+                "geminicodeassist.localCodebaseAwareness": false,
+                "[typescriptreact]": {
+                  "editor.defaultFormatter": "vscode.typescript-language-features"
+                },
+                "[json]": {
+                  "editor.defaultFormatter": "skyler.ocrmnav"
+                },
+                "[typescript]": {
+                  "editor.defaultFormatter": "skyler.ocrmnav"
+                },
+                "explorer.fileNesting.enabled": true,
+                "explorer.fileNesting.expand": false,
+                "explorer.fileNesting.patterns": {
+                  ".agent": ".agent, .claude, .cline, .codebuddy, .codex, .commandcode, .continue, .crush, .cursor, .factory, .gemini, .goose, .junie, .kilocode, .kiro, .kode, .mcpjam, .mux, .neovate, .opencode, .openhands, .pi, .pochi, .qoder, .qwen, .roo, .trae, .windsurf, .zencoder",
+                  ".clang-tidy": ".clang-format, .clangd, compile_commands.json",
+                  "config.asgard": "config.bifrost, ",
+                  ".env": "*.env, .env.*, .envrc, env.d.ts, .gitignore, .pro7, .fantasticonrc.js  ",
+                  "vulknut.svg": "clipboardcheck.svg, code.png, code.svg, snippets.jsonc, global-navigator-config.json, project-config.json, project-1744496862041-y866zpqtd9.jsonc, navigator-workspace.json, ghost.svg, pixel-2-alarm.svg, pixel-2-arrest.svg, pixel-2-bookmark2.svg, pixel-2-prank.svg, pixel-product-management.svg,pixel-robot.svg, pixel-search.svg, pixel-themes.svg, pixel-window-close-solid.svg, pixel-writing.svg, valhalla-baldr.svg, valhalla-baldr.svg    ",
+                  ".gitignore": ".gitattributes, .gitmodules, .gitmessage, .lfsconfig, .mailmap, .git-blame*",
+                  ".project": ".classpath",
+                  "+layout.svelte": "+layout.ts,+layout.js,+layout.server.ts,+layout.server.js,+layout.gql",
+                  "+page.svelte": "+page.server.ts,+page.server.js,+page.ts,+page.js,+page.gql",
+                  "AGENTS.md": ".clinerules, .cursorrules, .replit.md, .windsurfrules, AGENT.md, CLAUDE.local.md, CLAUDE.md, GEMINI.md",
+                  "ansible.cfg": "ansible.cfg, .ansible-lint, requirements.yml",
+                  "app.config.*": "*.env, .babelrc*, .codecov, .cssnanorc*, .env.*, .envrc, .htmlnanorc*, .lighthouserc.*, .mocha*, .postcssrc*, .terserrc*, api-extractor.json, ava.config.*, babel.config.*, capacitor.config.*, content.config.*, contentlayer.config.*, cssnano.config.*, cypress.*, env.d.ts, formkit.config.*, formulate.config.*, histoire.config.*, htmlnanorc.*, i18n.config.*, ionic.config.*, jasmine.*, jest.config.*, jsconfig.*, karma*, lighthouserc.*, panda.config.*, playwright.config.*, postcss.config.*, puppeteer.config.*, react-router.config.*, rspack.config.*, sst.config.*, svgo.config.*, tailwind.config.*, tsconfig.*, tsdoc.*, uno.config.*, unocss.config.*, vitest.config.*, vuetify.config.*, webpack.config.*, windi.config.*",
+                  "application.properties": "*.properties",
+                  "artisan": "*.env, .babelrc*, .codecov, .cssnanorc*, .env.*, .envrc, .htmlnanorc*, .lighthouserc.*, .mocha*, .postcssrc*, .terserrc*, api-extractor.json, ava.config.*, babel.config.*, capacitor.config.*, content.config.*, contentlayer.config.*, cssnano.config.*, cypress.*, env.d.ts, formkit.config.*, formulate.config.*, histoire.config.*, htmlnanorc.*, i18n.config.*, ionic.config.*, jasmine.*, jest.config.*, jsconfig.*, karma*, lighthouserc.*, panda.config.*, playwright.config.*, postcss.config.*, puppeteer.config.*, react-router.config.*, rspack.config.*, server.php, sst.config.*, svgo.config.*, tailwind.config.*, tsconfig.*, tsdoc.*, uno.config.*, unocss.config.*, vitest.config.*, vuetify.config.*, webpack.config.*, webpack.mix.js, windi.config.*",
+                  "astro.config.*": "*.env, .babelrc*, .codecov, .cssnanorc*, .env.*, .envrc, .htmlnanorc*, .lighthouserc.*, .mocha*, .postcssrc*, .terserrc*, api-extractor.json, ava.config.*, babel.config.*, capacitor.config.*, content.config.*, contentlayer.config.*, cssnano.config.*, cypress.*, env.d.ts, formkit.config.*, formulate.config.*, histoire.config.*, htmlnanorc.*, i18n.config.*, ionic.config.*, jasmine.*, jest.config.*, jsconfig.*, karma*, lighthouserc.*, panda.config.*, playwright.config.*, postcss.config.*, puppeteer.config.*, react-router.config.*, rspack.config.*, sst.config.*, svgo.config.*, tailwind.config.*, tsconfig.*, tsdoc.*, uno.config.*, unocss.config.*, vitest.config.*, vuetify.config.*, webpack.config.*, windi.config.*",
+                  "build-wrapper.log": "build-wrapper*.log, build-wrapper-dump*.json, build-wrapper-win*.exe, build-wrapper-linux*, build-wrapper-macosx*",
+                  "BUILD.bazel": "*.bzl, *.bazel, *.bazelrc, bazel.rc, .bazelignore, .bazelproject, .bazelversion, MODULE.bazel.lock, WORKSPACE",
+                  "Cargo.toml": ".clippy.toml, .rustfmt.toml, Cargo.Bazel.lock, Cargo.lock, clippy.toml, cross.toml, insta.yaml, rust-toolchain.toml, rustfmt.toml",
+                  "CMakeLists.txt": "*.cmake, *.cmake.in, .cmake-format.yaml, CMakePresets.json, CMakeCache.txt",
+                  "composer.json": ".php*.cache, composer.lock, phpunit.xml*, psalm*.xml",
+                  "default.nix": "shell.nix",
+                  "deno.json*": "*.env, .env.*, .envrc, api-extractor.json, deno.lock, env.d.ts, import-map.json, import_map.json, jsconfig.*, tsconfig.*, tsdoc.*",
+                  "Dockerfile": "*.dockerfile, .devcontainer.*, .dockerignore, captain-definition, compose.*, docker-compose.*, dockerfile*",
+                  "flake.nix": "default.nix, shell.nix, flake.lock",
+                  "gatsby-config.*": "*.env, .babelrc*, .codecov, .cssnanorc*, .env.*, .envrc, .htmlnanorc*, .lighthouserc.*, .mocha*, .postcssrc*, .terserrc*, api-extractor.json, ava.config.*, babel.config.*, capacitor.config.*, content.config.*, contentlayer.config.*, cssnano.config.*, cypress.*, env.d.ts, formkit.config.*, formulate.config.*, gatsby-browser.*, gatsby-node.*, gatsby-ssr.*, gatsby-transformer.*, histoire.config.*, htmlnanorc.*, i18n.config.*, ionic.config.*, jasmine.*, jest.config.*, jsconfig.*, karma*, lighthouserc.*, panda.config.*, playwright.config.*, postcss.config.*, puppeteer.config.*, react-router.config.*, rspack.config.*, sst.config.*, svgo.config.*, tailwind.config.*, tsconfig.*, tsdoc.*, uno.config.*, unocss.config.*, vitest.config.*, vuetify.config.*, webpack.config.*, windi.config.*",
+                  "gemfile": ".ruby-version, gemfile.lock",
+                  "go.mod": ".air*, go.sum",
+                  "go.work": "go.work.sum",
+                  "hatch.toml": ".editorconfig, .flake8, .isort.cfg, .python-version, hatch.toml, requirements*.in, requirements*.pip, requirements*.txt, tox.ini",
+                  "I*.cs": "$(capture).cs",
+                  "Makefile": "*.mk",
+                  "mix.exs": ".credo.exs, .dialyzer_ignore.exs, .formatter.exs, .iex.exs, .tool-versions, mix.lock",
+                  "next.config.*": "*.env, .babelrc*, .codecov, .cssnanorc*, .env.*, .envrc, .htmlnanorc*, .lighthouserc.*, .mocha*, .postcssrc*, .terserrc*, api-extractor.json, ava.config.*, babel.config.*, capacitor.config.*, content.config.*, contentlayer.config.*, cssnano.config.*, cypress.*, env.d.ts, formkit.config.*, formulate.config.*, histoire.config.*, htmlnanorc.*, i18n.config.*, ionic.config.*, jasmine.*, jest.config.*, jsconfig.*, karma*, lighthouserc.*, next-env.d.ts, next-i18next.config.*, panda.config.*, playwright.config.*, postcss.config.*, puppeteer.config.*, react-router.config.*, rspack.config.*, sst.config.*, svgo.config.*, tailwind.config.*, tsconfig.*, tsdoc.*, uno.config.*, unocss.config.*, vitest.config.*, vuetify.config.*, webpack.config.*, windi.config.*",
+                  "nuxt.config.*": "*.env, .babelrc*, .codecov, .cssnanorc*, .env.*, .envrc, .htmlnanorc*, .lighthouserc.*, .mocha*, .nuxtignore, .nuxtrc, .postcssrc*, .terserrc*, api-extractor.json, ava.config.*, babel.config.*, capacitor.config.*, content.config.*, contentlayer.config.*, cssnano.config.*, cypress.*, env.d.ts, formkit.config.*, formulate.config.*, histoire.config.*, htmlnanorc.*, i18n.config.*, ionic.config.*, jasmine.*, jest.config.*, jsconfig.*, karma*, lighthouserc.*, panda.config.*, playwright.config.*, postcss.config.*, puppeteer.config.*, react-router.config.*, rspack.config.*, sst.config.*, svgo.config.*, tailwind.config.*, tsconfig.*, tsdoc.*, uno.config.*, unocss.config.*, vitest.config.*, vuetify.config.*, webpack.config.*, windi.config.*",
+                  "package.json": "*.code-workspace, .browserslist*, .circleci*, .commitlint*, .cspell*, .cursor*, .cz-config.js, .czrc, .dlint.json, .dprint.json*, .editorconfig, .eslint*, .firebase*, .flowconfig, .github*, .gitlab*, .gitmojirc.json, .gitpod*, .huskyrc*, .jslint*, .knip.*, .lintstagedrc*, .ls-lint.yml, .markdownlint*, .node-version, .nodemon*, .npm*, .nvmrc, .oxfmtrc.json, .oxfmtrc.json.bak, .oxfmtrc.jsonc, .oxlintrc.json, .oxlintrc.json.bak, .oxlintrc.jsonc, .pm2*, .pnp.*, .pnpm*, .prettier*, .pylintrc, .release-please*.json, .releaserc*, .ruff.toml, .sentry*, .shellcheckrc, .simple-git-hooks*, .stackblitz*, .styleci*, .stylelint*, .tazerc*, .textlint*, .tool-versions, .travis*, .versionrc*, .vscode*, .watchman*, .windsurfrules, .xo-config*, .yamllint*, .yarnrc*, Procfile, alejandra.toml, apollo.config.*, appveyor*, azure-pipelines*, biome.json*, bower.json, build.config.*, bun.lock, bun.lockb, bunfig.toml, colada.options.ts, commitlint*, crowdin*, cspell*, cz.config.*, dangerfile*, dlint.json, dprint.json*, ec.config.*, electron-builder.*, eslint*, firebase.json, grunt*, gulp*, jenkins*, knip.*, lefthook.*, lerna*, lint-staged*, nest-cli.*, netlify*, nixpacks*, nodemon*, npm-shrinkwrap.json, nx.*, oxlint.config.*, package-lock.json, package.nls*.json, phpcs.xml, pm2.*, pnpm*, prettier*, pullapprove*, pyrightconfig.json, release-please*.json, release-tasks.sh, release.config.*, renovate*, rolldown.config.*, rollup.config.*, rspack*, ruff.toml, sentry.*.config.ts, simple-git-hooks*, sonar-project.properties, stylelint*, taze.config.*, tsdown.config.*, tslint*, tsup.config.*, turbo*, typedoc*, unlighthouse*, vercel*, vetur.config.*, webpack*, workspace.json, wrangler.*, xo.config.*, yarn*, tsconfig.json, tasks.json, svgtofont.config.js",
+                  "Pipfile": ".editorconfig, .flake8, .isort.cfg, .python-version, Pipfile, Pipfile.lock, requirements*.in, requirements*.pip, requirements*.txt, tox.ini",
+                  "pom.xml": "mvnw*",
+                  "pubspec.yaml": ".metadata, .packages, all_lint_rules.yaml, analysis_options.yaml, build.yaml, pubspec.lock, pubspec_overrides.yaml",
+                  "pyproject.toml": ".commitlint*, .cspell*, .dlint.json, .dprint.json*, .editorconfig, .eslint*, .flake8, .flowconfig, .isort.cfg, .jslint*, .lintstagedrc*, .ls-lint.yml, .markdownlint*, .oxfmtrc.json, .oxfmtrc.json.bak, .oxfmtrc.jsonc, .oxlintrc.json, .oxlintrc.json.bak, .oxlintrc.jsonc, .pdm-python, .pdm.toml, .prettier*, .pylintrc, .python-version, .ruff.toml, .shellcheckrc, .stylelint*, .textlint*, .xo-config*, .yamllint*, MANIFEST.in, Pipfile, Pipfile.lock, alejandra.toml, biome.json*, commitlint*, cspell*, dangerfile*, dlint.json, dprint.json*, eslint*, hatch.toml, lint-staged*, oxlint.config.*, pdm.lock, phpcs.xml, poetry.lock, poetry.toml, prettier*, pyproject.toml, pyrightconfig.json, requirements*.in, requirements*.pip, requirements*.txt, ruff.toml, setup.cfg, setup.py, stylelint*, tox.ini, tslint*, uv.lock, uv.toml, xo.config.*",
+                  "quasar.conf*": "*.env, .babelrc*, .codecov, .cssnanorc*, .env.*, .envrc, .htmlnanorc*, .lighthouserc.*, .mocha*, .postcssrc*, .terserrc*, api-extractor.json, ava.config.*, babel.config.*, capacitor.config.*, content.config.*, contentlayer.config.*, cssnano.config.*, cypress.*, env.d.ts, formkit.config.*, formulate.config.*, histoire.config.*, htmlnanorc.*, i18n.config.*, ionic.config.*, jasmine.*, jest.config.*, jsconfig.*, karma*, lighthouserc.*, panda.config.*, playwright.config.*, postcss.config.*, puppeteer.config.*, quasar.extensions.json, react-router.config.*, rspack.config.*, sst.config.*, svgo.config.*, tailwind.config.*, tsconfig.*, tsdoc.*, uno.config.*, unocss.config.*, vitest.config.*, vuetify.config.*, webpack.config.*, windi.config.*",
+                  "readme*": "AUTHORS, Authors, BACKERS*, Backers*, CHANGELOG*, CITATION*, CODEOWNERS, CODE_OF_CONDUCT*, CONTRIBUTING*, CONTRIBUTORS, CONTRIBUTORS.MD, CONTRIBUTORS.TXT, COPYING*, CREDITS, Changelog*, Citation*, Code_Of_Conduct*, Codeowners, Contributing*, Contributors, Contributors.md, Contributors.txt, Copying*, Credits, GOVERNANCE.MD, Governance.md, HISTORY.MD, History.md, LICENSE, LICENSE.MD, LICENSE.txt, License, License.md, License.txt, MAINTAINERS, Maintainers, README-*, README_*, RELEASE_NOTES*, ROADMAP.MD, Readme-*, Readme_*, Release_Notes*, Roadmap.md, SECURITY.MD, SPONSORS*, Security.md, Sponsors*, authors, backers*, changelog*, citation*, code_of_conduct*, codeowners, contributing*, contributors, contributors.md, contributors.txt, copying*, credits, governance.md, history.md, license, license.md, license.txt, maintainers, readme-*, readme_*, release_notes*, roadmap.md, security.md, sponsors*",
+                  "Readme*": "AUTHORS, Authors, BACKERS*, Backers*, CHANGELOG*, CITATION*, CODEOWNERS, CODE_OF_CONDUCT*, CONTRIBUTING*, CONTRIBUTORS, CONTRIBUTORS.MD, CONTRIBUTORS.TXT, COPYING*, CREDITS, Changelog*, Citation*, Code_Of_Conduct*, Codeowners, Contributing*, Contributors, Contributors.md, Contributors.txt, Copying*, Credits, GOVERNANCE.MD, Governance.md, HISTORY.MD, History.md, LICENSE, LICENSE.MD, LICENSE.txt, License, License.md, License.txt, MAINTAINERS, Maintainers, README-*, README_*, RELEASE_NOTES*, ROADMAP.MD, Readme-*, Readme_*, Release_Notes*, Roadmap.md, SECURITY.MD, SPONSORS*, Security.md, Sponsors*, authors, backers*, changelog*, citation*, code_of_conduct*, codeowners, contributing*, contributors, contributors.md, contributors.txt, copying*, credits, governance.md, history.md, license, license.md, license.txt, maintainers, readme-*, readme_*, release_notes*, roadmap.md, security.md, sponsors*",
+                  "README*": "AUTHORS, Authors, BACKERS*, Backers*, CHANGELOG*, CITATION*, CODEOWNERS, CODE_OF_CONDUCT*, CONTRIBUTING*, CONTRIBUTORS, CONTRIBUTORS.MD, CONTRIBUTORS.TXT, COPYING*, CREDITS, Changelog*, Citation*, Code_Of_Conduct*, Codeowners, Contributing*, Contributors, Contributors.md, Contributors.txt, Copying*, Credits, GOVERNANCE.MD, Governance.md, HISTORY.MD, History.md, LICENSE, LICENSE.MD, LICENSE.txt, License, License.md, License.txt, MAINTAINERS, Maintainers, README-*, README_*, RELEASE_NOTES*, ROADMAP.MD, Readme-*, Readme_*, Release_Notes*, Roadmap.md, SECURITY.MD, SPONSORS*, Security.md, Sponsors*, authors, backers*, changelog*, citation*, code_of_conduct*, codeowners, contributing*, contributors, contributors.md, contributors.txt, copying*, credits, governance.md, history.md, license, license.md, license.txt, maintainers, readme-*, readme_*, release_notes*, roadmap.md, security.md, sponsors*",
+                  "remix.config.*": "*.env, .babelrc*, .codecov, .cssnanorc*, .env.*, .envrc, .htmlnanorc*, .lighthouserc.*, .mocha*, .postcssrc*, .terserrc*, api-extractor.json, ava.config.*, babel.config.*, capacitor.config.*, content.config.*, contentlayer.config.*, cssnano.config.*, cypress.*, env.d.ts, formkit.config.*, formulate.config.*, histoire.config.*, htmlnanorc.*, i18n.config.*, ionic.config.*, jasmine.*, jest.config.*, jsconfig.*, karma*, lighthouserc.*, panda.config.*, playwright.config.*, postcss.config.*, puppeteer.config.*, react-router.config.*, remix.*, rspack.config.*, sst.config.*, svgo.config.*, tailwind.config.*, tsconfig.*, tsdoc.*, uno.config.*, unocss.config.*, vitest.config.*, vuetify.config.*, webpack.config.*, windi.config.*",
+                  "requirements.txt": ".editorconfig, .flake8, .isort.cfg, .python-version, requirements*.in, requirements*.pip, requirements*.txt, tox.ini",
+                  "rush.json": "*.code-workspace, .browserslist*, .circleci*, .commitlint*, .cspell*, .cursor*, .cz-config.js, .czrc, .dlint.json, .dprint.json*, .editorconfig, .eslint*, .firebase*, .flowconfig, .github*, .gitlab*, .gitmojirc.json, .gitpod*, .huskyrc*, .jslint*, .knip.*, .lintstagedrc*, .ls-lint.yml, .markdownlint*, .node-version, .nodemon*, .npm*, .nvmrc, .oxfmtrc.json, .oxfmtrc.json.bak, .oxfmtrc.jsonc, .oxlintrc.json, .oxlintrc.json.bak, .oxlintrc.jsonc, .pm2*, .pnp.*, .pnpm*, .prettier*, .pylintrc, .release-please*.json, .releaserc*, .ruff.toml, .sentry*, .shellcheckrc, .simple-git-hooks*, .stackblitz*, .styleci*, .stylelint*, .tazerc*, .textlint*, .tool-versions, .travis*, .versionrc*, .vscode*, .watchman*, .windsurfrules, .xo-config*, .yamllint*, .yarnrc*, Procfile, alejandra.toml, apollo.config.*, appveyor*, azure-pipelines*, biome.json*, bower.json, build.config.*, bun.lock, bun.lockb, bunfig.toml, colada.options.ts, commitlint*, crowdin*, cspell*, cz.config.*, dangerfile*, dlint.json, dprint.json*, ec.config.*, electron-builder.*, eslint*, firebase.json, grunt*, gulp*, jenkins*, knip.*, lefthook.*, lerna*, lint-staged*, nest-cli.*, netlify*, nixpacks*, nodemon*, npm-shrinkwrap.json, nx.*, oxlint.config.*, package-lock.json, package.nls*.json, phpcs.xml, pm2.*, pnpm*, prettier*, pullapprove*, pyrightconfig.json, release-please*.json, release-tasks.sh, release.config.*, renovate*, rolldown.config.*, rollup.config.*, rspack*, ruff.toml, sentry.*.config.ts, simple-git-hooks*, sonar-project.properties, stylelint*, taze.config.*, tsdown.config.*, tslint*, tsup.config.*, turbo*, typedoc*, unlighthouse*, vercel*, vetur.config.*, webpack*, workspace.json, wrangler.*, xo.config.*, yarn*",
+                  "sanity.config.*": "sanity.cli.*, sanity.types.ts, schema.json",
+                  "setup.cfg": ".editorconfig, .flake8, .isort.cfg, .python-version, MANIFEST.in, requirements*.in, requirements*.pip, requirements*.txt, setup.cfg, tox.ini",
+                  "setup.py": ".editorconfig, .flake8, .isort.cfg, .python-version, MANIFEST.in, requirements*.in, requirements*.pip, requirements*.txt, setup.cfg, setup.py, tox.ini",
+                  "shims.d.ts": "*.d.ts",
+                  "svelte.config.*": "*.env, .babelrc*, .codecov, .cssnanorc*, .env.*, .envrc, .htmlnanorc*, .lighthouserc.*, .mocha*, .postcssrc*, .terserrc*, api-extractor.json, ava.config.*, babel.config.*, capacitor.config.*, content.config.*, contentlayer.config.*, cssnano.config.*, cypress.*, env.d.ts, formkit.config.*, formulate.config.*, histoire.config.*, houdini.config.*, htmlnanorc.*, i18n.config.*, ionic.config.*, jasmine.*, jest.config.*, jsconfig.*, karma*, lighthouserc.*, mdsvex.config.js, panda.config.*, playwright.config.*, postcss.config.*, puppeteer.config.*, react-router.config.*, rspack.config.*, sst.config.*, svgo.config.*, tailwind.config.*, tsconfig.*, tsdoc.*, uno.config.*, unocss.config.*, vite.config.*, vitest.config.*, vuetify.config.*, webpack.config.*, windi.config.*",
+                  "tauri.conf.json": "tauri.*.conf.json",
+                  "tauri.conf.json5": "tauri.*.conf.json5",
+                  "Tauri.toml": "Tauri.*.toml",
+                  "tsconfig.json": "tsconfig*.tsbuildinfo, tsconfig.*.json",
+                  "vite.config.*": "*.env, .babelrc*, .codecov, .cssnanorc*, .env.*, .envrc, .htmlnanorc*, .lighthouserc.*, .mocha*, .postcssrc*, .terserrc*, api-extractor.json, ava.config.*, babel.config.*, capacitor.config.*, content.config.*, contentlayer.config.*, cssnano.config.*, cypress.*, env.d.ts, formkit.config.*, formulate.config.*, histoire.config.*, htmlnanorc.*, i18n.config.*, ionic.config.*, jasmine.*, jest.config.*, jsconfig.*, karma*, lighthouserc.*, panda.config.*, playwright.config.*, postcss.config.*, puppeteer.config.*, react-router.config.*, rspack.config.*, sst.config.*, svgo.config.*, tailwind.config.*, tsconfig.*, tsdoc.*, uno.config.*, unocss.config.*, vitest.config.*, vuetify.config.*, webpack.config.*, windi.config.*",
+                  "vue.config.*": "*.env, .babelrc*, .codecov, .cssnanorc*, .env.*, .envrc, .htmlnanorc*, .lighthouserc.*, .mocha*, .postcssrc*, .terserrc*, api-extractor.json, ava.config.*, babel.config.*, capacitor.config.*, content.config.*, contentlayer.config.*, cssnano.config.*, cypress.*, env.d.ts, formkit.config.*, formulate.config.*, histoire.config.*, htmlnanorc.*, i18n.config.*, ionic.config.*, jasmine.*, jest.config.*, jsconfig.*, karma*, lighthouserc.*, panda.config.*, playwright.config.*, postcss.config.*, puppeteer.config.*, react-router.config.*, rspack.config.*, sst.config.*, svgo.config.*, tailwind.config.*, tsconfig.*, tsdoc.*, uno.config.*, unocss.config.*, vitest.config.*, vuetify.config.*, webpack.config.*, windi.config.*",
+                  "*.asax": "$(capture).*.cs, $(capture).*.vb",
+                  "*.ascx": "$(capture).*.cs, $(capture).*.vb",
+                  "*.ashx": "$(capture).*.cs, $(capture).*.vb",
+                  "*.aspx": "$(capture).*.cs, $(capture).*.vb",
+                  "*.axaml": "$(capture).axaml.cs",
+                  "*.bloc.dart": "$(capture).event.dart, $(capture).state.dart",
+                  "*.c": "$(capture).h",
+                  "*.cc": "$(capture).hpp, $(capture).h, $(capture).hxx, $(capture).hh",
+                  "*.cjs": "$(capture).cjs.map, $(capture).*.cjs, $(capture)_*.cjs",
+                  "*.component.ts": "$(capture).component.html, $(capture).component.spec.ts, $(capture).component.css, $(capture).component.scss, $(capture).component.sass, $(capture).component.less",
+                  "*.cpp": "$(capture).hpp, $(capture).h, $(capture).hxx, $(capture).hh",
+                  "*.cs": "$(capture).*.cs, $(capture).cs.uid",
+                  "*.cshtml": "$(capture).cshtml.cs, $(capture).cshtml.css",
+                  "*.csproj": "*.config, *proj.user, appsettings.*, bundleconfig.json",
+                  "*.css": "$(capture).css.map, $(capture).*.css",
+                  "*.cxx": "$(capture).hpp, $(capture).h, $(capture).hxx, $(capture).hh",
+                  "*.dart": "$(capture).freezed.dart, $(capture).g.dart, $(capture).mapper.dart",
+                  "*.db": "*.db-shm, *.db-wal",
+                  "*.ex": "$(capture).html.eex, $(capture).html.heex, $(capture).html.leex",
+                  "*.fs": "$(capture).fs.js, $(capture).fs.js.map, $(capture).fs.jsx, $(capture).fs.ts, $(capture).fs.tsx, $(capture).fs.rs, $(capture).fs.php, $(capture).fs.dart",
+                  "*.gd": "$(capture).gd.uid",
+                  "*.gdshader": "$(capture).gdshader.uid",
+                  "*.gdshaderinc": "$(capture).gdshaderinc.uid",
+                  "*.go": "$(capture)_test.go",
+                  "*.java": "$(capture).class",
+                  "*.js": "$(capture).js.map, $(capture).*.js, $(capture)_*.js, $(capture).d.ts, $(capture).d.ts.map, $(capture).js.flow",
+                  "*.jsx": "$(capture).js, $(capture).*.jsx, $(capture)_*.js, $(capture)_*.jsx, $(capture).css, $(capture).module.css, $(capture).less, $(capture).module.less, $(capture).module.less.d.ts, $(capture).scss, $(capture).module.scss, $(capture).module.scss.d.ts",
+                  "*.master": "$(capture).*.cs, $(capture).*.vb",
+                  "*.md": "$(capture).*",
+                  "*.mjs": "$(capture).mjs.map, $(capture).*.mjs, $(capture)_*.mjs",
+                  "*.module.ts": "$(capture).resolver.ts, $(capture).controller.ts, $(capture).service.ts",
+                  "*.mts": "$(capture).mts.map, $(capture).*.mts, $(capture)_*.mts",
+                  "*.proto": "$(capture).pb.go, $(capture).pb.micro.go",
+                  "*.pubxml": "$(capture).pubxml.user",
+                  "*.py": "$(capture).pyi",
+                  "*.razor": "$(capture).razor.cs, $(capture).razor.css, $(capture).razor.scss",
+                  "*.resx": "$(capture).*.resx, $(capture).designer.cs, $(capture).designer.vb",
+                  "*.tex": "$(capture).acn, $(capture).acr, $(capture).alg, $(capture).aux, $(capture).bbl, $(capture).bbl-SAVE-ERROR, $(capture).bcf, $(capture).bib, $(capture).blg, $(capture).fdb_latexmk, $(capture).fls, $(capture).glg, $(capture).glo, $(capture).gls, $(capture).idx, $(capture).ind, $(capture).ist, $(capture).lof, $(capture).log, $(capture).lot, $(capture).nav, $(capture).out, $(capture).run.xml, $(capture).snm, $(capture).synctex.gz, $(capture).toc, $(capture).xdv",
+                  "*.ts": "$(capture).js, $(capture).d.ts.map, $(capture).*.ts, $(capture)_*.js, $(capture)_*.ts",
+                  "*.tsx": "$(capture).ts, $(capture).*.ts, $(capture).*.tsx, $(capture)_*.ts, $(capture)_*.tsx, $(capture).css, $(capture).module.css, $(capture).less, $(capture).module.less, $(capture).module.less.d.ts, $(capture).scss, $(capture).module.scss, $(capture).module.scss.d.ts, $(capture).css.ts",
+                  "*.vbproj": "*.config, *proj.user, appsettings.*, bundleconfig.json",
+                  "*.vue": "$(capture).*.ts, $(capture).*.js, $(capture).story.vue",
+                  "*.w": "$(capture).*.w, I$(capture).w",
+                  "*.wat": "$(capture).wasm",
+                  "*.xaml": "$(capture).xaml.cs"
+                }
+              },
+              "autorun": [],
+              "onClose": [],
+              "git": {
+                "branch": "",
+                "onLoad": [],
+                "onClose": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "PRIMARY",
+      "expanded": true,
+      "type": "folder",
+      "global": false,
+      "items": [
+        {
+          "label": "Relative path example",
+          "path": "app/routes/index.tsx",
+          "type": "file",
+          "icon": "vulknut"
+        },
+        {
+          "label": "Full path example",
+          "path": "F:/DevStack/app/routes/index.tsx",
+          "type": "file",
+          "icon": "vulknut"
+        },
+        {
+          "label": "File Nesting Example",
+          "path": "src/helpers/menus.ts",
+          "type": "file",
+          "icon": "vulknut",
+          "items": [
+            {
+              "label": "master.ts",
+              "path": "src/helpers/master.ts",
+              "type": "file",
+              "icon": "vulknut"
+            },
+            {
+              "label": "master.ts",
+              "path": "src/helpers/master.ts",
+              "type": "file",
+              "icon": "vulknut"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "SECONDARY",
+      "expanded": false,
+      "type": "folder",
+      "items": [],
+      "global": false
+    },
+    {
+      "label": "COMPONENTS",
+      "expanded": false,
+      "type": "folder",
+      "items": [],
+      "global": false
+    },
+    {
+      "label": "UTILS",
+      "expanded": false,
+      "type": "folder",
+      "items": [],
+      "global": false
+    },
+    {
+      "label": "__notes__",
+      "type": "folder",
+      "hidden": true,
+      "expanded": false,
+      "global": false,
+      "items": []
+    }
+  ]
+}
