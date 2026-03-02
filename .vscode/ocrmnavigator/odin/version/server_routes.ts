@@ -9323,14 +9323,22 @@ app.use((req, res, next) => {
 // 🌐 SERVE STATIC FILES
 app.use(express.static(path.join(process.cwd(), 'public')));
 
-// 🏠 ROOT → Landing page
+// 🏠 ROOT → Landing page (pure HTML, no Expo)
 app.get('/', (_req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'landing.html'));
 });
 
-// 📱 All non-API routes → Expo app (index.html)
+// 📱 /app → Expo web build
+app.get('/app', (_req, res) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'app.html'));
+});
+app.get('/app/*', (_req, res) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'app.html'));
+});
+
+// All other non-API routes → Expo app fallback
 app.get(/^\/(?!api).*/, (_req, res) => {
-  res.sendFile(path.join(process.cwd(), 'public', 'index.html'), (err) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'app.html'), (err) => {
     if (err) res.status(404).send('Not found');
   });
 });
