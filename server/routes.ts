@@ -627,6 +627,7 @@ app.post("/api/auth/reset-first-login", sanitizeBody, async (req, res) => {
 });
 
 // ===== OTP SEND =====
+// ===== OTP SEND (via Fonnte WhatsApp) =====
 app.post("/api/auth/otp/send", strictLimiter, sanitizeBody, async (req, res) => {
   try {
     const { phone, mode } = req.body;
@@ -646,9 +647,51 @@ app.post("/api/auth/otp/send", strictLimiter, sanitizeBody, async (req, res) => 
     
     await db.insert(otpCodes).values({ phone, code, expiresAt });
 
-    console.log("📨 OTP sent:", code);
+    // ✅ Send via Fonnte WhatsApp
+    const fonnteApiKey = process.env.FONNTE_API_KEY;
+    
+    if (fonnteApiKey) {
+      try {
+        // Fonnte expects phone without + prefix
+        const cleanPhone = phone.replace(/^\+/, "");
+        
+        const fonnteResponse = await fetch("https://api.fonnte.com/send", {
+          method: "POST",
+          headers: {
+            "Authorization": fonnteApiKey,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            target: cleanPhone,
+            message: `Kode verifikasi ZendO kamu adalah: *${code}*\n\nKode berlaku selama 5 menit. Jangan bagikan kode ini kepada siapapun.`,
+            countryCode: "62", // Indonesia default
+          }).toString(),
+        });
 
+        const fonnteResult = await fonnteResponse.json();
+        
+        if (!fonnteResult.status) {
+          console.error("❌ Fonnte send failed:", fonnteResult);
+          // Don't fail the request — fall through to dev mode
+        } else {
+          console.log(`✅ WhatsApp OTP sent to ${cleanPhone} via Fonnte`);
+          // In production, don't return the code
+          if (process.env.NODE_ENV === "production") {
+            return res.json({ success: true, message: "OTP sent via WhatsApp" });
+          }
+        }
+      } catch (fonnteError) {
+        console.error("❌ Fonnte API error:", fonnteError);
+        // Fall through to dev response
+      }
+    } else {
+      console.warn("⚠️ FONNTE_API_KEY not set — OTP not sent via WhatsApp");
+    }
+
+    // Dev/fallback: return code so you can test without WhatsApp
+    console.log("📨 OTP (dev mode):", code);
     res.json({ success: true, code, message: "OTP sent" });
+
   } catch (error) {
     logError(error as Error, 'OTP_SEND');
     res.status(500).json({ error: "Failed to send OTP" });
