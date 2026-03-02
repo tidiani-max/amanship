@@ -582,14 +582,14 @@
         btn.innerHTML = '✓ Berhasil!';
         btn.style.background = 'linear-gradient(135deg,#10b981,#059669)';
 
-        setTimeout(() => {
-          const role = d.user?.role;
-          window.location.href =
-            role === 'admin'        ? '/admin'        :
-            role === 'store_owner'  ? '/store-owner'  :
-            role === 'picker'       ? '/picker'       :
-            role === 'driver'       ? '/picker'       : '/';
-        }, 800);
+      setTimeout(() => {
+  // Store credentials so the app can auto-login
+  localStorage.setItem('qikly_token', d.token);
+  localStorage.setItem('qikly_user', JSON.stringify(d.user));
+
+  // Redirect to the Expo app deep link — opens the real app
+  window.location.href = 'exp+qikly-app://expo-development-client/?url=https%3A%2F%2Febrqnvm-dioti-8081.exp.direct';
+}, 800);
       } else {
         showErr(d.error || 'Nomor atau password salah.');
         shake('phone'); shake('pass');
