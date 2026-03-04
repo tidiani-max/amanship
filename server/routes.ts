@@ -9159,7 +9159,6 @@ app.get("/api/picker/pre-staging-recommendations", async (req, res) => {
       return res.status(400).json({ error: "userId required" });
     }
     
-    // Get picker's store
     const [staff] = await db
       .select()
       .from(storeStaff)
@@ -9169,24 +9168,26 @@ app.get("/api/picker/pre-staging-recommendations", async (req, res) => {
       return res.status(404).json({ error: "Picker not found" });
     }
     
-    // Analyze patterns
     const predictions = await analyzeOrderPatterns(staff.storeId);
     
-    // Get product details
+    // ✅ Guard: if no predictions, return early
+    if (!predictions.length) {
+      return res.json({
+        recommendations: [],
+        timeContext: getTimeContext(),
+        totalPredictions: 0,
+        message: 'No high-confidence predictions at this time'
+      });
+    }
+    
     const productIds = predictions.map(p => p.productId);
     
-    // ✅ FIX: Rename the variable to avoid conflict
     const productDetails = await db
-      .select({
-        id: products.id,
-        name: products.name,
-        image: products.image,
-      })
+      .select({ id: products.id, name: products.name, image: products.image })
       .from(products)
       .where(sql`${products.id} IN (${sql.join(productIds.map(id => sql`${id}`), sql`, `)})`)
       .limit(10);
     
-    // Merge predictions with product details
     const recommendations = predictions.map(pred => {
       const product = productDetails.find((p: any) => p.id === pred.productId);
       return {
@@ -9194,25 +9195,13 @@ app.get("/api/picker/pre-staging-recommendations", async (req, res) => {
         product,
         confidenceLevel: pred.probability > 0.5 ? 'HIGH' : pred.probability > 0.3 ? 'MEDIUM' : 'LOW',
       };
-    }).filter(r => r.product); // Only return products that exist
+    }).filter(r => r.product);
     
-    // Generate time-based insights
     const hourOfDay = new Date().getHours();
-    let timeContext = '';
-    
-    if (hourOfDay >= 6 && hourOfDay < 10) {
-      timeContext = 'Morning rush - Expect breakfast items & drinks';
-    } else if (hourOfDay >= 12 && hourOfDay < 14) {
-      timeContext = 'Lunch time - Prepare quick meal items';
-    } else if (hourOfDay >= 17 && hourOfDay < 21) {
-      timeContext = 'Dinner rush - Stock fresh produce & proteins';
-    } else {
-      timeContext = 'Off-peak - Standard inventory';
-    }
     
     res.json({
       recommendations,
-      timeContext,
+      timeContext: getTimeContext(hourOfDay),
       totalPredictions: recommendations.length,
       message: recommendations.length > 0 
         ? `Move these ${recommendations.length} items to picking station for faster fulfillment`
@@ -9224,6 +9213,14 @@ app.get("/api/picker/pre-staging-recommendations", async (req, res) => {
     res.status(500).json({ error: "Failed to generate recommendations" });
   }
 });
+
+// Extract helper so it's reusable
+function getTimeContext(hour = new Date().getHours()): string {
+  if (hour >= 6 && hour < 10)  return 'Morning rush - Expect breakfast items & drinks';
+  if (hour >= 12 && hour < 14) return 'Lunch time - Prepare quick meal items';
+  if (hour >= 17 && hour < 21) return 'Dinner rush - Stock fresh produce & proteins';
+  return 'Off-peak - Standard inventory';
+}
 
 // ==================== BACKEND: AI PERFORMANCE COACH ====================
 

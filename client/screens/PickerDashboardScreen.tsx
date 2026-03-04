@@ -387,7 +387,8 @@ const PromotionCard: React.FC<{
 }> = ({ promotion, onEdit, onDelete, onToggleActive }) => {
   const { theme } = useTheme();
   return (
-    <Card style={[styles.promoCard, !promotion.isActive && { opacity: 0.6 }]}>
+    
+    <Card style={[styles.promoCard, !promotion.isActive ? { opacity: 0.6 } : undefined]}>
       {promotion.image && <Image source={{ uri: getImageUrl(promotion.image) }} style={styles.promoImg} resizeMode="cover" />}
       <View style={styles.promoHeader}>
         <View style={{ flex: 1 }}>
