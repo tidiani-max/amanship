@@ -144,6 +144,7 @@ export const storeInventory = pgTable("store_inventory", {
   stockCount: integer("stock_count").notNull().default(0),
   location: text("location"),
   isAvailable: boolean("is_available").default(true).notNull(),
+  priceOverride: integer("price_override"), // Per-store price override (used for expiry discounts)
 });
 
 export const addresses = pgTable("addresses", {
@@ -483,6 +484,89 @@ export const productFreshness = pgTable("product_freshness", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// ==================== 🛡️ EXPIRY & LOSS PREVENTION TABLES ====================
+
+export const shelfLifeMaster = pgTable("shelf_life_master", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  categoryId: varchar("category_id", { length: 255 }).notNull().unique(),
+  categoryName: text("category_name").notNull(),
+  isFresh: boolean("is_fresh").default(false).notNull(),
+  shelfLifeValue: integer("shelf_life_value").notNull(),
+  unit: text("unit").notNull().default("hours"), // "hours" or "days"
+  notes: text("notes"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const inventoryBatches = pgTable("inventory_batches", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  storeId: varchar("store_id", { length: 255 }).notNull(),
+  productId: varchar("product_id", { length: 255 }).notNull(),
+  quantity: integer("quantity").notNull(),
+  originalQuantity: integer("original_quantity").notNull(),
+  enteredAt: timestamp("entered_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  status: text("status").notNull().default("active"), // "active" | "consumed" | "discarded" | "bundled"
+  costPrice: integer("cost_price").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const expiryDiscountSuggestions = pgTable("expiry_discount_suggestions", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  storeId: varchar("store_id", { length: 255 }).notNull(),
+  productId: varchar("product_id", { length: 255 }).notNull(),
+  batchId: varchar("batch_id", { length: 255 }).notNull(),
+  type: text("type").notNull(), // "fresh_discount" | "packaged_discount" | "bundle" | "overstock"
+  suggestedDiscountPercent: integer("suggested_discount_percent").notNull(),
+  currentPrice: integer("current_price").notNull(),
+  suggestedPrice: integer("suggested_price").notNull(),
+  rupiahAtRisk: integer("rupiah_at_risk").notNull(),
+  hoursUntilExpiry: integer("hours_until_expiry"),
+  daysUntilExpiry: integer("days_until_expiry"),
+  status: text("status").notNull().default("pending"), // "pending" | "approved" | "ignored" | "expired"
+  approvedAt: timestamp("approved_at"),
+  ignoredAt: timestamp("ignored_at"),
+  promotionId: varchar("promotion_id", { length: 255 }),
+  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const bundleSuggestions = pgTable("bundle_suggestions", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  storeId: varchar("store_id", { length: 255 }).notNull(),
+  suggestedName: text("suggested_name").notNull(),
+  items: jsonb("items").notNull(), // Array of { productId, productName, quantity, unitCostPrice, unitPrice }
+  normalTotal: integer("normal_total").notNull(),
+  suggestedBundlePrice: integer("suggested_bundle_price").notNull(),
+  minimumBundlePrice: integer("minimum_bundle_price").notNull(),
+  discountPercent: integer("discount_percent").notNull(),
+  rupiahAtRisk: integer("rupiah_at_risk").notNull(),
+  possibleBundleCount: integer("possible_bundle_count").notNull(),
+  earliestExpiry: timestamp("earliest_expiry").notNull(),
+  status: text("status").notNull().default("pending"), // "pending" | "approved" | "ignored" | "price_adjusted"
+  approvedAt: timestamp("approved_at"),
+  finalPrice: integer("final_price"),
+  promotionId: varchar("promotion_id", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const deadStockAlerts = pgTable("dead_stock_alerts", {
+  id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
+  storeId: varchar("store_id", { length: 255 }).notNull(),
+  productId: varchar("product_id", { length: 255 }).notNull(),
+  daysSinceLastSale: integer("days_since_last_sale").notNull(),
+  currentStock: integer("current_stock").notNull(),
+  rupiahAtRisk: integer("rupiah_at_risk").notNull(),
+  severity: text("severity").notNull(), // "yellow" | "red" | "critical"
+  hasExpiryRisk: boolean("has_expiry_risk").default(false).notNull(),
+  status: text("status").notNull().default("active"), // "active" | "resolved" | "dismissed"
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const storeOwnerDailyEarnings = pgTable("store_owner_daily_earnings", {
   id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
   storeOwnerId: varchar("store_owner_id", { length: 255 }).notNull(),
@@ -651,6 +735,32 @@ export const productFreshnessRelations = relations(productFreshness, ({ one }) =
   product: one(products, { fields: [productFreshness.productId], references: [products.id] }),
 }));
 
+export const shelfLifeMasterRelations = relations(shelfLifeMaster, ({ one }) => ({
+  category: one(categories, { fields: [shelfLifeMaster.categoryId], references: [categories.id] }),
+}));
+
+export const inventoryBatchesRelations = relations(inventoryBatches, ({ one }) => ({
+  store: one(stores, { fields: [inventoryBatches.storeId], references: [stores.id] }),
+  product: one(products, { fields: [inventoryBatches.productId], references: [products.id] }),
+}));
+
+export const expiryDiscountSuggestionsRelations = relations(expiryDiscountSuggestions, ({ one }) => ({
+  store: one(stores, { fields: [expiryDiscountSuggestions.storeId], references: [stores.id] }),
+  product: one(products, { fields: [expiryDiscountSuggestions.productId], references: [products.id] }),
+  batch: one(inventoryBatches, { fields: [expiryDiscountSuggestions.batchId], references: [inventoryBatches.id] }),
+  promotion: one(promotions, { fields: [expiryDiscountSuggestions.promotionId], references: [promotions.id] }),
+}));
+
+export const bundleSuggestionsRelations = relations(bundleSuggestions, ({ one }) => ({
+  store: one(stores, { fields: [bundleSuggestions.storeId], references: [stores.id] }),
+  promotion: one(promotions, { fields: [bundleSuggestions.promotionId], references: [promotions.id] }),
+}));
+
+export const deadStockAlertsRelations = relations(deadStockAlerts, ({ one }) => ({
+  store: one(stores, { fields: [deadStockAlerts.storeId], references: [stores.id] }),
+  product: one(products, { fields: [deadStockAlerts.productId], references: [products.id] }),
+}));
+
 export const storeOwnerDailyEarningsRelations = relations(storeOwnerDailyEarnings, ({ one }) => ({
   storeOwner: one(storeOwners, { fields: [storeOwnerDailyEarnings.storeOwnerId], references: [storeOwners.id] }),
   store: one(stores, { fields: [storeOwnerDailyEarnings.storeId], references: [stores.id] }),
@@ -701,6 +811,13 @@ export const insertAdminFinancialsSchema = createInsertSchema(adminFinancials).o
 export const insertStoreOwnerSchema = createInsertSchema(storeOwners).omit({ id: true, createdAt: true });
 export const insertProductFreshnessSchema = createInsertSchema(productFreshness).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertStoreOwnerDailyEarningsSchema = createInsertSchema(storeOwnerDailyEarnings).omit({ id: true, createdAt: true, updatedAt: true });
+
+// Expiry & Loss Prevention
+export const insertShelfLifeMasterSchema = createInsertSchema(shelfLifeMaster).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertInventoryBatchSchema = createInsertSchema(inventoryBatches).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertExpiryDiscountSuggestionSchema = createInsertSchema(expiryDiscountSuggestions).omit({ id: true, createdAt: true });
+export const insertBundleSuggestionSchema = createInsertSchema(bundleSuggestions).omit({ id: true, createdAt: true });
+export const insertDeadStockAlertSchema = createInsertSchema(deadStockAlerts).omit({ id: true, createdAt: true, updatedAt: true });
 
 
 
@@ -760,3 +877,15 @@ export type ProductFreshness = typeof productFreshness.$inferSelect;
 export type InsertProductFreshness = z.infer<typeof insertProductFreshnessSchema>;
 export type StoreOwnerDailyEarnings = typeof storeOwnerDailyEarnings.$inferSelect;
 export type InsertStoreOwnerDailyEarnings = z.infer<typeof insertStoreOwnerDailyEarningsSchema>;
+
+// Expiry & Loss Prevention
+export type ShelfLifeMaster = typeof shelfLifeMaster.$inferSelect;
+export type InsertShelfLifeMaster = z.infer<typeof insertShelfLifeMasterSchema>;
+export type InventoryBatch = typeof inventoryBatches.$inferSelect;
+export type InsertInventoryBatch = z.infer<typeof insertInventoryBatchSchema>;
+export type ExpiryDiscountSuggestion = typeof expiryDiscountSuggestions.$inferSelect;
+export type InsertExpiryDiscountSuggestion = z.infer<typeof insertExpiryDiscountSuggestionSchema>;
+export type BundleSuggestion = typeof bundleSuggestions.$inferSelect;
+export type InsertBundleSuggestion = z.infer<typeof insertBundleSuggestionSchema>;
+export type DeadStockAlert = typeof deadStockAlerts.$inferSelect;
+export type InsertDeadStockAlert = z.infer<typeof insertDeadStockAlertSchema>;

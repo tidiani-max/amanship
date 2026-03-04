@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { createServer, type Server } from "node:http";
-import { eq, and, gt, sql, or, gte, lte, isNull, desc } from "drizzle-orm";
+import { eq, and, gt, sql, or, gte, lte, isNull, desc, asc } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
 import { 
@@ -20,6 +20,11 @@ import {
   storeOwners,
   productFreshness,
   storeOwnerDailyEarnings,
+  shelfLifeMaster,
+  inventoryBatches,
+  expiryDiscountSuggestions,
+  bundleSuggestions,
+  deadStockAlerts,
 } from "../shared/schema";
 import { findNearestAvailableStore, getStoresWithAvailability, estimateDeliveryTime } from "./storeAvailability";
 import express, { Express } from 'express';
@@ -55,7 +60,9 @@ import {
   notifyCustomerOrderStatus,
   notifyChatMessage,
   notifyCustomerDriverNearby,   // ← NEW
-  notifyCustomerDriverArrived,  
+  notifyCustomerDriverArrived,
+  notifyNearbyCustomersExpiryDiscount,
+  notifyNearbyCustomersBundleDeal,
 } from './notifications';
 import { 
   scanProduct, 
@@ -65,6 +72,21 @@ import {
   getDeliveryPriorityProducts,
 } from '../server/services/productTracking';
 import { startAllJobs,triggerManualScan  } from '../server/services/scheduledJobs';
+import {
+  seedShelfLifeDefaults,
+  runExpiryDiscountScan,
+  runBundleSuggestionScan,
+  runDeadStockScan,
+  runOverstockScan,
+  getLossSummary,
+  getPendingExpirySuggestions,
+  getPendingBundleSuggestions,
+  getActiveDeadStockAlerts,
+  approveSuggestion,
+  approveBundle,
+  calculateExpiryForBatch,
+  deductStockFIFO,
+} from '../server/services/expiryEngine';
 // At the top of registerRoutes()
 import grabmapsTilesRouter from "./routes/grabmapsTiles";
 
@@ -3404,6 +3426,22 @@ app.put("/api/driver/orders/:id/complete", async (req, res) => {
       .where(eq(users.id, completed.userId));
 
     await notifyCustomerOrderStatus(completed.id, "delivered");
+
+    // 📦 FIFO batch deduction — deduct sold items from oldest batches
+    if (completed.storeId) {
+      try {
+        const completedItems = completed.items as Array<{ productId: string; quantity: number }>;
+        if (Array.isArray(completedItems)) {
+          for (const item of completedItems) {
+            if (item.productId && item.quantity) {
+              await deductStockFIFO(item.productId, completed.storeId, item.quantity);
+            }
+          }
+        }
+      } catch (fifoErr) {
+        console.error("⚠️ FIFO deduction failed (non-critical):", fifoErr);
+      }
+    }
 
     console.log(`✅ Order ${id} delivered by driver ${userId}`);
     res.json(completed);
@@ -9096,6 +9134,312 @@ app.post("/api/automation/trigger-scan", async (req, res) => {
 
 console.log("✅ Smart Grocery Automation routes registered");
 
+// ==================== EXPIRY & LOSS PREVENTION ROUTES ====================
+
+// ── Helper: get storeId from authenticated store_owner user ──────────────────
+async function getStoreIdForOwner(userId: string): Promise<string | null> {
+  const [so] = await db.select({ storeId: storeOwners.storeId })
+    .from(storeOwners)
+    .where(eq(storeOwners.userId, userId))
+    .limit(1);
+  return so?.storeId ?? null;
+}
+
+// ── Admin: Shelf Life Master CRUD ─────────────────────────────────────────────
+
+app.get("/api/admin/shelf-life-master", authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const rules = await db.select().from(shelfLifeMaster).orderBy(asc(shelfLifeMaster.categoryName));
+    res.json(rules);
+  } catch (error) {
+    logError(error as Error, "GET /api/admin/shelf-life-master");
+    res.status(500).json({ error: "Failed to fetch shelf life rules" });
+  }
+});
+
+app.post("/api/admin/shelf-life-master", authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { categoryId, categoryName, isFresh, shelfLifeValue, unit, notes } = req.body;
+    if (!categoryId || !categoryName || shelfLifeValue === undefined) {
+      return res.status(400).json({ error: "categoryId, categoryName, shelfLifeValue required" });
+    }
+    const [rule] = await db.insert(shelfLifeMaster).values({
+      categoryId,
+      categoryName,
+      isFresh: !!isFresh,
+      shelfLifeValue: Number(shelfLifeValue),
+      unit: unit ?? (isFresh ? "hours" : "days"),
+      notes: notes ?? null,
+    }).returning();
+    res.json(rule);
+  } catch (error) {
+    logError(error as Error, "POST /api/admin/shelf-life-master");
+    res.status(500).json({ error: "Failed to create shelf life rule" });
+  }
+});
+
+app.put("/api/admin/shelf-life-master/:id", authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { shelfLifeValue, notes, isFresh, unit } = req.body;
+    const updates: { shelfLifeValue?: number; notes?: string | null; isFresh?: boolean; unit?: string; updatedAt: Date } = { updatedAt: new Date() };
+    if (shelfLifeValue !== undefined) updates.shelfLifeValue = Number(shelfLifeValue);
+    if (notes !== undefined) updates.notes = notes;
+    if (isFresh !== undefined) updates.isFresh = !!isFresh;
+    if (unit !== undefined) updates.unit = unit;
+
+    const [updated] = await db.update(shelfLifeMaster)
+      .set(updates)
+      .where(eq(shelfLifeMaster.id, id))
+      .returning();
+    if (!updated) return res.status(404).json({ error: "Rule not found" });
+    res.json(updated);
+  } catch (error) {
+    logError(error as Error, "PUT /api/admin/shelf-life-master/:id");
+    res.status(500).json({ error: "Failed to update shelf life rule" });
+  }
+});
+
+app.delete("/api/admin/shelf-life-master/:id", authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await db.delete(shelfLifeMaster).where(eq(shelfLifeMaster.id, id));
+    res.json({ success: true });
+  } catch (error) {
+    logError(error as Error, "DELETE /api/admin/shelf-life-master/:id");
+    res.status(500).json({ error: "Failed to delete rule" });
+  }
+});
+
+// ── Store Owner: Loss Summary ─────────────────────────────────────────────────
+
+app.get("/api/store-owner/loss-summary", authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId as string;
+    const storeId = await getStoreIdForOwner(userId);
+    if (!storeId) return res.status(404).json({ error: "No store assigned" });
+
+    const summary = await getLossSummary(storeId);
+    res.json(summary);
+  } catch (error) {
+    logError(error as Error, "GET /api/store-owner/loss-summary");
+    res.status(500).json({ error: "Failed to fetch loss summary" });
+  }
+});
+
+// ── Store Owner: Expiry Suggestions ──────────────────────────────────────────
+
+app.get("/api/store-owner/expiry-suggestions", authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId as string;
+    const storeId = await getStoreIdForOwner(userId);
+    if (!storeId) return res.status(404).json({ error: "No store assigned" });
+
+    const suggestions = await getPendingExpirySuggestions(storeId);
+    res.json(suggestions);
+  } catch (error) {
+    logError(error as Error, "GET /api/store-owner/expiry-suggestions");
+    res.status(500).json({ error: "Failed to fetch suggestions" });
+  }
+});
+
+app.post("/api/store-owner/approve-suggestion/:id", authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId as string;
+    const storeId = await getStoreIdForOwner(userId);
+    if (!storeId) return res.status(404).json({ error: "No store assigned" });
+
+    const { id } = req.params;
+    const result = await approveSuggestion(id, userId);
+
+    // Fire push notifications to nearby customers
+    const [suggestion] = await db.select()
+      .from(expiryDiscountSuggestions)
+      .where(eq(expiryDiscountSuggestions.id, id))
+      .limit(1);
+
+    if (suggestion) {
+      notifyNearbyCustomersExpiryDiscount(
+        suggestion.productId,
+        storeId,
+        suggestion.suggestedDiscountPercent
+      ).catch(console.error);
+    }
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logError(error as Error, "POST /api/store-owner/approve-suggestion/:id");
+    res.status(500).json({ error: "Failed to approve suggestion" });
+  }
+});
+
+app.post("/api/store-owner/ignore-suggestion/:id", authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId as string;
+    const storeId = await getStoreIdForOwner(userId);
+    if (!storeId) return res.status(404).json({ error: "No store assigned" });
+
+    const { id } = req.params;
+    await db.update(expiryDiscountSuggestions)
+      .set({ status: "ignored", ignoredAt: new Date() })
+      .where(and(eq(expiryDiscountSuggestions.id, id), eq(expiryDiscountSuggestions.storeId, storeId)));
+    res.json({ success: true });
+  } catch (error) {
+    logError(error as Error, "POST /api/store-owner/ignore-suggestion/:id");
+    res.status(500).json({ error: "Failed to ignore suggestion" });
+  }
+});
+
+// ── Store Owner: Bundle Suggestions ──────────────────────────────────────────
+
+app.get("/api/store-owner/bundle-suggestions", authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId as string;
+    const storeId = await getStoreIdForOwner(userId);
+    if (!storeId) return res.status(404).json({ error: "No store assigned" });
+
+    const bundles = await getPendingBundleSuggestions(storeId);
+    res.json(bundles);
+  } catch (error) {
+    logError(error as Error, "GET /api/store-owner/bundle-suggestions");
+    res.status(500).json({ error: "Failed to fetch bundle suggestions" });
+  }
+});
+
+app.post("/api/store-owner/approve-bundle/:id", authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId as string;
+    const storeId = await getStoreIdForOwner(userId);
+    if (!storeId) return res.status(404).json({ error: "No store assigned" });
+
+    const { id } = req.params;
+    const { finalPrice } = req.body;
+    const result = await approveBundle(id, userId, finalPrice ? Number(finalPrice) : undefined);
+
+    // Fire push notifications
+    const [bundle] = await db.select()
+      .from(bundleSuggestions)
+      .where(eq(bundleSuggestions.id, id))
+      .limit(1);
+
+    if (bundle) {
+      notifyNearbyCustomersBundleDeal(
+        {
+          id: bundle.id,
+          suggestedName: bundle.suggestedName,
+          suggestedBundlePrice: bundle.finalPrice ?? bundle.suggestedBundlePrice,
+          items: bundle.items as any[],
+        },
+        storeId
+      ).catch(console.error);
+    }
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logError(error as Error, "POST /api/store-owner/approve-bundle/:id");
+    res.status(500).json({ error: "Failed to approve bundle" });
+  }
+});
+
+app.post("/api/store-owner/ignore-bundle/:id", authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId as string;
+    const storeId = await getStoreIdForOwner(userId);
+    if (!storeId) return res.status(404).json({ error: "No store assigned" });
+
+    const { id } = req.params;
+    await db.update(bundleSuggestions)
+      .set({ status: "ignored" })
+      .where(and(eq(bundleSuggestions.id, id), eq(bundleSuggestions.storeId, storeId)));
+    res.json({ success: true });
+  } catch (error) {
+    logError(error as Error, "POST /api/store-owner/ignore-bundle/:id");
+    res.status(500).json({ error: "Failed to ignore bundle" });
+  }
+});
+
+// ── Store Owner: Dead Stock Alerts ────────────────────────────────────────────
+
+app.get("/api/store-owner/dead-stock-alerts", authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId as string;
+    const storeId = await getStoreIdForOwner(userId);
+    if (!storeId) return res.status(404).json({ error: "No store assigned" });
+
+    const alerts = await getActiveDeadStockAlerts(storeId);
+    res.json(alerts);
+  } catch (error) {
+    logError(error as Error, "GET /api/store-owner/dead-stock-alerts");
+    res.status(500).json({ error: "Failed to fetch dead stock alerts" });
+  }
+});
+
+// ── Inventory Restock (creates batch with auto-calculated expiry) ─────────────
+
+app.post("/api/inventory/restock", authenticate, async (req: Request, res: Response) => {
+  try {
+    const { storeId, productId, quantity, costPrice } = req.body;
+    if (!storeId || !productId || !quantity || !costPrice) {
+      return res.status(400).json({ error: "storeId, productId, quantity, costPrice required" });
+    }
+
+    // Create batch (calculates expiry automatically)
+    const batch = await calculateExpiryForBatch(productId, storeId, Number(quantity), Number(costPrice));
+
+    // Update storeInventory stockCount
+    const [existing] = await db.select()
+      .from(storeInventory)
+      .where(and(eq(storeInventory.storeId, storeId), eq(storeInventory.productId, productId)))
+      .limit(1);
+
+    if (existing) {
+      await db.update(storeInventory)
+        .set({ stockCount: existing.stockCount + Number(quantity) })
+        .where(eq(storeInventory.id, existing.id));
+    } else {
+      await db.insert(storeInventory).values({
+        storeId,
+        productId,
+        stockCount: Number(quantity),
+        isAvailable: true,
+      });
+    }
+
+    res.json({ success: true, batch });
+  } catch (error) {
+    logError(error as Error, "POST /api/inventory/restock");
+    res.status(500).json({ error: "Failed to restock" });
+  }
+});
+
+// ── Admin: Manual trigger for expiry scan ────────────────────────────────────
+
+app.post("/api/cron/run-expiry-scan", authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const allStores = await db.select().from(stores).where(eq(stores.isActive, true));
+    let suggestionsCreated = 0;
+    let bundlesCreated = 0;
+    let deadStockUpdated = 0;
+
+    for (const store of allStores) {
+      const s = await runExpiryDiscountScan(store.id);
+      const b = await runBundleSuggestionScan(store.id);
+      await runDeadStockScan(store.id);
+      await runOverstockScan(store.id);
+      suggestionsCreated += s;
+      bundlesCreated += b;
+      deadStockUpdated++;
+    }
+
+    res.json({ success: true, suggestionsCreated, bundlesCreated, deadStockUpdated });
+  } catch (error) {
+    logError(error as Error, "POST /api/cron/run-expiry-scan");
+    res.status(500).json({ error: "Scan failed" });
+  }
+});
+
+console.log("✅ Expiry & Loss Prevention routes registered");
+
 
 
 
@@ -9159,6 +9503,7 @@ app.get("/api/picker/pre-staging-recommendations", async (req, res) => {
       return res.status(400).json({ error: "userId required" });
     }
     
+    // Get picker's store
     const [staff] = await db
       .select()
       .from(storeStaff)
@@ -9168,26 +9513,24 @@ app.get("/api/picker/pre-staging-recommendations", async (req, res) => {
       return res.status(404).json({ error: "Picker not found" });
     }
     
+    // Analyze patterns
     const predictions = await analyzeOrderPatterns(staff.storeId);
     
-    // ✅ Guard: if no predictions, return early
-    if (!predictions.length) {
-      return res.json({
-        recommendations: [],
-        timeContext: getTimeContext(),
-        totalPredictions: 0,
-        message: 'No high-confidence predictions at this time'
-      });
-    }
-    
+    // Get product details
     const productIds = predictions.map(p => p.productId);
     
+    // ✅ FIX: Rename the variable to avoid conflict
     const productDetails = await db
-      .select({ id: products.id, name: products.name, image: products.image })
+      .select({
+        id: products.id,
+        name: products.name,
+        image: products.image,
+      })
       .from(products)
       .where(sql`${products.id} IN (${sql.join(productIds.map(id => sql`${id}`), sql`, `)})`)
       .limit(10);
     
+    // Merge predictions with product details
     const recommendations = predictions.map(pred => {
       const product = productDetails.find((p: any) => p.id === pred.productId);
       return {
@@ -9195,13 +9538,25 @@ app.get("/api/picker/pre-staging-recommendations", async (req, res) => {
         product,
         confidenceLevel: pred.probability > 0.5 ? 'HIGH' : pred.probability > 0.3 ? 'MEDIUM' : 'LOW',
       };
-    }).filter(r => r.product);
+    }).filter(r => r.product); // Only return products that exist
     
+    // Generate time-based insights
     const hourOfDay = new Date().getHours();
+    let timeContext = '';
+    
+    if (hourOfDay >= 6 && hourOfDay < 10) {
+      timeContext = 'Morning rush - Expect breakfast items & drinks';
+    } else if (hourOfDay >= 12 && hourOfDay < 14) {
+      timeContext = 'Lunch time - Prepare quick meal items';
+    } else if (hourOfDay >= 17 && hourOfDay < 21) {
+      timeContext = 'Dinner rush - Stock fresh produce & proteins';
+    } else {
+      timeContext = 'Off-peak - Standard inventory';
+    }
     
     res.json({
       recommendations,
-      timeContext: getTimeContext(hourOfDay),
+      timeContext,
       totalPredictions: recommendations.length,
       message: recommendations.length > 0 
         ? `Move these ${recommendations.length} items to picking station for faster fulfillment`
@@ -9213,14 +9568,6 @@ app.get("/api/picker/pre-staging-recommendations", async (req, res) => {
     res.status(500).json({ error: "Failed to generate recommendations" });
   }
 });
-
-// Extract helper so it's reusable
-function getTimeContext(hour = new Date().getHours()): string {
-  if (hour >= 6 && hour < 10)  return 'Morning rush - Expect breakfast items & drinks';
-  if (hour >= 12 && hour < 14) return 'Lunch time - Prepare quick meal items';
-  if (hour >= 17 && hour < 21) return 'Dinner rush - Stock fresh produce & proteins';
-  return 'Off-peak - Standard inventory';
-}
 
 // ==================== BACKEND: AI PERFORMANCE COACH ====================
 
@@ -9384,6 +9731,25 @@ app.get(/^\/(?!api).*/, (_req, res) => {
 });
 
 startAllJobs(); // Start automation
+// Seed shelf life defaults if table is empty
+seedShelfLifeDefaults().catch((err: unknown) => console.error('❌ Shelf life seed failed:', err));
+
+// 🛡️ Expiry & Loss Prevention — run every hour
+cron.schedule('0 * * * *', async () => {
+  console.log('🕐 Running expiry/loss prevention scan...');
+  try {
+    const allStores = await db.select().from(stores).where(eq(stores.isActive, true));
+    for (const store of allStores) {
+      await runExpiryDiscountScan(store.id);
+      await runBundleSuggestionScan(store.id);
+      await runDeadStockScan(store.id);
+      await runOverstockScan(store.id);
+    }
+    console.log(`✅ Expiry scan complete — ${allStores.length} stores scanned`);
+  } catch (e) {
+    console.error('❌ Expiry scan failed:', e);
+  }
+});
 console.log('✅ Smart Grocery Automation started');
 
   const httpServer = createServer(app);

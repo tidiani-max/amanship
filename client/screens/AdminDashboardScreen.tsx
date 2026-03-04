@@ -1726,7 +1726,7 @@ export default function AdminDashboardScreen() {
   const { t } = useLanguage();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'stores' | 'promotions' | 'financials'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'stores' | 'promotions' | 'financials' | 'shelf_life'>('overview');
   const [showStoreModal, setShowStoreModal] = useState(false);
   const [showStoreOwnerModal, setShowStoreOwnerModal] = useState(false);
   const [showStaffModal, setShowStaffModal] = useState(false);
@@ -1785,7 +1785,47 @@ export default function AdminDashboardScreen() {
     refetchInterval: activeTab === 'financials' ? 60000 : false,
   });
 
-  // Search handler
+  // ==================== SHELF LIFE MASTER ====================
+  interface ShelfLifeRule {
+    id: string;
+    categoryId: string;
+    categoryName: string;
+    isFresh: boolean;
+    shelfLifeValue: number;
+    unit: string;
+    notes: string | null;
+    isActive: boolean;
+  }
+
+  const { data: shelfLifeRules = [], refetch: refetchShelfLife } = useQuery<ShelfLifeRule[]>({
+    queryKey: ['/api/admin/shelf-life-master'],
+    enabled: activeTab === 'shelf_life',
+  });
+
+  const updateShelfLifeMutation = useMutation({
+    mutationFn: ({ id, shelfLifeValue, isFresh, unit }: { id: string; shelfLifeValue: number; isFresh?: boolean; unit?: string }) =>
+      apiRequest('PUT', `/api/admin/shelf-life-master/${id}`, { shelfLifeValue, isFresh, unit }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/shelf-life-master'] });
+      Alert.alert('✅ Berhasil', 'Shelf life berhasil diperbarui.');
+    },
+    onError: () => Alert.alert('Error', 'Gagal memperbarui shelf life.'),
+  });
+
+  const addShelfLifeMutation = useMutation({
+    mutationFn: (data: { categoryId: string; categoryName: string; isFresh: boolean; shelfLifeValue: number; unit: string }) =>
+      apiRequest('POST', '/api/admin/shelf-life-master', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/shelf-life-master'] });
+      Alert.alert('✅ Berhasil', 'Kategori shelf life berhasil ditambahkan.');
+    },
+    onError: () => Alert.alert('Error', 'Gagal menambahkan kategori.'),
+  });
+
+  const deleteShelfLifeMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('DELETE', `/api/admin/shelf-life-master/${id}`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/admin/shelf-life-master'] }),
+  });
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
     
@@ -2179,6 +2219,18 @@ export default function AdminDashboardScreen() {
                 Financials
               </ThemedText>
             </Pressable>
+
+            <Pressable
+              style={[styles.navItem, activeTab === 'shelf_life' && styles.navItemActive]}
+              onPress={() => setActiveTab('shelf_life')}
+            >
+              <View style={styles.navIcon}>
+                <Feather name="clock" size={20} color={activeTab === 'shelf_life' ? '#fff' : theme.text} />
+              </View>
+              <ThemedText style={{ color: activeTab === 'shelf_life' ? '#fff' : theme.text, fontWeight: '600' }}>
+                Shelf Life
+              </ThemedText>
+            </Pressable>
           </View>
         </View>
 
@@ -2192,6 +2244,7 @@ export default function AdminDashboardScreen() {
                 {activeTab === 'stores' && 'Stores & Staff'}
                 {activeTab === 'promotions' && 'Promotions'}
                 {activeTab === 'financials' && 'Financial Dashboard'}
+                {activeTab === 'shelf_life' && '⏱ Shelf Life Master'}
               </ThemedText>
               
               {/* Search Bar */}
@@ -3077,9 +3130,286 @@ export default function AdminDashboardScreen() {
     )}
   </View>
 )}
+
+{/* ── SHELF LIFE MASTER TAB ─────────────────────────────────────────────── */}
+{activeTab === 'shelf_life' && (
+  <View style={{ padding: Spacing.xl }}>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg }}>
+      <ThemedText style={{ fontSize: 18, fontWeight: '800' }}>
+        ⏱ Shelf Life Master ({shelfLifeRules.length})
+      </ThemedText>
+      <Pressable
+        style={{ backgroundColor: '#6338f2', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: BorderRadius.sm }}
+        onPress={() => {
+          Alert.prompt(
+            'Tambah Kategori',
+            'Masukkan nama kategori baru:',
+            (name: string) => {
+              if (!name?.trim()) return;
+              Alert.prompt(
+                `${name} — Shelf Life (jam/hari)`,
+                'Masukkan durasi shelf life dalam angka (cth: 48 untuk jam, 30 untuk hari):',
+                (value: string) => {
+                  if (!value || isNaN(Number(value))) return;
+                  addShelfLifeMutation.mutate({
+                    categoryId: `custom-${name.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`,
+                    categoryName: name.trim(),
+                    isFresh: false,
+                    shelfLifeValue: Number(value),
+                    unit: 'days',
+                  });
+                },
+                'plain-text',
+                '',
+              );
+            },
+            'plain-text',
+            '',
+          );
+        }}
+      >
+        <ThemedText style={{ color: 'white', fontWeight: '700', fontSize: 13 }}>+ Tambah</ThemedText>
+      </Pressable>
+    </View>
+
+    <ThemedText style={{ fontSize: 13, color: theme.textSecondary, marginBottom: Spacing.lg }}>
+      Database shelf life per kategori. Digunakan otomatis saat stok baru masuk untuk menghitung tanggal kadaluarsa.
+    </ThemedText>
+
+    {shelfLifeRules.length === 0 ? (
+      <View style={{ alignItems: 'center', padding: Spacing.xxl }}>
+        <Feather name="clock" size={48} color={theme.textSecondary} />
+        <ThemedText style={{ marginTop: Spacing.md, color: theme.textSecondary }}>
+          Belum ada data. Data default akan di-seed otomatis saat server restart.
+        </ThemedText>
+      </View>
+    ) : (
+      shelfLifeRules.map((rule) => (
+        <View
+          key={rule.id}
+          style={{
+            padding: Spacing.lg,
+            borderRadius: BorderRadius.md,
+            borderWidth: 1,
+            borderColor: rule.isFresh ? '#86efac' : '#bfdbfe',
+            backgroundColor: rule.isFresh ? '#f0fdf4' : '#eff6ff',
+            marginBottom: Spacing.md,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: 4 }}>
+              <View style={{
+                paddingHorizontal: Spacing.sm,
+                paddingVertical: 2,
+                borderRadius: BorderRadius.full,
+                backgroundColor: rule.isFresh ? '#16a34a' : '#2563eb',
+              }}>
+                <ThemedText style={{ color: 'white', fontSize: 10, fontWeight: '800' }}>
+                  {rule.isFresh ? '🥬 SEGAR' : '📦 KEMASAN'}
+                </ThemedText>
+              </View>
+            </View>
+            <ThemedText style={{ fontSize: 15, fontWeight: '700', color: theme.text }}>
+              {rule.categoryName}
+            </ThemedText>
+            <ThemedText style={{ fontSize: 20, fontWeight: '900', color: rule.isFresh ? '#16a34a' : '#2563eb', marginTop: 2 }}>
+              {rule.shelfLifeValue} {rule.unit === 'hours' ? 'jam' : 'hari'}
+            </ThemedText>
+            {rule.notes && (
+              <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                {rule.notes}
+              </ThemedText>
+            )}
+          </View>
+          <Pressable
+            onPress={() => {
+              Alert.prompt(
+                `Edit: ${rule.categoryName}`,
+                `Nilai saat ini: ${rule.shelfLifeValue} ${rule.unit === 'hours' ? 'jam' : 'hari'}\nMasukkan nilai baru:`,
+                (value: string) => {
+                  if (!value || isNaN(Number(value))) return;
+                  updateShelfLifeMutation.mutate({ id: rule.id, shelfLifeValue: Number(value) });
+                },
+                'plain-text',
+                String(rule.shelfLifeValue)
+              );
+            }}
+            style={{ padding: Spacing.md }}
+          >
+            <Feather name="edit-2" size={18} color="#6338f2" />
+          </Pressable>
+        </View>
+      ))
+    )}
+  </View>
+)}
           </ScrollView>
         </View>
       </View>
+
+      {/* ==================== SHELF LIFE TAB ==================== */}
+      {activeTab === 'shelf_life' && (
+        <View style={{ flex: 1, padding: Spacing.md }}>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Add new rule button */}
+            <Pressable
+              style={{
+                backgroundColor: '#6338f2',
+                borderRadius: 12,
+                paddingVertical: 14,
+                alignItems: 'center',
+                marginBottom: Spacing.lg,
+                flexDirection: 'row',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+              onPress={() => {
+                Alert.alert(
+                  'Tambah Shelf Life',
+                  'Format: nama kategori, nilai, satuan (jam/hari)',
+                  [
+                    { text: 'Batal', style: 'cancel' },
+                    {
+                      text: 'Tambah',
+                      onPress: () => {
+                        // Simple prompt chain for adding a new rule
+                        Alert.prompt('Nama Kategori', 'Contoh: Daging Sapi', (catName) => {
+                          if (!catName) return;
+                          Alert.prompt('Shelf Life (angka)', 'Contoh: 28', (valStr) => {
+                            const val = parseInt(valStr ?? '0', 10);
+                            if (!val) return;
+                            Alert.alert('Satuan', 'Pilih satuan:', [
+                              {
+                                text: 'Jam (produk segar)', onPress: () => {
+                                  addShelfLifeMutation.mutate({
+                                    categoryId: `custom-${catName.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`,
+                                    categoryName: catName,
+                                    isFresh: true,
+                                    shelfLifeValue: val,
+                                    unit: 'hours',
+                                  });
+                                }
+                              },
+                              {
+                                text: 'Hari (packaged)', onPress: () => {
+                                  addShelfLifeMutation.mutate({
+                                    categoryId: `custom-${catName.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`,
+                                    categoryName: catName,
+                                    isFresh: false,
+                                    shelfLifeValue: val,
+                                    unit: 'days',
+                                  });
+                                }
+                              },
+                            ]);
+                          });
+                        });
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              <Feather name="plus" size={18} color="white" />
+              <ThemedText style={{ color: 'white', fontWeight: '700', fontSize: 15 }}>
+                + Tambah Kategori
+              </ThemedText>
+            </Pressable>
+
+            {shelfLifeRules.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                <ActivityIndicator color="#6338f2" />
+                <ThemedText style={{ marginTop: 12, color: '#6b7280' }}>
+                  Memuat data shelf life...
+                </ThemedText>
+              </View>
+            ) : (
+              shelfLifeRules.map((rule) => (
+                <View
+                  key={rule.id}
+                  style={{
+                    backgroundColor: rule.isActive ? 'white' : '#f1f5f9',
+                    borderRadius: 14,
+                    borderWidth: 1.5,
+                    borderColor: rule.isFresh ? '#10b981' : '#6338f2',
+                    padding: Spacing.md,
+                    marginBottom: Spacing.sm,
+                    opacity: rule.isActive ? 1 : 0.5,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <View style={{
+                          backgroundColor: rule.isFresh ? '#10b981' : '#6338f2',
+                          borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2,
+                        }}>
+                          <ThemedText style={{ color: 'white', fontSize: 11, fontWeight: '700' }}>
+                            {rule.isFresh ? '🥬 SEGAR' : '📦 PACKAGED'}
+                          </ThemedText>
+                        </View>
+                      </View>
+                      <ThemedText style={{ fontSize: 16, fontWeight: '700', marginBottom: 4 }}>
+                        {rule.categoryName}
+                      </ThemedText>
+                      <ThemedText style={{ fontSize: 20, fontWeight: '900', color: rule.isFresh ? '#10b981' : '#6338f2' }}>
+                        {rule.shelfLifeValue} {rule.unit === 'hours' ? 'jam' : 'hari'}
+                      </ThemedText>
+                      {rule.notes && (
+                        <ThemedText style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+                          {rule.notes}
+                        </ThemedText>
+                      )}
+                    </View>
+
+                    {/* Actions */}
+                    <View style={{ gap: 6 }}>
+                      <Pressable
+                        style={{
+                          backgroundColor: '#eff6ff',
+                          borderRadius: 8, padding: 8,
+                        }}
+                        onPress={() => {
+                          Alert.prompt(
+                            'Edit Shelf Life',
+                            `Ubah nilai untuk ${rule.categoryName} (saat ini: ${rule.shelfLifeValue} ${rule.unit === 'hours' ? 'jam' : 'hari'}):`,
+                            (value: string) => {
+                              const newVal = parseInt(value ?? '0', 10);
+                              if (newVal > 0) {
+                                updateShelfLifeMutation.mutate({ id: rule.id, shelfLifeValue: newVal });
+                              }
+                            },
+                            'plain-text',
+                            String(rule.shelfLifeValue)
+                          );
+                        }}
+                      >
+                        <Feather name="edit-2" size={16} color="#3b82f6" />
+                      </Pressable>
+
+                      <Pressable
+                        style={{ backgroundColor: '#fef2f2', borderRadius: 8, padding: 8 }}
+                        onPress={() => {
+                          confirmAction(
+                            'Hapus Rule',
+                            `Hapus shelf life untuk ${rule.categoryName}?`,
+                            () => deleteShelfLifeMutation.mutate(rule.id)
+                          );
+                        }}
+                      >
+                        <Feather name="trash-2" size={16} color="#dc2626" />
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              ))
+            )}
+          </ScrollView>
+        </View>
+      )}
 
       {/* MODALS */}
       <StoreModal
