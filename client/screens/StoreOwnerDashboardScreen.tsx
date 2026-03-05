@@ -401,6 +401,7 @@ const styles = StyleSheet.create({
 
 // ===================== LOSS PREVENTION STYLES =====================
 const lossStyles = StyleSheet.create({
+  // ── Summary card ──────────────────────────────────────────────
   summaryCard: {
     padding: Spacing.lg,
     borderRadius: BorderRadius.md,
@@ -409,13 +410,13 @@ const lossStyles = StyleSheet.create({
   },
   summaryTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     marginBottom: Spacing.md,
     color: '#1e293b',
   },
   summaryBigNumber: {
     fontSize: 32,
-    fontWeight: '900',
+    fontWeight: '900' as const,
     marginBottom: 4,
   },
   summarySubtext: {
@@ -424,7 +425,7 @@ const lossStyles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   breakdownRow: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: Spacing.md,
     marginBottom: Spacing.md,
   },
@@ -437,203 +438,39 @@ const lossStyles = StyleSheet.create({
   breakdownLabel: {
     fontSize: 11,
     color: '#64748b',
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   breakdownValue: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     marginTop: 2,
   },
-  savedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
+  savedBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     padding: Spacing.sm,
     borderRadius: BorderRadius.sm,
     backgroundColor: '#f0fdf4',
+    marginTop: Spacing.sm,
   },
   savedText: {
     fontSize: 13,
     color: '#16a34a',
-    fontWeight: '600',
+    fontWeight: '600' as const,
     flex: 1,
   },
+  // ── Section headers ────────────────────────────────────────────
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '800',
-    marginBottom: Spacing.md,
-    marginTop: Spacing.lg,
-  },
-  suggestionCard: {
-    borderRadius: BorderRadius.md,
-    borderWidth: 2,
-    padding: Spacing.lg,
-    marginBottom: Spacing.md,
-  },
-  urgencyTag: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 4,
-    borderRadius: BorderRadius.full,
-    alignSelf: 'flex-start',
-    marginBottom: Spacing.sm,
-  },
-  urgencyText: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: 'white',
-  },
-  productNameText: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  riskText: {
-    fontSize: 13,
-    color: '#dc2626',
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  priceText: {
-    fontSize: 13,
-    color: '#475569',
-    marginBottom: Spacing.md,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  approveBtn: {
-    flex: 1,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.sm,
-    alignItems: 'center',
-  },
-  ignoreBtn: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.sm,
-    alignItems: 'center',
-    backgroundColor: '#f1f5f9',
-  },
-  approveBtnText: {
-    color: 'white',
-    fontWeight: '800',
-    fontSize: 13,
-  },
-  ignoreBtnText: {
-    color: '#94a3b8',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  bundleCard: {
-    borderRadius: BorderRadius.md,
-    borderWidth: 2,
-    borderColor: '#8b5cf6',
-    padding: Spacing.lg,
-    marginBottom: Spacing.md,
-    backgroundColor: '#faf5ff',
-  },
-  bundleName: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#6d28d9',
-    marginBottom: Spacing.sm,
-  },
-  bundleItem: {
-    fontSize: 13,
-    color: '#475569',
-    marginBottom: 2,
-  },
-  bundlePriceOld: {
-    fontSize: 13,
-    color: '#94a3b8',
-    textDecorationLine: 'line-through',
-    marginTop: Spacing.sm,
-  },
-  bundlePriceNew: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#16a34a',
-  },
-  bundleDiscountBadge: {
-    backgroundColor: '#16a34a',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 4,
-    borderRadius: BorderRadius.full,
-    alignSelf: 'flex-start',
-    marginBottom: Spacing.sm,
-  },
-  bundleDiscountText: {
-    color: 'white',
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  bundleCount: {
-    fontSize: 12,
-    color: '#64748b',
-    marginBottom: Spacing.md,
-  },
-  adjustPriceBtn: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.sm,
-    alignItems: 'center',
-    backgroundColor: '#ede9fe',
-  },
-  adjustPriceBtnText: {
-    color: '#7c3aed',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  deadStockCard: {
-    borderRadius: BorderRadius.md,
-    borderWidth: 2,
-    padding: Spacing.lg,
-    marginBottom: Spacing.md,
-  },
-  deadStockName: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  deadStockInfo: {
-    fontSize: 13,
-    color: '#475569',
-    marginBottom: 2,
-  },
-  deadStockRisk: {
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  criticalBadge: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 3,
-    borderRadius: BorderRadius.full,
-    backgroundColor: '#dc2626',
-    alignSelf: 'flex-start',
-    marginTop: Spacing.sm,
-  },
-  criticalBadgeText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: '900',
-  },
-  // ── Aliases & missing keys ──────────────────────────────────
-  savedBanner: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 8,
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#f0fdf4',
+    fontWeight: '800' as const,
+    color: '#1e293b',
   },
   sectionHeaderRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    marginBottom: 12,
-    marginTop: 16,
+    marginBottom: Spacing.md,
+    marginTop: Spacing.lg,
   },
   countBadge: {
     backgroundColor: '#ef4444',
@@ -649,22 +486,72 @@ const lossStyles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800' as const,
   },
+  // ── Suggestion cards ───────────────────────────────────────────
+  suggestionCard: {
+    borderRadius: BorderRadius.md,
+    borderWidth: 2,
+    marginBottom: Spacing.md,
+    overflow: 'hidden' as const,
+    backgroundColor: 'white',
+  },
+  cardBody: {
+    padding: Spacing.lg,
+  },
   urgencyStrip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: 'flex-start' as const,
-    marginBottom: 8,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 6,
   },
   urgencyStripText: {
     color: 'white',
     fontSize: 11,
     fontWeight: '900' as const,
+    letterSpacing: 0.5,
+  },
+  typeBadgeRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    marginBottom: 6,
+    marginTop: 8,
+  },
+  freshBadge: {
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  freshBadgeText: {
+    color: '#16a34a',
+    fontSize: 10,
+    fontWeight: '800' as const,
+  },
+  packagedBadge: {
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  packagedBadgeText: {
+    color: '#1d4ed8',
+    fontSize: 10,
+    fontWeight: '800' as const,
+  },
+  overstockBadge: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  overstockBadgeText: {
+    color: '#d97706',
+    fontSize: 10,
+    fontWeight: '800' as const,
   },
   productName: {
     fontSize: 16,
     fontWeight: '700' as const,
     marginBottom: 4,
+    color: '#1e293b',
   },
   riskLine: {
     fontSize: 13,
@@ -674,19 +561,43 @@ const lossStyles = StyleSheet.create({
   priceLine: {
     fontSize: 13,
     color: '#475569',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   actionRow: {
     flexDirection: 'row' as const,
-    gap: 8,
+    gap: Spacing.sm,
   },
+  approveBtn: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center' as const,
+  },
+  ignoreBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center' as const,
+    backgroundColor: '#f1f5f9',
+  },
+  approveBtnText: {
+    color: 'white',
+    fontWeight: '800' as const,
+    fontSize: 13,
+  },
+  ignoreBtnText: {
+    color: '#94a3b8',
+    fontWeight: '600' as const,
+    fontSize: 13,
+  },
+  // ── Bundle cards ───────────────────────────────────────────────
   bundleItemLine: {
     fontSize: 13,
     color: '#475569',
-    marginBottom: 2,
+    marginBottom: 3,
   },
   bundlePriceRow: {
-    marginTop: 8,
+    marginTop: 10,
     marginBottom: 4,
   },
   normalPrice: {
@@ -695,10 +606,48 @@ const lossStyles = StyleSheet.create({
     marginBottom: 2,
   },
   bundlePrice: {
+    fontSize: 16,
+    fontWeight: '800' as const,
+    color: '#16a34a',
+    marginBottom: Spacing.sm,
+  },
+  // ── Dead stock cards ───────────────────────────────────────────
+  deadStockCard: {
+    borderRadius: BorderRadius.md,
+    borderWidth: 2,
+    borderColor: '#fca5a5',
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    backgroundColor: '#fff5f5',
+  },
+  deadStockName: {
     fontSize: 15,
     fontWeight: '700' as const,
+    marginBottom: 4,
     color: '#1e293b',
-    marginBottom: 8,
+  },
+  deadStockInfo: {
+    fontSize: 13,
+    color: '#64748b',
+    marginBottom: 2,
+  },
+  deadStockRisk: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: '#dc2626',
+    marginTop: 4,
+  },
+  severityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start' as const,
+    marginBottom: 6,
+  },
+  severityText: {
+    fontSize: 11,
+    fontWeight: '900' as const,
+    color: 'white',
   },
 });
 
@@ -1558,7 +1507,7 @@ export default function StoreOwnerDashboardScreen() {
         {activeTab === 'loss' && (
           <View style={styles.contentSection}>
 
-            {/* ── LOSS SUMMARY BANNER ─────────────────────────────── */}
+            {/* ══ LOSS SUMMARY BANNER ══════════════════════════════════════ */}
             <View style={[lossStyles.summaryCard, {
               backgroundColor: (lossSummary?.totalAtRisk ?? 0) > 0 ? '#fff1f2' : '#f0fdf4',
               borderColor: (lossSummary?.totalAtRisk ?? 0) > 0 ? '#fca5a5' : '#86efac',
@@ -1570,20 +1519,22 @@ export default function StoreOwnerDashboardScreen() {
                   <ThemedText style={[lossStyles.summaryBigNumber, { color: '#dc2626' }]}>
                     {formatCurrency(lossSummary!.totalAtRisk)}
                   </ThemedText>
-                  <ThemedText style={lossStyles.summarySubtext}>dari barang berisiko</ThemedText>
+                  <ThemedText style={lossStyles.summarySubtext}>total potensi kerugian</ThemedText>
 
                   <View style={lossStyles.breakdownRow}>
-                    <View style={lossStyles.breakdownItem}>
-                      <ThemedText style={lossStyles.breakdownLabel}>🥬 Barang Segar</ThemedText>
+                    <View style={[lossStyles.breakdownItem, { borderLeftWidth: 3, borderLeftColor: '#16a34a' }]}>
+                      <ThemedText style={lossStyles.breakdownLabel}>🥬 BARANG SEGAR</ThemedText>
                       <ThemedText style={[lossStyles.breakdownValue, { color: '#dc2626' }]}>
                         {formatCurrency(lossSummary!.freshAtRisk)}
                       </ThemedText>
+                      <ThemedText style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>expires &lt; 72 jam</ThemedText>
                     </View>
-                    <View style={lossStyles.breakdownItem}>
-                      <ThemedText style={lossStyles.breakdownLabel}>📦 Packaged</ThemedText>
+                    <View style={[lossStyles.breakdownItem, { borderLeftWidth: 3, borderLeftColor: '#3b82f6' }]}>
+                      <ThemedText style={lossStyles.breakdownLabel}>📦 BARANG KEMASAN</ThemedText>
                       <ThemedText style={[lossStyles.breakdownValue, { color: '#ea580c' }]}>
                         {formatCurrency(lossSummary!.packagedAtRisk)}
                       </ThemedText>
+                      <ThemedText style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>expires &lt; 30 hari</ThemedText>
                     </View>
                   </View>
                 </>
@@ -1602,8 +1553,8 @@ export default function StoreOwnerDashboardScreen() {
               )}
             </View>
 
-            {/* ── EXPIRY DISCOUNT SUGGESTIONS ─────────────────────── */}
-            {expirySuggestions.length > 0 && (
+            {/* ══ EXPIRY DISCOUNT SUGGESTIONS ═══════════════════════════════ */}
+            {expirySuggestions.length > 0 ? (
               <View>
                 <View style={lossStyles.sectionHeaderRow}>
                   <ThemedText style={lossStyles.sectionTitle}>⚡ Saran Diskon Mendesak</ThemedText>
@@ -1613,66 +1564,108 @@ export default function StoreOwnerDashboardScreen() {
                 </View>
 
                 {expirySuggestions.map((s) => {
+                  const isFreshProduct = s.type === 'fresh_discount';
+                  const isOverstock = s.type === 'overstock';
                   const isUltraCritical = (s.hoursUntilExpiry ?? 999) < 6;
                   const isCritical = (s.hoursUntilExpiry ?? 999) < 24;
-                  const urgencyColor = isUltraCritical ? '#dc2626' : isCritical ? '#ea580c' : '#d97706';
-                  const urgencyLabel = isUltraCritical
-                    ? `🚨 KRITIS ${s.hoursUntilExpiry} JAM LAGI`
+
+                  // Urgency color
+                  const urgencyColor = isUltraCritical
+                    ? '#dc2626'
                     : isCritical
-                    ? `⚠️ ${s.hoursUntilExpiry} JAM LAGI`
-                    : s.daysUntilExpiry != null
-                    ? `⏰ ${s.daysUntilExpiry} HARI LAGI`
-                    : s.type === 'overstock'
-                    ? `📦 OVERSTOCK ${s.daysUntilExpiry} HARI SUPPLY`
-                    : '⏰ PERLU DISKON';
+                    ? '#ea580c'
+                    : isOverstock
+                    ? '#d97706'
+                    : '#3b82f6';
+
+                  // Urgency label
+                  const urgencyLabel = isUltraCritical
+                    ? `🚨 KRITIS — HABIS ${s.hoursUntilExpiry} JAM LAGI`
+                    : isCritical
+                    ? `⚠️ MENDESAK — ${s.hoursUntilExpiry} JAM LAGI`
+                    : isOverstock
+                    ? `📦 OVERSTOCK — ${s.daysUntilExpiry} HARI SUPPLY`
+                    : `⏰ AKAN KADALUARSA — ${s.daysUntilExpiry} HARI LAGI`;
 
                   return (
                     <View key={s.id} style={[lossStyles.suggestionCard, { borderColor: urgencyColor }]}>
+                      {/* Urgency strip at top */}
                       <View style={[lossStyles.urgencyStrip, { backgroundColor: urgencyColor }]}>
                         <ThemedText style={lossStyles.urgencyStripText}>{urgencyLabel}</ThemedText>
                       </View>
 
-                      <ThemedText style={lossStyles.productName}>{s.productName}</ThemedText>
+                      <View style={lossStyles.cardBody}>
+                        {/* Fresh vs Packaged badge */}
+                        <View style={lossStyles.typeBadgeRow}>
+                          {isFreshProduct ? (
+                            <View style={lossStyles.freshBadge}>
+                              <ThemedText style={lossStyles.freshBadgeText}>🥬 BARANG SEGAR</ThemedText>
+                            </View>
+                          ) : isOverstock ? (
+                            <View style={lossStyles.overstockBadge}>
+                              <ThemedText style={lossStyles.overstockBadgeText}>📦 OVERSTOCK</ThemedText>
+                            </View>
+                          ) : (
+                            <View style={lossStyles.packagedBadge}>
+                              <ThemedText style={lossStyles.packagedBadgeText}>📦 BARANG KEMASAN</ThemedText>
+                            </View>
+                          )}
+                          <ThemedText style={{ fontSize: 10, color: '#94a3b8' }}>
+                            diskon {s.suggestedDiscountPercent}%
+                          </ThemedText>
+                        </View>
 
-                      <ThemedText style={lossStyles.riskLine}>
-                        Potensi rugi: <ThemedText style={{ color: '#dc2626', fontWeight: '800' }}>
-                          {formatCurrency(s.rupiahAtRisk)}
+                        <ThemedText style={lossStyles.productName}>{s.productName}</ThemedText>
+
+                        <ThemedText style={lossStyles.riskLine}>
+                          Potensi rugi:{' '}
+                          <ThemedText style={{ color: '#dc2626', fontWeight: '800' }}>
+                            {formatCurrency(s.rupiahAtRisk)}
+                          </ThemedText>
                         </ThemedText>
-                      </ThemedText>
 
-                      <ThemedText style={lossStyles.priceLine}>
-                        Saran: {formatCurrency(s.currentPrice)}{' '}
-                        <ThemedText style={{ color: '#dc2626', textDecorationLine: 'line-through' }}>
-                          →
-                        </ThemedText>{' '}
-                        <ThemedText style={{ color: '#16a34a', fontWeight: '700' }}>
-                          {formatCurrency(s.suggestedPrice)}
-                        </ThemedText>{' '}
-                        (diskon {s.suggestedDiscountPercent}%)
-                      </ThemedText>
+                        {/* Price arrow: from → to */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                          <ThemedText style={{ fontSize: 14, color: '#94a3b8', textDecorationLine: 'line-through' }}>
+                            {formatCurrency(s.currentPrice)}
+                          </ThemedText>
+                          <ThemedText style={{ fontSize: 14, color: '#94a3b8' }}>→</ThemedText>
+                          <ThemedText style={{ fontSize: 16, fontWeight: '800', color: '#16a34a' }}>
+                            {formatCurrency(s.suggestedPrice)}
+                          </ThemedText>
+                          <ThemedText style={{ fontSize: 11, color: '#64748b' }}>
+                            (hemat {s.suggestedDiscountPercent}%)
+                          </ThemedText>
+                        </View>
 
-                      <View style={lossStyles.actionRow}>
-                        <Pressable
-                          style={[lossStyles.approveBtn, { backgroundColor: BRAND_PURPLE }]}
-                          onPress={() => approveSuggestionMutation.mutate(s.id)}
-                          disabled={approveSuggestionMutation.isPending}
-                        >
-                          <ThemedText style={lossStyles.approveBtnText}>✅ APPROVE</ThemedText>
-                        </Pressable>
-                        <Pressable
-                          style={lossStyles.ignoreBtn}
-                          onPress={() => ignoreSuggestionMutation.mutate(s.id)}
-                        >
-                          <ThemedText style={lossStyles.ignoreBtnText}>Abaikan</ThemedText>
-                        </Pressable>
+                        <View style={lossStyles.actionRow}>
+                          <Pressable
+                            style={[lossStyles.approveBtn, { backgroundColor: BRAND_PURPLE }]}
+                            onPress={() => approveSuggestionMutation.mutate(s.id)}
+                            disabled={approveSuggestionMutation.isPending}
+                          >
+                            <ThemedText style={lossStyles.approveBtnText}>✅ Terapkan Diskon</ThemedText>
+                          </Pressable>
+                          <Pressable
+                            style={lossStyles.ignoreBtn}
+                            onPress={() => ignoreSuggestionMutation.mutate(s.id)}
+                          >
+                            <ThemedText style={lossStyles.ignoreBtnText}>Lewati</ThemedText>
+                          </Pressable>
+                        </View>
                       </View>
                     </View>
                   );
                 })}
               </View>
+            ) : (
+              <View style={{ padding: Spacing.lg, alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 12, marginBottom: Spacing.lg }}>
+                <ThemedText style={{ fontSize: 24, marginBottom: 8 }}>✅</ThemedText>
+                <ThemedText style={{ fontSize: 14, color: '#64748b', textAlign: 'center' }}>Tidak ada saran diskon saat ini</ThemedText>
+              </View>
             )}
 
-            {/* ── BUNDLE SUGGESTIONS ──────────────────────────────── */}
+            {/* ══ BUNDLE SUGGESTIONS ════════════════════════════════════════ */}
             {bundleSuggestions.length > 0 && (
               <View>
                 <View style={lossStyles.sectionHeaderRow}>
@@ -1684,116 +1677,124 @@ export default function StoreOwnerDashboardScreen() {
 
                 {bundleSuggestions.map((b) => (
                   <View key={b.id} style={[lossStyles.suggestionCard, { borderColor: '#7c3aed' }]}>
-                    <ThemedText style={[lossStyles.productName, { fontSize: 18 }]}>{b.suggestedName}</ThemedText>
-
-                    {b.items.map((item, i) => (
-                      <ThemedText key={i} style={lossStyles.bundleItemLine}>
-                        • {item.productName} ×{item.quantity} — {formatCurrency(item.unitPrice)}
-                      </ThemedText>
-                    ))}
-
-                    <View style={lossStyles.bundlePriceRow}>
-                      <ThemedText style={lossStyles.normalPrice}>
-                        Harga normal:{' '}
-                        <ThemedText style={{ textDecorationLine: 'line-through' }}>
-                          {formatCurrency(b.normalTotal)}
-                        </ThemedText>
-                      </ThemedText>
-                      <ThemedText style={lossStyles.bundlePrice}>
-                        Harga bundle:{' '}
-                        <ThemedText style={{ color: '#16a34a', fontWeight: '800' }}>
-                          {formatCurrency(b.suggestedBundlePrice)}
-                        </ThemedText>
-                      </ThemedText>
+                    <View style={[lossStyles.urgencyStrip, { backgroundColor: '#7c3aed' }]}>
+                      <ThemedText style={lossStyles.urgencyStripText}>🎁 PAKET BUNDLE — JUAL BERSAMA LEBIH HEMAT</ThemedText>
                     </View>
-
-                    <ThemedText style={lossStyles.riskLine}>
-                      Diskon {b.discountPercent}% untuk pelanggan • Bisa buat {b.possibleBundleCount} paket
-                    </ThemedText>
-                    <ThemedText style={lossStyles.riskLine}>
-                      Potensi rugi jika tidak dijual:{' '}
-                      <ThemedText style={{ color: '#dc2626', fontWeight: '800' }}>
-                        {formatCurrency(b.rupiahAtRisk)}
+                    <View style={lossStyles.cardBody}>
+                      <ThemedText style={[lossStyles.productName, { fontSize: 18, color: '#6d28d9' }]}>
+                        {b.suggestedName}
                       </ThemedText>
-                    </ThemedText>
 
-                    <View style={lossStyles.actionRow}>
-                      <Pressable
-                        style={[lossStyles.approveBtn, { backgroundColor: '#7c3aed', flex: 1 }]}
-                        onPress={() => approveBundleMutation.mutate({ id: b.id })}
-                        disabled={approveBundleMutation.isPending}
-                      >
-                        <ThemedText style={lossStyles.approveBtnText}>✅ APPROVE</ThemedText>
-                      </Pressable>
-                      <Pressable
-                        style={[lossStyles.approveBtn, { backgroundColor: '#0284c7', flex: 1 }]}
-                        onPress={() => {
-                          Alert.prompt(
-                            'Ubah Harga Bundle',
-                            `Masukkan harga baru (min Rp ${b.suggestedBundlePrice.toLocaleString('id-ID')}):`,
-                            (value) => {
-                              const price = parseInt(value ?? '0', 10);
-                              if (price > 0) {
-                                approveBundleMutation.mutate({ id: b.id, finalPrice: price });
-                              }
-                            },
-                            'plain-text',
-                            String(b.suggestedBundlePrice)
-                          );
-                        }}
-                      >
-                        <ThemedText style={lossStyles.approveBtnText}>✏️ Ubah Harga</ThemedText>
-                      </Pressable>
-                      <Pressable
-                        style={lossStyles.ignoreBtn}
-                        onPress={() => ignoreBundleMutation.mutate(b.id)}
-                      >
-                        <ThemedText style={lossStyles.ignoreBtnText}>Abaikan</ThemedText>
-                      </Pressable>
+                      <ThemedText style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>ISI PAKET:</ThemedText>
+                      {b.items.map((item, i) => (
+                        <ThemedText key={i} style={lossStyles.bundleItemLine}>
+                          • {item.productName} ×{item.quantity}
+                          {'  '}
+                          <ThemedText style={{ color: '#64748b' }}>{formatCurrency(item.unitPrice)}/pcs</ThemedText>
+                        </ThemedText>
+                      ))}
+
+                      <View style={lossStyles.bundlePriceRow}>
+                        <ThemedText style={lossStyles.normalPrice}>
+                          Harga normal:{' '}
+                          <ThemedText style={{ textDecorationLine: 'line-through' }}>
+                            {formatCurrency(b.normalTotal)}
+                          </ThemedText>
+                        </ThemedText>
+                        <ThemedText style={lossStyles.bundlePrice}>
+                          Harga bundle:{' '}
+                          <ThemedText style={{ color: '#16a34a', fontWeight: '900' }}>
+                            {formatCurrency(b.suggestedBundlePrice)}
+                          </ThemedText>
+                          {'  '}
+                          <ThemedText style={{ fontSize: 12, backgroundColor: '#dcfce7', color: '#16a34a', fontWeight: '700' }}>
+                            HEMAT {b.discountPercent}%
+                          </ThemedText>
+                        </ThemedText>
+                      </View>
+
+                      <ThemedText style={lossStyles.riskLine}>
+                        Bisa buat <ThemedText style={{ fontWeight: '700', color: '#1e293b' }}>{b.possibleBundleCount} paket</ThemedText>
+                      </ThemedText>
+
+                      <View style={[lossStyles.actionRow, { marginTop: 8 }]}>
+                        <Pressable
+                          style={[lossStyles.approveBtn, { backgroundColor: '#7c3aed' }]}
+                          onPress={() => approveBundleMutation.mutate({ id: b.id })}
+                          disabled={approveBundleMutation.isPending}
+                        >
+                          <ThemedText style={lossStyles.approveBtnText}>✅ Aktifkan Paket</ThemedText>
+                        </Pressable>
+                        <Pressable
+                          style={[lossStyles.approveBtn, { backgroundColor: '#0284c7' }]}
+                          onPress={() => {
+                            Alert.prompt(
+                              'Ubah Harga Bundle',
+                              `Harga saran: ${formatCurrency(b.suggestedBundlePrice)}
+Min: ${formatCurrency(b.minimumBundlePrice)}`,
+                              (value: string) => {
+                                const price = parseInt(value?.replace(/\D/g, '') || '0');
+                                if (price >= b.minimumBundlePrice) {
+                                  approveBundleMutation.mutate({ id: b.id, finalPrice: price });
+                                } else {
+                                  Alert.alert('Harga terlalu rendah', `Minimum: ${formatCurrency(b.minimumBundlePrice)}`);
+                                }
+                              },
+                              'plain-text',
+                              String(b.suggestedBundlePrice)
+                            );
+                          }}
+                        >
+                          <ThemedText style={lossStyles.approveBtnText}>✏️ Ubah Harga</ThemedText>
+                        </Pressable>
+                        <Pressable
+                          style={lossStyles.ignoreBtn}
+                          onPress={() => ignoreBundleMutation.mutate(b.id)}
+                        >
+                          <ThemedText style={lossStyles.ignoreBtnText}>Lewati</ThemedText>
+                        </Pressable>
+                      </View>
                     </View>
                   </View>
                 ))}
               </View>
             )}
 
-            {/* ── DEAD STOCK WARNINGS ─────────────────────────────── */}
+            {/* ══ DEAD STOCK ALERTS ════════════════════════════════════════ */}
             {deadStockAlerts.length > 0 && (
               <View>
-                <ThemedText style={[lossStyles.sectionTitle, { marginBottom: Spacing.sm }]}>
-                  ⚠️ Stok Mati
+                <View style={lossStyles.sectionHeaderRow}>
+                  <ThemedText style={lossStyles.sectionTitle}>⚰️ Stok Mati</ThemedText>
+                  <View style={[lossStyles.countBadge, { backgroundColor: '#dc2626' }]}>
+                    <ThemedText style={lossStyles.countBadgeText}>{deadStockAlerts.length}</ThemedText>
+                  </View>
+                </View>
+                <ThemedText style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12, marginTop: -8 }}>
+                  Produk tidak terjual dalam waktu lama — perlu tindakan
                 </ThemedText>
 
-                {deadStockAlerts.map((alert) => {
-                  const bgColor =
-                    alert.severity === 'critical' ? '#fef2f2' :
-                    alert.severity === 'red' ? '#fff7ed' : '#fefce8';
-                  const borderColor =
-                    alert.severity === 'critical' ? '#dc2626' :
-                    alert.severity === 'red' ? '#ea580c' : '#ca8a04';
-
+                {deadStockAlerts.map((d) => {
+                  const severityColor = d.severity === 'red' ? '#dc2626' : d.severity === 'orange' ? '#ea580c' : '#d97706';
+                  const severityLabel = d.severity === 'red' ? '🔴 KRITIS' : d.severity === 'orange' ? '🟠 WASPADA' : '🟡 PERHATIAN';
                   return (
-                    <View key={alert.id} style={[lossStyles.deadStockCard, { backgroundColor: bgColor, borderColor }]}>
-                      {alert.hasExpiryRisk && (
-                        <View style={[lossStyles.criticalBadge, { backgroundColor: '#dc2626' }]}>
-                          <ThemedText style={lossStyles.criticalBadgeText}>
-                            🚨 + RISIKO KADALUARSA
-                          </ThemedText>
-                        </View>
-                      )}
-                      <ThemedText style={[lossStyles.productName, { color: borderColor }]}>
-                        {alert.productName}
+                    <View key={d.id} style={[lossStyles.deadStockCard, { borderColor: severityColor + '80' }]}>
+                      <View style={[lossStyles.severityBadge, { backgroundColor: severityColor }]}>
+                        <ThemedText style={lossStyles.severityText}>{severityLabel}</ThemedText>
+                      </View>
+                      <ThemedText style={lossStyles.deadStockName}>{d.productName}</ThemedText>
+                      <ThemedText style={lossStyles.deadStockInfo}>
+                        📅 Tidak terjual selama <ThemedText style={{ fontWeight: '700', color: '#1e293b' }}>{d.daysSinceLastSale} hari</ThemedText>
                       </ThemedText>
                       <ThemedText style={lossStyles.deadStockInfo}>
-                        {alert.daysSinceLastSale >= 999
-                          ? 'Belum pernah terjual'
-                          : `${alert.daysSinceLastSale} hari tanpa penjualan`}{' '}
-                        — stok {alert.currentStock} unit
+                        📦 Stok tersisa: <ThemedText style={{ fontWeight: '700', color: '#1e293b' }}>{d.currentStock} unit</ThemedText>
                       </ThemedText>
-                      <ThemedText style={lossStyles.riskLine}>
-                        Estimasi kerugian:{' '}
-                        <ThemedText style={{ color: '#dc2626', fontWeight: '800' }}>
-                          {formatCurrency(alert.rupiahAtRisk)}
+                      {d.hasExpiryRisk && (
+                        <ThemedText style={{ fontSize: 12, color: '#dc2626', marginTop: 2 }}>
+                          ⚠️ Berisiko kadaluarsa sebelum terjual
                         </ThemedText>
+                      )}
+                      <ThemedText style={lossStyles.deadStockRisk}>
+                        💸 Modal tertanam: {formatCurrency(d.rupiahAtRisk)}
                       </ThemedText>
                     </View>
                   );
@@ -1801,15 +1802,17 @@ export default function StoreOwnerDashboardScreen() {
               </View>
             )}
 
-            {expirySuggestions.length === 0 && bundleSuggestions.length === 0 && deadStockAlerts.length === 0 && (
-              <View style={styles.emptyState}>
-                <Feather name="check-circle" size={64} color="#16a34a" />
-                <ThemedText style={styles.emptyTitle}>Semua Aman! ✅</ThemedText>
-                <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
-                  Tidak ada saran atau peringatan kerugian saat ini.
+            {/* Empty state */}
+            {expirySuggestions.length === 0 && bundleSuggestions.length === 0 && deadStockAlerts.length === 0 && (lossSummary?.totalAtRisk ?? 0) === 0 && (
+              <View style={{ alignItems: 'center', padding: 40 }}>
+                <ThemedText style={{ fontSize: 48, marginBottom: 12 }}>🎉</ThemedText>
+                <ThemedText style={{ fontSize: 18, fontWeight: '800', color: '#16a34a', marginBottom: 8 }}>Toko Anda Sehat!</ThemedText>
+                <ThemedText style={{ fontSize: 14, color: '#64748b', textAlign: 'center' }}>
+                  Tidak ada risiko kerugian yang terdeteksi saat ini.
                 </ThemedText>
               </View>
             )}
+
           </View>
         )}
       </ScrollView>

@@ -9235,7 +9235,11 @@ app.get("/api/store-owner/expiry-suggestions", authenticate, async (req: Request
     const storeId = await getStoreIdForOwner(userId);
     if (!storeId) return res.status(404).json({ error: "No store assigned" });
 
-    const suggestions = await getPendingExpirySuggestions(storeId);
+    const rows = await getPendingExpirySuggestions(storeId);
+    const suggestions = rows.map(({ suggestion, productName }: any) => ({
+      ...suggestion,
+      productName,
+    }));
     res.json(suggestions);
   } catch (error) {
     logError(error as Error, "GET /api/store-owner/expiry-suggestions");
@@ -9366,7 +9370,11 @@ app.get("/api/store-owner/dead-stock-alerts", authenticate, async (req: Request,
     const storeId = await getStoreIdForOwner(userId);
     if (!storeId) return res.status(404).json({ error: "No store assigned" });
 
-    const alerts = await getActiveDeadStockAlerts(storeId);
+    const rows = await getActiveDeadStockAlerts(storeId);
+    const alerts = rows.map(({ alert, productName }: any) => ({
+      ...alert,
+      productName,
+    }));
     res.json(alerts);
   } catch (error) {
     logError(error as Error, "GET /api/store-owner/dead-stock-alerts");
